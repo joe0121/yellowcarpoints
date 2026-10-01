@@ -39,6 +39,29 @@
     <div class="chart" id="ch-margin"><div class="tip"></div></div>
   </section>
 
+  <section class="card" id="pace-card" style="margin-bottom:16px">
+    <div class="pace-head">
+      <h2>Pace</h2>
+      <label class="cmp">Compare with <select id="cmp"></select></label>
+    </div>
+    <p class="live-sub" id="pace-sub"></p>
+    <div class="charts" style="margin-top:12px">
+      <div>
+        <h2 style="font-size:14px">Lap time through a stint</h2>
+        <div class="legend" id="lg-stint"></div>
+        <div class="chart" id="ch-stint"><div class="tip"></div></div>
+      </div>
+      <div>
+        <h2 style="font-size:14px">Next 20 laps, projected</h2>
+        <div class="legend" id="lg-proj"></div>
+        <div class="chart" id="ch-proj"><div class="tip"></div></div>
+      </div>
+    </div>
+    <h2 style="font-size:14px;margin-top:16px">Class pace</h2>
+    <div class="scroll"><table id="pace-table"></table></div>
+    <p class="note" id="pace-note"></p>
+  </section>
+
   <div class="charts">
     <section class="card">
       <h2>Lap times</h2>
@@ -141,6 +164,7 @@ function render() {
     $("kpi-note").textContent = "Strategy data is collected during WeatherTech sessions. It will appear here once the next one starts.";
     ["laps", "gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
     $("board").innerHTML = "";
+    $("pace-card").hidden = true;
     return;
   }
 
@@ -178,6 +202,8 @@ function render() {
   drawEnergyChart(S.slice(0, 2), me);
   drawLeaderChart(S);
   renderChampionship(lc, fc, sel, lapsCls[sel.car], lapsCls);
+  $("pace-card").hidden = false;
+  renderPace(lc, sel, rows, lapsCls, fc, clsName);
   renderBoard(rows, strat, sel, lapsCls, clsName, fc);
 
   $("foot").innerHTML = `Timing from IMSA live scoring; energy, refuels and pit lane from IMSA telemetry (unofficial, about 1 Hz). `
@@ -213,7 +239,7 @@ function renderKpis(me, st, lc) {
 }
 
 // --- generic line chart with crosshair tooltip (one y axis) ------------------------
-function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = false, empty = "Not enough laps yet.", zeroLine = false, robust = false }) {
+function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = false, empty = "Not enough laps yet.", zeroLine = false, robust = false, xName = "Lap" }) {
   const el = $(id), tip = el.querySelector(".tip");
   el.querySelector("svg")?.remove();
   el.querySelector(".empty")?.remove();
@@ -239,7 +265,8 @@ function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = fal
   const ends = [];
   for (const s of series) {
     if (!s.pts.length) continue;
-    lines += `<polyline fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" ${s.dash ? `stroke-dasharray="${s.dash}"` : ""} stroke-linejoin="round" stroke-linecap="round" points="${s.pts.map(p => `${x(p[0])},${y(Math.max(y0, Math.min(y1, p[1])))}`).join(" ")}"/>`;
+    if (s.dots) lines += s.pts.map(p => `<circle cx="${x(p[0])}" cy="${y(Math.max(y0, Math.min(y1, p[1])))}" r="2.5" fill="${s.color}" fill-opacity=".55"/>`).join("");
+    else lines += `<polyline fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" ${s.dash ? `stroke-dasharray="${s.dash}"` : ""} stroke-linejoin="round" stroke-linecap="round" points="${s.pts.map(p => `${x(p[0])},${y(Math.max(y0, Math.min(y1, p[1])))}`).join(" ")}"/>`;
     if (s.end) { const p = s.pts.at(-1); ends.push({ x: x(p[0]) + 6, y: y(Math.max(y0, Math.min(y1, p[1]))) + 4, t: s.end }); }
   }
   // Keep end labels at least 13px apart vertically.
@@ -252,8 +279,9 @@ function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = fal
   svg.querySelector(".hit").addEventListener("pointermove", ev => {
     const r = svg.getBoundingClientRect(), v = Math.round(x0 + ((ev.clientX - r.left) * W / r.width - m.l) / iw * (x1 - x0));
     xh.setAttribute("x1", x(v)); xh.setAttribute("x2", x(v)); xh.setAttribute("visibility", "visible");
-    tip.innerHTML = `<b>Lap ${v}</b>` + named.map(s => { const p = s.pts.find(q => q[0] === v);
-      return `<div><span><i style="--c:${s.color}"></i>${esc(s.name)}</span><span>${p ? yFmt(p[1]) : "–"}</span></div>`; }).join("");
+    tip.innerHTML = `<b>${xName} ${v}</b>` + named.map(s => { const ps = s.pts.filter(q => q[0] === v);
+      const val = ps.length ? ps.reduce((a, q) => a + q[1], 0) / ps.length : null;
+      return `<div><span><i style="--c:${s.color}"></i>${esc(s.name)}${ps.length > 1 ? ` (avg of ${ps.length})` : ""}</span><span>${val != null ? yFmt(val) : "–"}</span></div>`; }).join("");
     tip.style.display = "block";
     tip.style.left = Math.min(x(v) / W * r.width + 12, r.width - tip.offsetWidth) + "px"; tip.style.top = "8px";
   });
@@ -388,6 +416,111 @@ function renderChampionship(lc, fc, sel, myLaps, lapsCls) {
   $("lg-margin").innerHTML = (tb ? `<span style="--c:${C.threat}">points ahead of #${esc(tb)} (title threat)</span>` : "")
     + (ta ? `<span style="--c:${C.target}">points behind #${esc(ta)} (title target)</span>` : "")
     + `<span style="--c:var(--text-3)">solid: net order · dotted: raw running order · above zero = ahead</span>`;
+}
+
+// --- pace: trimmed race pace, pace through a stint, and a projected matchup ----------
+// Laps since the car's last stop stand in for tyre age (teams sometimes double-stint tyres),
+// and the stint slope includes fuel burning off, so "loses x s/lap" is the net of both.
+function paceModel(d) {
+  if (!d || !d.laps?.length) return null;
+  const stops = d.stops || [], pit = new Set(stops.flatMap(s => [s, s + 1]));
+  let pts = d.laps.filter(([n]) => n > 1 && !pit.has(n));
+  if (!pts.length) return null;
+  const best = Math.min(...pts.map(p => p[1]));
+  pts = pts.filter(p => p[1] <= best * 1.07);                       // yellows, traffic, incidents
+  const lastStopBefore = n => stops.filter(s => s < n).at(-1) || 0;
+  pts = pts.map(([n, t]) => ({ n, t, sl: n - lastStopBefore(n) }));
+  const drop = pts.length >= 15 ? Math.max(3, Math.round(pts.length * 0.1)) : 0;
+  const kept = [...pts].sort((a, b) => a.t - b.t).slice(0, pts.length - drop);  // throw away the slowest 10%
+  const pace = kept.reduce((a, p) => a + p.t, 0) / (kept.length || 1);
+  let fit = null;
+  if (kept.length >= 8 && new Set(kept.map(p => p.sl)).size >= 4) {
+    const mx = kept.reduce((a, p) => a + p.sl, 0) / kept.length, my = pace;
+    const sxx = kept.reduce((a, p) => a + (p.sl - mx) ** 2, 0);
+    const b = kept.reduce((a, p) => a + (p.sl - mx) * (p.t - my), 0) / sxx;
+    fit = { a: my - b * mx, b, at: sl => my + b * (sl - mx), maxSl: Math.max(...kept.map(p => p.sl)) };
+  }
+  const lastLap = d.laps.at(-1)[0];
+  return { pace, best, n: kept.length, dropped: drop, fit, kept, stintLap: lastLap - (stops.filter(s => s <= lastLap).at(-1) || 0), lastLap };
+}
+
+let cmpChoice = null;
+function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
+  const models = Object.fromEntries(rows.map(r => [r.car, paceModel(lapsCls[r.car])]));
+  const me = models[sel.car];
+  const others = rows.filter(r => r.car !== sel.car);
+  const def = [fc.champ_behind, fc.champ_ahead, fc.ahead, fc.ref].find(c => c && models[c]) || others[0]?.car;
+  const cmp = cmpChoice && rows.some(r => r.car === cmpChoice) && cmpChoice !== sel.car ? cmpChoice : def;
+  const role = c => c === fc.champ_behind ? "title threat" : c === fc.champ_ahead ? "title target" : c === fc.ahead ? "car ahead" : c === fc.ref ? fc.ref_role : "";
+  $("cmp").innerHTML = others.map(r => `<option value="${esc(r.car)}"${r.car === cmp ? " selected" : ""}>#${esc(r.car)} P${r.class_pos}${role(r.car) ? " · " + esc(role(r.car)) : ""}</option>`).join("");
+  $("cmp").onchange = e => { cmpChoice = e.target.value; render(); };
+  const them = models[cmp];
+  const worn = lc.stint_model?.typical || 40, fresh = 3;
+
+  // Headline: pace now and over the next 10 laps, and when the advantage flips.
+  const proj = (m, row) => {
+    if (!m?.fit) return null;
+    const nextStop = row?.energy?.next_stop_lap ?? (row?.stint?.laps_to_typical != null ? m.lastLap + Math.max(1, row.stint.laps_to_typical) : null);
+    return Array.from({ length: 21 }, (_, k) => {
+      const lap = m.lastLap + k, sl = nextStop && lap > nextStop ? lap - nextStop : m.stintLap + k;
+      return [lap, m.fit.at(Math.max(2, sl)), nextStop];
+    });
+  };
+  const rowOf = c => rows.find(r => r.car === c);
+  const pm = proj(me, rowOf(sel.car)), pt = proj(them, rowOf(cmp));
+  let sub = "";
+  if (me && them) {
+    sub = `Race pace (slowest 10% of clean laps thrown away): <b>#${esc(sel.car)} ${lapTime(me.pace)}</b> vs <b>#${esc(cmp)} ${lapTime(them.pace)}</b> `
+      + `(${Math.abs(me.pace - them.pace).toFixed(2)} s/lap ${me.pace <= them.pace ? "quicker" : "slower"}).`;
+    if (pm && pt) {
+      const byLap = new Map(pt.map(p => [p[0], p[1]]));
+      const deltas = pm.filter(p => byLap.has(p[0])).map(p => [p[0], p[1] - byLap.get(p[0])]);
+      const next10 = deltas.slice(1, 11), avg = next10.reduce((a, d) => a + d[1], 0) / (next10.length || 1);
+      const flip = deltas.slice(1).find(d => Math.sign(d[1]) !== Math.sign(deltas[0][1]) && Math.abs(d[1]) > 0.02);
+      sub += ` Next 10 laps: <b>#${esc(sel.car)} about ${Math.abs(avg).toFixed(2)} s/lap ${avg <= 0 ? "quicker" : "slower"}</b>`
+        + ` (stint lap ${me.stintLap} vs ${them.stintLap}).`
+        + (flip ? ` The advantage flips around <b>lap ${flip[0]}</b>${pm[0][2] && flip[0] > pm[0][2] ? ` after #${esc(sel.car)} pits` : pt[0][2] && flip[0] > pt[0][2] ? ` after #${esc(cmp)} pits` : " as tyres age"}.` : "");
+    }
+  } else {
+    sub = "Pace needs about 8 clean laps per car, so it fills in a few laps into a session.";
+  }
+  $("pace-sub").innerHTML = sub;
+
+  // Chart 1: lap time against laps since the last stop, with each car's fitted line.
+  const stintSeries = [];
+  for (const [car, m, color] of [[sel.car, me, C.me], [cmp, them, C.ahead]]) {
+    if (!m) continue;
+    stintSeries.push({ name: `#${car}`, pts: m.kept.map(p => [p.sl, p.t]), color, dots: true });
+    if (m.fit) stintSeries.push({ pts: [[2, m.fit.at(2)], [m.fit.maxSl, m.fit.at(m.fit.maxSl)]], color, width: 2, end: `${signed(m.fit.b, 3)}s/lap` });
+  }
+  lineChart("ch-stint", { series: stintSeries, yFmt: lapTime, xName: "Stint lap", empty: "Needs a few clean laps." });
+  $("lg-stint").innerHTML = [[sel.car, C.me], [cmp, C.ahead]].map(([c, col]) => `<span style="--c:${col}">#${esc(c)}</span>`).join("")
+    + `<span style="--c:var(--text-3)">dots: clean laps by laps since the last stop · line: trend (tyres + fuel)</span>`;
+
+  // Chart 2: projected lap times for the next 20 laps, resetting at each car's next stop.
+  const projSeries = [];
+  if (pm) projSeries.push({ name: `#${sel.car}`, pts: pm.map(p => [p[0], p[1]]), color: C.me, end: `#${sel.car}` });
+  if (pt) projSeries.push({ name: `#${cmp}`, pts: pt.map(p => [p[0], p[1]]), color: C.ahead, end: `#${cmp}` });
+  lineChart("ch-proj", { series: projSeries, yFmt: lapTime, empty: "Projection needs each car's stint trend (about 8 clean laps over several stint laps)." });
+  $("lg-proj").innerHTML = [[sel.car, C.me, pm], [cmp, C.ahead, pt]].map(([c, col, p]) => `<span style="--c:${col}">#${esc(c)}${p?.[0]?.[2] ? ` · pits ~L${p[0][2]}` : ""}</span>`).join("")
+    + `<span style="--c:var(--text-3)">lower is quicker · drops back to fresh-tyre pace after a stop</span>`;
+
+  // Class table.
+  const corvettes = standings.cars.filter(c => c.class === sel.class).map(c => c.car);
+  const ranked = rows.filter(r => models[r.car]).sort((a, b) => models[a.car].pace - models[b.car].pace);
+  $("pace-table").innerHTML = `<thead><tr><th>#</th><th>Car</th><th>Pos</th><th>Race pace</th><th>Best</th><th title="Projected at stint lap ${fresh}">Fresh tyres</th><th title="Projected at stint lap ${worn}">Worn (L${worn})</th><th>Loses</th><th>Stint lap</th><th>Now</th><th>vs #${esc(sel.car)}</th><th>Laps used</th></tr></thead><tbody>`
+    + ranked.map((r, i) => { const m = models[r.car], f = m.fit, now = f ? f.at(Math.max(2, m.stintLap)) : null;
+      const mine = models[sel.car]?.fit ? models[sel.car].fit.at(Math.max(2, models[sel.car].stintLap)) : null;
+      return `<tr class="${corvettes.includes(r.car) ? "tracked" : ""}" style="--c:${r.car === sel.car ? C.me : corvettes.includes(r.car) ? "var(--series-2)" : C.ctx}">
+        <td>${i + 1}</td><td>#${esc(r.car)}</td><td class="dim">P${r.class_pos}</td><td class="total">${lapTime(m.pace)}</td><td class="dim">${lapTime(m.best)}</td>
+        <td>${f ? lapTime(f.at(fresh)) : "–"}</td><td>${f ? lapTime(f.at(worn)) : "–"}</td>
+        <td class="${f && f.b > 0.02 ? "down" : "dim"}">${f ? signed(f.b, 3) + "s/lap" : "–"}</td><td class="dim">${m.stintLap}</td>
+        <td>${now ? lapTime(now) : "–"}</td><td class="${now && mine ? (now < mine ? "down" : now > mine ? "up" : "dim") : "dim"}">${now && mine && r.car !== sel.car ? signed(now - mine) : "–"}</td>
+        <td class="dim">${m.n}${m.dropped ? ` (−${m.dropped})` : ""}</td></tr>`; }).join("")
+    + `</tbody>`;
+  $("pace-note").textContent = `Clean laps exclude the first lap, in- and out-laps and anything over 107% of the car's best; then the slowest 10% are dropped. `
+    + `"Stint lap" is laps since the last stop, a stand-in for tyre age (teams sometimes double-stint tyres), and the trend includes fuel burning off. `
+    + `"vs #${sel.car}": how much slower (+) or quicker (−) each car should be than #${sel.car} on its current stint lap; green is good for #${sel.car}.`;
 }
 
 let width = innerWidth;

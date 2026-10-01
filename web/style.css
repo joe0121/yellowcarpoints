@@ -189,3 +189,6 @@ tr.tracked .mini i { background: var(--s1); }
 .countdown { font-size: 12px; font-weight: 600; color: var(--text-2); padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .countdown[data-state="live"] { color: var(--text); border-color: var(--critical); }
 .countdown[data-state="live"]::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--critical); margin-right: 6px; vertical-align: 1px; }
+.pace-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.cmp { font-size: 13px; color: var(--text-2); }
+.cmp select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; margin-left: 6px; }
