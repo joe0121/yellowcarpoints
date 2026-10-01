@@ -18,6 +18,7 @@ import uuid
 
 import websocket
 
+from archive import RECORDER
 from common import CLASSES
 
 API = "wzidxebhlbgqpm7kt22wkx2pri"
@@ -112,9 +113,11 @@ class Telemetry:
                 key = (payload.get("series_name_short"), payload.get("session_name"), payload.get("session_start_time"))
                 if key != self.session_key:
                     self.session_key, self.cars = key, {}
+                    RECORDER.telemetry_session(payload)
             elif isinstance(payload, list):
                 for f in payload:
                     self._car(f)
+                RECORDER.telemetry_cars(payload)
 
     def _car(self, f):
         sc = f.get("scoring") or {}

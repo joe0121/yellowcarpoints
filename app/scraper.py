@@ -11,6 +11,7 @@ import hashlib
 import io
 import json
 import logging
+import logging.handlers
 import os
 import re
 import statistics
@@ -304,6 +305,11 @@ def run_once(last_hash=None):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # Also keep a log next to the session recordings, for debugging after the fact.
+    (DATA_DIR / "archive").mkdir(parents=True, exist_ok=True)
+    fh = logging.handlers.RotatingFileHandler(DATA_DIR / "archive" / "scraper.log", maxBytes=5_000_000, backupCount=5)
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logging.getLogger().addHandler(fh)
     last, next_pdf, failures = None, 0.0, 0
     while True:
         if time.monotonic() >= next_pdf:

@@ -9,6 +9,8 @@ services:
       INTERVAL_MINUTES: ${INTERVAL_MINUTES:-30}
     volumes:
       - data:/data
+      # Session recordings and the scraper log, readable on the host for debugging/replay.
+      - ./archive:/data/archive
 
   web:
     image: ghcr.io/joe0121/yellowcarpoints-web:latest

@@ -60,3 +60,25 @@ In the Cloudflare tunnel's public hostname, point `yellowcarpoints.win` at `http
 
 Set `CARS` in `.env` as `CLASS:NUMBER` pairs, e.g. `CARS=GTDPRO:4,GTD:13`, then `docker compose up -d`.
 Leave it empty for the default Corvettes. The class is as printed in the PDF: `GTP`, `LMP2`, `GTDPRO`, `GTD`.
+
+## Championship maths during the race
+
+For each tracked car, `live.json` → `classes.<class>.focus.<car>` holds the cars that matter: the race
+reference (class leader, or the car behind when leading), the car ahead on track, and the championship
+neighbours either side in the projection. The projection uses the **net** order when it can: during a
+pit cycle (some cars in the class stopped within the last 40% of a stint, others not) the cars that
+still owe a stop are moved back by the class pit loss; in the final tank it compares stops still needed
+to reach the flag. Net is switched off under yellows. A change of title rival must hold for 3 polls
+before it's reported. Also: margin to each rival (raw and net), what a place is worth, the lowest
+finish needed to stay ahead of / get ahead of each rival, and what the rival behind needs. The title
+margin per lap is in `laps.json` (`margins`).
+
+## Recordings and replay
+
+Every WeatherTech session is recorded to `./archive/<date>_<session>/` (bind-mounted into the
+scraper): `feed.jsonl.gz` (every leaderboard poll), `telemetry.jsonl.gz` (tracked classes every 10 s)
+and `outputs.jsonl.gz` (live.json / laps.json every 5 minutes). The scraper log is
+`./archive/scraper.log`. To rebuild what the live code computed:
+
+    docker compose exec scraper python replay.py /data/archive/<folder> /tmp/replay
+    # or locally: DATA_DIR is set by the script; --data points at a copy of standings/baseline/quali

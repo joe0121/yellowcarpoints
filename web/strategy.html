@@ -29,6 +29,16 @@
     <p class="note" id="kpi-note"></p>
   </section>
 
+  <section class="card" id="champ-card" hidden style="margin-bottom:16px">
+    <h2 id="champ-title">Championship if it finished now</h2>
+    <div class="live-sub" id="champ-sub"></div>
+    <div id="champ-event"></div>
+    <div class="kpis" id="champ-kpis"></div>
+    <h2 style="margin-top:16px">Title margin by lap</h2>
+    <div class="legend" id="lg-margin"></div>
+    <div class="chart" id="ch-margin"><div class="tip"></div></div>
+  </section>
+
   <div class="charts">
     <section class="card">
       <h2>Lap times</h2>
@@ -36,7 +46,7 @@
       <div class="chart" id="ch-laps"><div class="tip"></div></div>
     </section>
     <section class="card">
-      <h2>Gap to the cars either side</h2>
+      <h2>Gap to the car ahead and the leader</h2>
       <div class="legend" id="lg-gaps"></div>
       <div class="chart" id="ch-gaps"><div class="tip"></div></div>
     </section>
@@ -60,7 +70,8 @@
 </main>
 <script>
 const CLASS_NAMES = { GTDPRO: "GTD PRO", GTD: "GTD", GTP: "GTP", LMP2: "LMP2" };
-const C = { me: "var(--s1)", ahead: "var(--s2)", behind: "var(--s3)", ctx: "var(--context)" };
+// On-track roles use one validated set; the championship chart uses its own validated pair.
+const C = { me: "var(--s1)", ahead: "var(--s2)", ref: "var(--s3)", ctx: "var(--context)", threat: "var(--s4)", target: "var(--s2)" };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const lapTime = t => t == null ? "–" : `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
@@ -134,8 +145,9 @@ function render() {
   }
 
   const rows = lc.cars, me = rows.find(r => r.car === sel.car);
-  const idx = rows.indexOf(me);
-  const ahead = idx > 0 ? rows[idx - 1] : null, behind = me && idx + 1 < rows.length ? rows[idx + 1] : null;
+  const fc = lc.focus?.[sel.car] || {};
+  const byCar = n => rows.find(r => r.car === n) || null;
+  const ahead = byCar(fc.ahead), ref = byCar(fc.ref);
   const strat = lc.strategy?.cars || {};
   const lapsCls = laps?.classes?.[sel.class] || {};
 
@@ -160,12 +172,13 @@ function render() {
 
   // --- charts
   const series = (car, color, role) => car && lapsCls[car.car] ? { car: car.car, color, role, d: lapsCls[car.car] } : null;
-  const S = [series(me, C.me, "this car"), series(ahead, C.ahead, "car ahead"), series(behind, C.behind, "car behind")].filter(Boolean);
+  const S = [series(me, C.me, "this car"), series(ahead, C.ahead, "car ahead"), series(ref, C.ref, fc.ref_role || "leader")].filter(Boolean);
   drawLapChart(S);
-  drawGapChart(me && lapsCls[me.car], ahead && lapsCls[ahead.car], behind && lapsCls[behind.car], ahead, behind);
+  drawGapChart(me && lapsCls[me.car], ahead, ref, fc.ref_role, lapsCls);
   drawEnergyChart(S.slice(0, 2), me);
   drawLeaderChart(S);
-  renderBoard(rows, strat, sel, lapsCls, clsName);
+  renderChampionship(lc, fc, sel, lapsCls[sel.car], lapsCls);
+  renderBoard(rows, strat, sel, lapsCls, clsName, fc);
 
   $("foot").innerHTML = `Timing from IMSA live scoring; energy, refuels and pit lane from IMSA telemetry (unofficial, about 1 Hz). `
     + `Updated ${new Date(live.updated).toLocaleTimeString()}. Estimates assume the current pace and energy use continue; yellows, short fills and strategy calls change them. `
@@ -266,23 +279,30 @@ function drawLapChart(S) {
 }
 
 // Laps affected by a pit stop (in-lap through two laps after), left out of gap lines and trends.
-const pitLaps = d => new Set(d.stops.flatMap(s => [s - 1, s, s + 1, s + 2]));
+const pitLaps = d => new Set((d.stops || []).flatMap(s => [s - 1, s, s + 1, s + 2]));
 const offPit = (pts, ...cars) => { const skip = new Set(cars.flatMap(c => [...pitLaps(c)])); return pts.filter(([n]) => !skip.has(n)); };
 
 // Gap between two cars per lap, from each car's gap to the class leader on that lap.
 function between(a, b) {
-  const m = new Map(b.gaps.map(([n, g]) => [n, g]));
-  return offPit(a.gaps.filter(([n]) => m.has(n)).map(([n, g]) => [n, +(g - m.get(n)).toFixed(3)]), a, b);
+  const m = new Map((b.gaps || []).map(([n, g]) => [n, g]));
+  return offPit((a.gaps || []).filter(([n]) => m.has(n)).map(([n, g]) => [n, +(g - m.get(n)).toFixed(3)]), a, b);
 }
 
-function drawGapChart(me, a, b, ahead, behind) {
-  const series = [];
-  if (me && a) { const p = between(me, a); series.push({ name: `to #${ahead.car} ahead`, pts: p, color: C.ahead }, ...trendSeries(p, C.ahead, "s/lap")); }
-  if (me && b) { const p = between(b, me); series.push({ name: `to #${behind.car} behind`, pts: p, color: C.behind }, ...trendSeries(p, C.behind, "s/lap")); }
+function drawGapChart(me, ahead, ref, refRole, lapsCls) {
+  const series = [], lg = [];
+  if (me && ahead && lapsCls[ahead.car]) {
+    const p = between(me, lapsCls[ahead.car]);
+    series.push({ name: `behind #${ahead.car}`, pts: p, color: C.ahead }, ...trendSeries(p, C.ahead, "s/lap"));
+    lg.push(`<span style="--c:${C.ahead}">seconds behind #${esc(ahead.car)} (car ahead)</span>`);
+  }
+  if (me && ref && lapsCls[ref.car]) {
+    const leading = refRole === "car behind";
+    const p = leading ? between(lapsCls[ref.car], me) : between(me, lapsCls[ref.car]);
+    series.push({ name: leading ? `ahead of #${ref.car}` : `behind #${ref.car}`, pts: p, color: C.ref }, ...trendSeries(p, C.ref, "s/lap"));
+    lg.push(`<span style="--c:${C.ref}">seconds ${leading ? "ahead of" : "behind"} #${esc(ref.car)} (${esc(refRole)})</span>`);
+  }
   lineChart("ch-gaps", { series, robust: true, zeroLine: true, yFmt: v => v.toFixed(1) + "s", empty: "Gaps build up once the race is running." });
-  $("lg-gaps").innerHTML = (ahead ? `<span style="--c:${C.ahead}">seconds behind #${esc(ahead.car)}</span>` : "")
-    + (behind ? `<span style="--c:${C.behind}">seconds ahead of #${esc(behind.car)}</span>` : "")
-    + `<span style="--c:var(--text-3)">dashed trend: falling = closing on the car ahead / car behind closing in</span>`;
+  $("lg-gaps").innerHTML = lg.join("") + `<span style="--c:var(--text-3)">dashed: trend over the last 10 laps (falling = gap shrinking)</span>`;
 }
 
 function drawEnergyChart(S, me) {
@@ -306,14 +326,15 @@ function drawLeaderChart(S) {
     + `<span style="--c:var(--text-3)">seconds behind the class leader; dashed: trend</span>`;
 }
 
-function renderBoard(rows, strat, sel, lapsCls, clsName) {
+function renderBoard(rows, strat, sel, lapsCls, clsName, fc) {
   const corvettes = standings.cars.filter(c => c.class === sel.class).map(c => c.car);
   $("board-title").textContent = `${clsName} strategy board`;
-  $("board").innerHTML = `<thead><tr><th>Pos</th><th>Car</th><th class="l">Driver</th><th class="l">Energy</th><th>Use/lap</th><th>Laps left</th><th>Next stop</th><th>Stops</th><th>Last fill</th><th>Pace</th><th>Trend</th><th title="Change in gap to the class leader per lap, last 10 laps">Gap trend</th></tr></thead><tbody>`
+  $("board").innerHTML = `<thead><tr><th>Pos</th><th title="Class position once every car has made the stops it owes in this pit cycle">Net</th><th>Car</th><th class="l">Driver</th><th class="l">Energy</th><th>Use/lap</th><th>Laps left</th><th>Next stop</th><th>Stops</th><th>Last fill</th><th>Pace</th><th>Trend</th><th title="Change in gap to the class leader per lap, last 10 laps">Gap trend</th></tr></thead><tbody>`
     + rows.map(r => { const e = r.energy || {}, x = strat[r.car] || {}, g = fit(lapsCls[r.car]?.gaps || []);
       const last = e.refills?.at(-1);
       return `<tr class="${corvettes.includes(r.car) ? "tracked" : ""}" style="--c:${r.car === sel.car ? C.me : corvettes.includes(r.car) ? "var(--series-2)" : C.ctx}">
-        <td>${r.class_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}</td>
+        <td>${r.class_pos}</td><td class="dim">${r.net_pos ?? "–"}</td><td>#${esc(r.car)}${[fc.champ_behind, fc.champ_ahead].includes(r.car) ? ` <span class="owes" title="Championship rival">TITLE</span>` : ""}</td>
+        <td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}${r.owes_stop ? `<span class="owes" title="Still owes a stop in this pit cycle">OWES STOP</span>` : ""}</td>
         <td class="l">${e.now != null ? `<span class="mini"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></span>${e.now.toFixed(0)}%` : "–"}</td>
         <td>${e.use_per_lap ?? "–"}</td><td>${e.laps_left != null ? Math.floor(e.laps_left) : "–"}</td><td>${e.next_stop_lap ? "L" + e.next_stop_lap : "–"}</td>
         <td>${r.pit_stops ?? "–"}${e.stops_remaining != null ? ` <span class="dim">+${e.stops_remaining}</span>` : ""}</td>
@@ -321,6 +342,52 @@ function renderBoard(rows, strat, sel, lapsCls, clsName) {
         <td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td>
         <td class="${g && g.slope < -0.05 ? "up" : g && g.slope > 0.05 ? "down" : "dim"}">${g ? signed(g.slope) + "s" : "–"}</td></tr>`; }).join("")
     + `</tbody>`;
+}
+
+function renderChampionship(lc, fc, sel, myLaps, lapsCls) {
+  const show = live.is_race && fc.champ_pos;
+  $("champ-card").hidden = !show;
+  if (!show) return;
+  const net = fc.basis === "net";
+  const mg = (n, r) => n == null ? "–" : `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;
+  $("champ-title").textContent = `Championship if it finished now${net ? " (after pit stops)" : ""}`;
+  $("champ-sub").innerHTML = net
+    ? "Using the <b>net</b> order: cars that still owe a stop in this pit cycle are moved back by the pit loss. Raw order in brackets."
+    : "Using the running order (the net order needs a pit-loss figure and green-flag running).";
+  const ev = fc.events?.at(-1);
+  $("champ-event").innerHTML = ev && ev.to ? `<p class="event">Title ${ev.role === "champ_behind" ? "threat" : "target"} is now <b>#${esc(ev.to)}</b>${ev.from ? ` (was #${esc(ev.from)})` : ""}, since lap ${ev.lap}.</p>` : "";
+  const k = (a, b, c) => `<div class="kpi"><div class="k">${a}</div><div class="v">${b}</div><div class="s">${c}</div></div>`;
+  const tiles = [k("Title position", `P${fc.champ_pos}`, `${net ? "net" : "raw"} projection`)];
+  if (fc.champ_behind) tiles.push(k(`Ahead of #${esc(fc.champ_behind)}`, `${mg(net ? fc.net_margin_behind : fc.margin_behind)}<small>pts</small>`,
+    `raw ${mg(fc.margin_behind)} · ${fc.we_hold_vs_behind ? `stays ahead finishing P${fc.we_hold_vs_behind} or better` : "would lose it as things stand"}`));
+  if (fc.champ_ahead) tiles.push(k(`Behind #${esc(fc.champ_ahead)}`, `${mg(net ? fc.net_margin_ahead : fc.margin_ahead)}<small>pts</small>`,
+    `raw ${mg(fc.margin_ahead)} · ${fc.we_need_vs_ahead ? `gets ahead finishing P${fc.we_need_vs_ahead} or better` : "can't get ahead unless it drops back"}`));
+  tiles.push(k("A place is worth", `+${fc.place_gain}<small>/ −${fc.place_lose}</small>`, "gaining one class position / losing one"));
+  if (fc.champ_behind) tiles.push(k(`#${esc(fc.champ_behind)} needs`, fc.rival_needs ? `P${fc.rival_needs}` : "–",
+    fc.rival_needs ? `or better to pass #${esc(sel.car)}, everyone else holding` : `can't pass #${esc(sel.car)} unless #${esc(sel.car)} drops back`));
+  $("champ-kpis").innerHTML = tiles.join("");
+
+  // Title margin by lap: net solid, raw dotted, one colour per rival role.
+  const m = myLaps?.margins || [], series = [];
+  // Only the laps where this car was the rival in that role (switches are in the banner above).
+  const add = (iRaw, iNet, iCar, color, role) => {
+    const car = role === "behind" ? fc.champ_behind : fc.champ_ahead;
+    if (!car) return null;
+    // Leave out laps around either car's stops: positions are mid-stop there, not real changes.
+    const skip = new Set([...pitLaps(myLaps || {}), ...pitLaps(lapsCls[car] || {})]);
+    const mine = m.filter(r => r[iCar] === car && !skip.has(r[0]));
+    const netPts = mine.filter(r => r[iNet] != null).map(r => [r[0], r[iNet]]);
+    const rawPts = mine.filter(r => r[iRaw] != null).map(r => [r[0], r[iRaw]]);
+    if (!rawPts.length) return null;
+    series.push({ name: `vs #${car} ${role} (net)`, pts: netPts, color, end: netPts.length ? `#${car}` : null });
+    series.push({ name: `vs #${car} ${role} (raw)`, pts: rawPts, color, dash: "1 4", width: 1.5, end: netPts.length ? null : `#${car}` });
+    return car;
+  };
+  const tb = add(1, 2, 5, C.threat, "behind"), ta = add(3, 4, 6, C.target, "ahead");
+  lineChart("ch-margin", { series, zeroLine: true, robust: true, yFmt: v => (v > 0 ? "+" : "") + v.toFixed(0), empty: "Builds up lap by lap during the race." });
+  $("lg-margin").innerHTML = (tb ? `<span style="--c:${C.threat}">points ahead of #${esc(tb)} (title threat)</span>` : "")
+    + (ta ? `<span style="--c:${C.target}">points behind #${esc(ta)} (title target)</span>` : "")
+    + `<span style="--c:var(--text-3)">solid: net order · dotted: raw running order · above zero = ahead</span>`;
 }
 
 let width = innerWidth;

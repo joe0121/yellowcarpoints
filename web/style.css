@@ -16,6 +16,7 @@
   --row-hl: #fdf3dc;
   /* strategy charts: validated categorical slots (selected car, car ahead, car behind) */
   --s1: #eda100; --s2: #2a78d6; --s3: #1baf7a;
+  --s4: #eb6834;   /* championship threat (paired with --s2 for the target) */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -32,7 +33,7 @@
     --series-2: #3987e5;
     --context: #46463f;
     --row-hl: #2a2414;
-    --s1: #c98500; --s2: #3987e5; --s3: #199e70;
+    --s1: #c98500; --s2: #3987e5; --s3: #199e70; --s4: #d95926;
   }
 }
 :root[data-theme="dark"] {
@@ -41,7 +42,7 @@
   --text: #ffffff; --text-2: #c3c2b7; --text-3: #8f8e86;
   --accent: #eda100; --accent-ink: #f5c04a; --series-2: #3987e5;
   --context: #46463f; --row-hl: #2a2414;
-  --s1: #c98500; --s2: #3987e5; --s3: #199e70;
+  --s1: #c98500; --s2: #3987e5; --s3: #199e70; --s4: #d95926;
 }
 * { box-sizing: border-box; }
 body {
@@ -177,3 +178,7 @@ tr.tracked .mini i { background: var(--s1); }
 @media (max-width: 560px) { .charts { grid-template-columns: 1fr; } }
 .empty { color: var(--text-3); font-size: 13px; padding: 24px 0; }
 .chart .endlbl { font-weight: 600; fill: var(--text); }
+
+.event { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--s4); font-size: 13px; color: var(--text-2); }
+.event b { color: var(--text); }
+.owes { font-size: 10px; font-weight: 700; color: var(--text-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }

@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 import history
 import telemetry
+from archive import RECORDER
 from common import CAR_CLASS, CLASSES, http, now_iso, read, write
 
 FEED = "https://dcqsrdkhg933g.cloudfront.net/"
@@ -216,9 +217,6 @@ def energy_info(tel, row, pace, remaining_secs, fill_rate):
         if fill_rate:
             arrive = max(now - use * int(laps_left), 0)
             out["next_fill_secs"] = round((100 - arrive) / fill_rate)
-        if pace and remaining_secs:
-            on_tank, per_tank = laps_left * pace, full * pace
-            out["stops_remaining"] = 0 if remaining_secs <= on_tank else int(-(-(remaining_secs - on_tank) // per_tank))
     return out
 
 
@@ -238,26 +236,83 @@ def project(base, quali, order):
     return totals
 
 
-def worst_winning_finish(car, base, quali, order, margin):
-    """Lowest class finish that still leaves `car` more than `margin` clear, rivals holding station."""
+def worst_winning_finish(car, base, quali, order, margin, vs=None):
+    """Lowest class finish that still leaves `car` more than `margin` clear of everyone (or of `vs`),
+    with the other cars holding station."""
+    if car not in order:
+        return None
     rest = [c for c in order if c != car]
     worst = None
     for p in range(1, len(order) + 1):
         totals = project(base, quali, rest[:p - 1] + [car] + rest[p - 1:])
-        if totals[car] - max(v for c, v in totals.items() if c != car) > margin:
+        other = totals.get(vs, 0) if vs else max(v for c, v in totals.items() if c != car)
+        if totals[car] - other > margin:
             worst = p
         else:
             break
     return worst
 
 
-def projection(cls, order, standings, quali, info):
+def stops_to_flag(row, energy, st, model, remaining, pace):
+    """Stops still needed to reach the flag: telemetry energy if we have it, else the stint model.
+    A car in the pit lane is counted as leaving on a full tank."""
+    if not remaining or not pace:
+        return None
+    in_pit = bool(row.get("P")) or bool(energy and energy.get("pit_lane"))
+    if energy and energy.get("full_tank_laps"):
+        per_tank, left = energy["full_tank_laps"] * pace, energy["laps_left"] * pace
+    elif model and st:
+        done = st["last_lap"] - st["stops"][-1] if st["stops"] else (st["last_lap"] if st["from_start"] else None)
+        if done is None:
+            return None
+        per_tank, left = model["typical"] * pace, max(model["typical"] - done, 0) * pace
+    else:
+        return None
+    on_tank = per_tank if in_pit else left
+    return 0 if remaining <= on_tank else int(-(-(remaining - on_tank) // per_tank))
+
+
+def owed_stops(rows, state, stops, model, remaining, pace):
+    """Stops each car still owes compared with the others.
+
+    Mid-race this is the current pit cycle: once some cars in the class have stopped within the
+    last W laps (W = 40% of a typical stint), the cars that haven't owe one stop. In the final
+    tank of the race it's the stops still needed to reach the flag (so a late splash counts)."""
+    typical = (model or {}).get("typical") or 40
+    w = max(5, round(0.4 * typical))
+    since = {}
+    for r in rows:
+        st = state["cars"].get(r["N"])
+        if st and st["stops"]:
+            since[r["N"]] = st["last_lap"] - st["stops"][-1]
+        elif st and st["from_start"]:
+            since[r["N"]] = st["last_lap"]
+    final = remaining is not None and pace and remaining < 1.2 * typical * pace
+    if final and sum(v is not None for v in stops.values()) >= len(rows) // 2:
+        return {n: (v if v is not None else 0) for n, v in stops.items()}
+    cycle_open = any(v < w for v in since.values()) and any(v >= w for v in since.values())
+    return {r["N"]: 1 if cycle_open and since.get(r["N"], 0) >= w and stops.get(r["N"]) != 0 else 0 for r in rows}
+
+
+def net_order(rows, gaps, owed, pit_loss, flag):
+    """Class order once every car has made the stops it owes: gap + pit loss per owed stop.
+    None under yellows (pit loss collapses) or without a pit loss figure."""
+    if not pit_loss or re.search(r"yellow|fcy|caution|red", flag or "", re.I):
+        return None
+    net = {r["N"]: (gaps[r["N"]] if gaps.get(r["N"]) is not None else 1e6 + i) + pit_loss * owed.get(r["N"], 0)
+           for i, r in enumerate(rows)}
+    return sorted(net, key=net.get)
+
+
+def projection(cls, order, net, standings, quali, info):
     base = {s["car"]: s for s in standings["standings"]}
     q = quali.get("classes", {}).get(cls, {}) if quali and quali.get("event") == info.get("E") else {}
     totals = project(base, q, order)
     after = max(standings["rounds_remaining"] - 1, 0) * standings["max_points_per_round"]
     ranked = sorted(totals, key=lambda car: -totals[car])
     leader = totals[ranked[0]]
+    net_totals = project(base, q, net) if net else None
+    net_ranked = sorted(net_totals, key=lambda car: -net_totals[car]) if net else None
     return {
         "quali_counted": bool(q),
         "max_points_after": after,
@@ -268,8 +323,78 @@ def projection(cls, order, standings, quali, info):
                        "quali_pts": _pts(q.get(car), 10),
                        "race_pts": _pts(order.index(car) + 1) if car in order else 0,
                        "projected": totals[car], "proj_pos": i + 1, "proj_gap": leader - totals[car],
+                       "net_projected": net_totals and net_totals[car],
+                       "net_pos": net_ranked and net_ranked.index(car) + 1,
+                       "net_class_pos": net and car in net and net.index(car) + 1,
                        "tracked": CAR_CLASS.get(car) == cls} for i, car in enumerate(ranked)],
+        "net_order": net,
+        "_ctx": {"base": base, "q": q, "after": after, "totals": totals, "ranked": ranked,
+                 "net_totals": net_totals, "net_ranked": net_ranked},
     }
+
+
+def focus(car, rows, proj, state):
+    """The cars that matter for `car`: race reference, car ahead on track, and the championship
+    neighbours either side in the projection (net order when available). Rival changes need to
+    hold for 3 polls before they're reported, so pit-cycle flicker doesn't spam."""
+    order = [r["N"] for r in rows]
+    if car not in order:
+        return None
+    i = order.index(car)
+    ref = order[0] if i else (order[1] if len(order) > 1 else None)
+    ahead = order[i - 1] if i > 1 else None          # i == 1: the car ahead is the leader (= ref)
+    out = {"ref": ref, "ref_role": "leader" if i else "car behind", "ahead": ahead}
+    if not proj:
+        return out
+    ctx = proj["_ctx"]
+    use_net = bool(ctx["net_ranked"])
+    ranked, totals = (ctx["net_ranked"], ctx["net_totals"]) if use_net else (ctx["ranked"], ctx["totals"])
+    j = ranked.index(car)
+    champ_ahead = ranked[j - 1] if j else None
+    champ_behind = ranked[j + 1] if j + 1 < len(ranked) else None
+
+    w = state.setdefault("watch", {}).setdefault(car, {"champ_ahead": champ_ahead, "champ_behind": champ_behind,
+                                                     "pending": {}, "events": []})
+    lap = state["cars"].get(car, {}).get("last_lap")
+    for role, now_car in (("champ_ahead", champ_ahead), ("champ_behind", champ_behind)):
+        if now_car == w[role]:
+            w["pending"].pop(role, None)
+            continue
+        cand, n = w["pending"].get(role, (None, 0))
+        n = n + 1 if cand == now_car else 1
+        w["pending"][role] = (now_car, n)
+        if n >= 3:
+            w["events"].append({"lap": lap, "role": role, "from": w[role], "to": now_car, "at": now_iso()})
+            w["events"] = w["events"][-20:]
+            w[role] = now_car
+            w["pending"].pop(role, None)
+    champ_ahead, champ_behind = w["champ_ahead"], w["champ_behind"]
+
+    p = i + 1
+    raw, net_t = ctx["totals"], ctx["net_totals"]
+    margin = lambda t, other: t[car] - t[other] if t and other in t else None
+    net = proj["net_order"] or order
+    out.update({
+        "basis": "net" if use_net else "raw",
+        "champ_pos": j + 1,
+        "champ_ahead": champ_ahead, "champ_behind": champ_behind,
+        "margin_ahead": margin(raw, champ_ahead), "margin_behind": margin(raw, champ_behind),
+        "net_margin_ahead": margin(net_t, champ_ahead), "net_margin_behind": margin(net_t, champ_behind),
+        "place_gain": _pts(p - 1) - _pts(p) if p > 1 else 0,
+        "place_lose": _pts(p) - _pts(p + 1),
+        # lowest class finish for us to stay ahead of the rival behind / get ahead of the one in front,
+        # and for the rival behind to get ahead of us, everyone else holding (net) position
+        "we_need_vs_ahead": champ_ahead and worst_winning_finish(car, ctx["base"], ctx["q"], net, 0, vs=champ_ahead),
+        "we_hold_vs_behind": champ_behind and worst_winning_finish(car, ctx["base"], ctx["q"], net, 0, vs=champ_behind),
+        "rival_needs": champ_behind and worst_winning_finish(champ_behind, ctx["base"], ctx["q"], net, 0, vs=car),
+        "events": w["events"][-5:],
+    })
+    # Title margin history, one point per lap of ours.
+    hist = state.setdefault("margins", {}).setdefault(car, [])
+    if lap and (not hist or lap > hist[-1][0]):
+        hist.append([lap, out["margin_behind"], out["net_margin_behind"], out["margin_ahead"], out["net_margin_ahead"],
+                     champ_behind, champ_ahead])
+    return out
 
 
 # --- strategy (slow tier) ----------------------------------------------------------
@@ -323,6 +448,7 @@ def step():
     refresh_schedule(now)
     active, upcoming = session_window(now_dt)
     TELEMETRY.ensure(bool(active))
+    RECORDER.start(active and f'{active["start"][:10]}_{active["name"]}')
     if _s["schedule"] and not active:
         wait = (upcoming - LEAD - now_dt).total_seconds() if upcoming else SCHEDULE_EVERY
         return max(60, min(wait, SCHEDULE_EVERY))
@@ -333,8 +459,12 @@ def step():
         # Before the green flag, or a support race overrunning into the slot.
         return SESSION_POLL if active else NO_SCHEDULE_POLL
     TELEMETRY.ensure(True)
+    if not active:   # no schedule: record under the feed's own session name
+        RECORDER.start(f'{now_dt.date()}_{info.get("E")}_{name}')
     is_race, is_quali = bool(RACE_SESSIONS.search(name)), "Qualif" in name
-    feed = [c for c in jsonp("RaceResults").get("B", []) if c.get("C") in CLASSES and c.get("PIC")]
+    results = jsonp("RaceResults")
+    RECORDER.feed(info, results)
+    feed = [c for c in results.get("B", []) if c.get("C") in CLASSES and c.get("PIC")]
     if not feed:
         return SESSION_POLL
 
@@ -345,7 +475,6 @@ def step():
         _s["strategy"], _s["strategy_at"] = {}, 0.0
     state = _s["state"]
     track(state, feed, now)
-    write("race_state.json", state)
 
     by_class = {}
     for c in sorted(feed, key=lambda c: c["PIC"]):
@@ -373,6 +502,18 @@ def step():
         model = stint_model(cls, state, baseline)
         rates = [r["rate"] for n, t in tel["cars"].items() if t["cls"] == cls for r in t["refills"]]
         fill_rate = statistics.median(rates) if len(rates) >= 2 else None
+        paces = {r["N"]: strategy_pace(state["cars"][r["N"]]) for r in rows}
+        class_pace = statistics.median([p for p in paces.values() if p]) if any(paces.values()) else None
+        energies = {r["N"]: energy_info(tel["cars"].get(r["N"]), r, paces[r["N"]], remaining, fill_rate) for r in rows}
+        stops = {r["N"]: stops_to_flag(r, energies[r["N"]], state["cars"][r["N"]], model, remaining,
+                                       paces[r["N"]] or class_pace) for r in rows}
+        for n, e in energies.items():
+            if e:
+                e["stops_remaining"] = stops[n]
+        pit_loss = (_s["strategy"].get(cls) or {}).get("pit_loss") or (baseline or {}).get("pit_lane", {}).get(cls)
+        gaps = {r["N"]: gap_secs(r, class_pace) for r in rows}
+        owed = owed_stops(rows, state, stops, model, remaining, class_pace) if is_race else {}
+        net = net_order(rows, gaps, owed, pit_loss, flag) if is_race else None
         out = {
             "stint_model": model,
             "strategy": _s["strategy"].get(cls),
@@ -382,25 +523,35 @@ def step():
                 "pit_stops": r.get("PS"), "in_pit": bool(r.get("P")), "driver": r.get("F"),
                 "vehicle": r.get("V"), "tracked": CAR_CLASS.get(r["N"]) == cls,
                 "stint": stint_info(state["cars"][r["N"]], int(r.get("L") or 0), model) if is_race else None,
-                "energy": energy_info(tel["cars"].get(r["N"]), r, strategy_pace(state["cars"][r["N"]]), remaining, fill_rate),
+                "energy": energies[r["N"]], "stops_remaining": stops[r["N"]],
+                "net_pos": net.index(r["N"]) + 1 if net else None, "owes_stop": owed.get(r["N"], 0),
             } for r in rows],
-            "fill_rate": fill_rate,
+            "fill_rate": fill_rate, "pit_loss": pit_loss,
         }
+        proj = None
         if standings and cls in standings["classes"]:
-            out.update(projection(cls, [r["N"] for r in rows], standings["classes"][cls], read("quali.json"), info))
+            proj = projection(cls, [r["N"] for r in rows], net, standings["classes"][cls], read("quali.json"), info)
+            out.update({k: v for k, v in proj.items() if k != "_ctx"})
+        out["focus"] = {car: focus(car, rows, proj, state) for car, k in CAR_CLASS.items() if k == cls}
         classes[cls] = out
-    write("live.json", {
+    live_out = {
         "updated": now_iso(), "event": info.get("E"), "session": name, "is_race": is_race,
         "flag": flag, "elapsed": info.get("TT"), "remaining": info.get("TR"),
         "finished": bool(re.search(r"check|finish", flag, re.I)),
         "scheduled_end": active and active["end"],
         "telemetry": {"connected": tel["connected"], "age": round(now - tel["last_data"]) if tel["last_data"] else None},
         "base_event": standings and standings["event"], "classes": classes,
-    })
-    write("laps.json", {"updated": now_iso(), "session": name, "classes": {
+    }
+    write("live.json", live_out)
+    RECORDER.output("live.json", live_out)
+    laps_out = {"updated": now_iso(), "session": name, "classes": {
         cls: {n: {"laps": st["laps"], "stops": st["stops"], "gaps": st.get("gaps", []),
-                  "energy": tel["cars"].get(n, {}).get("lap_energy", [])}
+                  "energy": tel["cars"].get(n, {}).get("lap_energy", []),
+                  "margins": state.get("margins", {}).get(n, [])}
               for n, st in state["cars"].items() if st["cls"] == cls}
-        for cls in CLASSES}})
+        for cls in CLASSES}}
+    write("laps.json", laps_out)
+    RECORDER.output("laps.json", laps_out)
+    write("race_state.json", state)
     log.info("live: %s %s, %s, %d cars", info.get("E"), name, flag, len(feed))
     return RACE_POLL if is_race else SESSION_POLL
