@@ -5,8 +5,7 @@ services:
     image: ghcr.io/joe0121/yellowcarpoints-scraper:latest
     restart: unless-stopped
     environment:
-      CLASS: ${CLASS:-GTDPRO}
-      CARS: ${CARS:-4}
+      CARS: ${CARS:-}
       INTERVAL_MINUTES: ${INTERVAL_MINUTES:-30}
     volumes:
       - data:/data

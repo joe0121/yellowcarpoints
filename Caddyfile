@@ -1,7 +1,8 @@
 :80 {
 	root * /srv
 	encode gzip
-	header /data/* Cache-Control "no-cache"
+	# Always revalidate so visitors get a new page/data as soon as it's deployed.
+	header Cache-Control "no-cache"
 	header -Server
 	file_server
 }

@@ -2,7 +2,7 @@ FROM python:3.13-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY scraper.py .
+COPY scraper.py history.py ./
 ENV PYTHONUNBUFFERED=1
 RUN mkdir /data && chown nobody /data
 USER nobody

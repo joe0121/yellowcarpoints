@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+import statistics
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,14 +22,20 @@ from urllib.parse import quote, unquote
 import pdfplumber
 import requests
 
+import history
+
 BASE = "https://imsa.results.alkamelcloud.com/"
 SERIES = "IMSA WeatherTech SportsCar Championship"
 POINTS_RE = re.compile(
     r'href="([^"]*' + re.escape(quote(SERIES)) + r'/00_Championship%20Points%20-%20(Official|Provisional)\.pdf)"'
 )
 
-CLASS = os.environ.get("CLASS", "GTDPRO")
-CARS = [c.strip() for c in os.environ.get("CARS", "4").split(",") if c.strip()]
+# Tracked cars as CLASS:NUMBER (class as printed in the points PDF: GTP, LMP2, GTDPRO, GTD).
+DEFAULT_CARS = "GTDPRO:4,GTDPRO:3,GTDPRO:74,GTD:13,GTD:36,GTD:81"
+CAR_CLASS = {c.split(":")[-1].strip(): (c.split(":")[0].strip() if ":" in c else os.environ.get("CLASS", "GTDPRO"))
+             for c in (os.environ.get("CARS") or DEFAULT_CARS).split(",") if c.strip()}
+CARS = list(CAR_CLASS)
+CLASSES = list(dict.fromkeys(CAR_CLASS.values()))
 INTERVAL = int(os.environ.get("INTERVAL_MINUTES", "30")) * 60
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
@@ -195,7 +202,7 @@ def parse_points(pdf_bytes, cls):
 
 # --- summary -----------------------------------------------------------------------
 
-def build(meta, events, teams, drivers):
+def build(cls, events, teams, drivers):
     def state(i):
         cells = [t["rounds"][i] for t in teams]
         if any(c and (c["q"] is not None or c["r"] is not None) for c in cells):
@@ -216,13 +223,9 @@ def build(meta, events, teams, drivers):
                         if d["points"] == t["points"] and [r and (r["q"], r["r"]) for r in d["rounds"]] == key]
         t["gap"] = leader - t["points"]
         t["alive"] = t["gap"] <= max_left
-        t["tracked"] = t["car"] in CARS
+        t["tracked"] = CAR_CLASS.get(t["car"]) == cls
 
     return {
-        "updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "class": CLASS,
-        "tracked": CARS,
-        **{k: meta[k] for k in ("season", "event", "status", "url")},
         "events": [{"name": n, "state": s} for n, s in zip(events, states)],
         "rounds_remaining": remaining,
         "max_points_per_round": max_q + max_r,
@@ -285,9 +288,64 @@ def worst_winning_finish(car, base, quali, order, margin):
     return worst
 
 
-def build_live(info, cars, standings, quali):
+def _secs(t):
+    return history.secs(t) if t and "-" not in str(t) else None
+
+
+def track_pits(state, feed, now):
+    """Update per-car pit/lap state from one live poll; stops are recorded at the lap they happened."""
+    for c in feed:
+        n, ps, laps = c["N"], int(c.get("PS") or 0), int(c.get("L") or 0)
+        st = state["cars"].get(n)
+        if st is None:
+            # Seen first mid-race (scraper restarted): earlier stops happened at unknown laps.
+            st = state["cars"][n] = {"ps": ps, "stops": [], "from_start": ps == 0, "recent": [],
+                                     "last_ll": None, "pit_in_at": None, "pit_secs": []}
+        elif ps > st["ps"]:
+            st["stops"].append(laps)
+            st["ps"] = ps
+        if c.get("P") and not st["pit_in_at"]:
+            st["pit_in_at"] = now
+        elif not c.get("P") and st["pit_in_at"]:
+            if now - st["pit_in_at"] < 600:
+                st["pit_secs"].append(round(now - st["pit_in_at"]))
+            st["pit_in_at"] = None
+        if c.get("LL") != st["last_ll"]:
+            st["last_ll"] = c.get("LL")
+            if _secs(c.get("LL")):
+                st["recent"] = (st["recent"] + [_secs(c["LL"])])[-8:]
+
+
+def race_stints(st):
+    marks = ([0] if st["from_start"] else []) + st["stops"]
+    return [b - a for a, b in zip(marks, marks[1:]) if b > a]
+
+
+def stint_info(st, laps, model):
+    if st["stops"]:
+        done = laps - st["stops"][-1]
+    elif st["from_start"]:
+        done = laps
+    else:
+        done = None
+    green = [t for t in st["recent"] if t <= 1.1 * min(st["recent"])] if st["recent"] else []
+    pace = statistics.median(green) if green else None
+    out = {"laps": done, "stops_seen": len(st["stops"]), "pace": pace,
+           "pit_secs": st["pit_secs"][-1] if st["pit_secs"] else None}
+    if model and done is not None:
+        to_typical = model["typical"] - done
+        out.update({
+            "window_open": model["short"], "typical": model["typical"], "window_close": model["long"],
+            "laps_to_window": max(model["short"] - done, 0),
+            "laps_to_typical": to_typical,
+            "eta_min": round(to_typical * pace / 60) if pace and to_typical > 0 else None,
+        })
+    return out
+
+
+def build_live_class(cls, info, cars, standings, quali, state, baseline):
     base = {s["car"]: s for s in standings["standings"]}
-    q = quali["positions"] if quali and quali.get("event") == info.get("E") else {}
+    q = (quali or {}).get("classes", {}).get(cls, {}) if (quali or {}).get("event") == info.get("E") else {}
     cars = sorted(cars, key=lambda c: c.get("PIC") or 999)
     order = [c["N"] for c in cars]
     totals = project(base, q, order)
@@ -295,6 +353,13 @@ def build_live(info, cars, standings, quali):
     ranked = sorted(totals, key=lambda car: -totals[car])
     leader = totals[ranked[0]]
     feed = {c["N"]: c for c in cars}
+
+    # Pit window: this race's own completed stints once there are enough, else last year's race here.
+    stints = [x for n in order if n in state["cars"] for x in race_stints(state["cars"][n])]
+    model, source = history.stint_model(stints), "this race"
+    if not model or model["sample"] < 6:
+        model, source = (baseline or {}).get(cls), (baseline or {}).get("source")
+
     rows = []
     for i, car in enumerate(ranked):
         f, b = feed.get(car), base.get(car)
@@ -307,48 +372,110 @@ def build_live(info, cars, standings, quali):
             "projected": totals[car],
             "proj_pos": i + 1,
             "proj_gap": leader - totals[car],
-            "tracked": car in CARS,
+            "tracked": CAR_CLASS.get(car) == cls,
             "running": f and {
                 "class_pos": f.get("PIC"), "laps": f.get("L"), "gap": f.get("DIC"), "interval": f.get("GIC"),
                 "last_lap": f.get("LL"), "best_lap": f.get("BL"), "pit_stops": f.get("PS"),
-                "in_pit": bool(f.get("P")), "driver": f.get("F"),
+                "in_pit": bool(f.get("P")), "driver": f.get("F"), "vehicle": f.get("V"),
+                "stint": stint_info(state["cars"][car], int(f.get("L") or 0), model) if car in state["cars"] else None,
             },
         })
-    flag = info.get("F", "")
     return {
+        "quali_counted": bool(q),
+        "max_points_after": after,
+        "worst_winning_finish": {car: worst_winning_finish(car, base, q, order, after)
+                                 for car in order if CAR_CLASS.get(car) == cls and car in base},
+        "stint_model": model and {**model, "source": source},
+        "standings": rows,
+    }
+
+
+_race_state = None
+
+
+def live_once():
+    """Poll IMSA live timing. Returns True while a tracked race is running."""
+    global _race_state
+    info = _jsonp("SessionInfo")
+    name = info.get("S", "")
+    is_quali, is_race = "Qualif" in name, bool(LIVE_SESSIONS.search(name))
+    if not name.startswith(LIVE_SERIES) or not (is_quali or is_race):
+        return False
+    feed = [c for c in _jsonp("RaceResults").get("B", []) if c.get("C") in CLASSES and c.get("PIC")]
+    if not feed:
+        return False
+    by_class = {}
+    for c in feed:
+        by_class.setdefault(c["C"], []).append(c)
+    if is_quali:
+        # Class qualifying can be split across sessions; keep whatever each class last showed.
+        quali = _read("quali.json") or {}
+        if quali.get("event") != info.get("E"):
+            quali = {"event": info.get("E"), "classes": {}}
+        for cls, cars in by_class.items():
+            quali["classes"][cls] = {c["N"]: c["PIC"] for c in cars}
+        _write("quali.json", quali)
+        return False
+
+    key = f'{info.get("E")}|{name}'
+    if not _race_state or _race_state.get("key") != key:
+        saved = _read("race_state.json")
+        _race_state = saved if saved and saved.get("key") == key else {"key": key, "cars": {}}
+    track_pits(_race_state, feed, time.time())
+    _write("race_state.json", _race_state)
+
+    standings = _read("standings.json")
+    if not standings:
+        return True
+    baseline = _read("baseline.json")
+    baseline = baseline and baseline.get("event") == info.get("E") and \
+        {**baseline["classes"], "source": baseline["source"]}
+    flag = info.get("F", "")
+    _write("live.json", {
         "updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "event": info.get("E"),
-        "session": info.get("S"),
+        "session": name,
         "flag": flag,
         "elapsed": info.get("TT"),
         "remaining": info.get("TR"),
         "finished": bool(re.search(r"check|finish", flag, re.I)),
         "base_event": standings["event"],
-        "quali_counted": bool(q),
-        "max_points_after": after,
-        "worst_winning_finish": {car: worst_winning_finish(car, base, q, order, after) for car in CARS if car in order},
-        "standings": rows,
-    }
+        "classes": {cls: build_live_class(cls, info, by_class.get(cls, []), standings["classes"][cls],
+                                          _read("quali.json"), _race_state, baseline)
+                    for cls in CLASSES if cls in standings["classes"]},
+    })
+    log.info("live: %s %s, %s, %d cars", info.get("E"), name, flag, len(feed))
+    return True
 
 
-def live_once():
-    info = _jsonp("SessionInfo")
-    name = info.get("S", "")
-    is_quali, is_race = "Qualif" in name, bool(LIVE_SESSIONS.search(name))
-    if not name.startswith(LIVE_SERIES) or not (is_quali or is_race):
+def refresh_history():
+    """Season race-by-race summaries for the tracked cars, and the pit-window baseline."""
+    races = history.update(http, BASE, _page, _options, DATA_DIR, SERIES, CAR_CLASS, CLASSES)
+    seasons, current = _options(_page(), "season")
+    cars = {c: [] for c in CARS}
+    for event, summary in races.items():
+        for car, row in summary["cars"].items():
+            cars[car].append({"round": event.split("_", 1)[1], "date": summary["date"], **row})
+    _write("history.json", {"updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                            "season": current.split("_", 1)[1], "cars": cars})
+
+    # Baseline for the latest event (the one in progress or next): last season's race at the same track.
+    events, _ = _options(_page(current), "evvent")
+    track = events[-1].split("_", 1)[1] if events else None
+    prev = [s for s in seasons if s < current]
+    if not track or not prev or (_read("baseline.json") or {}).get("event") == track:
         return
-    cars = [c for c in _jsonp("RaceResults").get("B", []) if c.get("C") == CLASS and c.get("PIC")]
-    if not cars:
+    prev_events, _ = _options(_page(prev[-1]), "evvent")
+    match = [e for e in prev_events if e.split("_", 1)[1] == track]
+    if not match:
         return
-    if is_quali:
-        # Class qualifying can be split across sessions; keep whatever this class last showed.
-        _write("quali.json", {"event": info.get("E"), "session": name,
-                              "positions": {c["N"]: c["PIC"] for c in cars}})
-    if is_race:
-        standings = _read("standings.json")
-        if standings:
-            _write("live.json", build_live(info, cars, standings, _read("quali.json")))
-            log.info("live: %s %s, %s, %d %s cars", info.get("E"), name, info.get("F"), len(cars), CLASS)
+    old = history.update(http, BASE, _page, _options, DATA_DIR, SERIES, CAR_CLASS, CLASSES,
+                         season=prev[-1], only=match)
+    if match[0] in old:
+        stints = old[match[0]]["class_stints"]
+        _write("baseline.json", {"event": track, "source": f'{prev[-1].split("_", 1)[1]} {track}',
+                                 "classes": {c: history.stint_model(stints.get(c, [])) for c in CLASSES}})
+        log.info("baseline: %s %s", prev[-1], track)
 
 
 def run_once(last_hash=None):
@@ -358,15 +485,24 @@ def run_once(last_hash=None):
         return last_hash
     r = http.get(meta["url"], timeout=60)
     r.raise_for_status()
-    digest = hashlib.sha256(r.content + CLASS.encode() + ",".join(CARS).encode()).hexdigest()
+    digest = hashlib.sha256(r.content + json.dumps(CAR_CLASS).encode()).hexdigest()
     if digest == last_hash:
         log.info("unchanged: %s %s (%s)", meta["season"], meta["event"], meta["status"])
         return digest
-    events, teams, drivers = parse_points(r.content, CLASS)
-    if not teams:
-        raise RuntimeError(f"no {CLASS} teams table in {unquote(meta['url'])}")
-    _write("standings.json", build(meta, events, teams, drivers))
-    log.info("updated: %s %s (%s), %d cars", meta["season"], meta["event"], meta["status"], len(teams))
+    classes = {}
+    for cls in CLASSES:
+        events, teams, drivers = parse_points(r.content, cls)
+        if not teams:
+            raise RuntimeError(f"no {cls} teams table in {unquote(meta['url'])}")
+        classes[cls] = build(cls, events, teams, drivers)
+    _write("standings.json", {
+        "updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        **{k: meta[k] for k in ("season", "event", "status", "url")},
+        "cars": [{"car": c, "class": k} for c, k in CAR_CLASS.items()],
+        "classes": classes,
+    })
+    log.info("updated: %s %s (%s), %s", meta["season"], meta["event"], meta["status"],
+             ", ".join(f"{len(c['standings'])} {k}" for k, c in classes.items()))
     return digest
 
 
@@ -380,11 +516,17 @@ def main():
                 last = run_once(last)
             except Exception:
                 log.exception("scrape failed")
+            try:
+                refresh_history()
+            except Exception:
+                log.exception("history failed")
+        racing = False
         try:
-            live_once()
+            racing = live_once()
         except Exception:
             log.exception("live timing failed")
-        time.sleep(LIVE_INTERVAL)
+        # Poll faster during a race so pit stops are timed more closely.
+        time.sleep(min(LIVE_INTERVAL, 15) if racing else LIVE_INTERVAL)
 
 
 if __name__ == "__main__":
