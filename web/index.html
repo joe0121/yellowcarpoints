@@ -286,6 +286,14 @@ function renderLive(l, c, d) {
   const sess = l.session.replace(/^WeatherTech Championship( - )?/, "") || "Session";
   const strat = c.strategy?.cars || {};
   const mine = c.cars.find(r => r.car === car);
+  // Practice/qualifying: IMSA's gap column is a laps difference, so show the gap to the class's fastest lap instead.
+  const toSecs = t => { if (!t || /^[0:.\s-]*$/.test(String(t))) return null; let v = 0; for (const p of String(t).split(":")) v = v * 60 + parseFloat(p); return isNaN(v) ? null : v; };
+  const classBest = Math.min(...c.cars.map(r => toSecs(r.best_lap) ?? Infinity));
+  const gapOf = (r, leaderWord) => {
+    if (l.is_race) return r.class_pos === 1 ? leaderWord : esc(r.gap);
+    const b = toSecs(r.best_lap);
+    return b == null ? "–" : b === classBest ? "Fastest" : `+${(b - classBest).toFixed(3)}`;
+  };
 
   // --- headline: championship projection in the race, timing otherwise
   let verdict = "", sub = "";
@@ -312,17 +320,17 @@ function renderLive(l, c, d) {
   const runners = d.tracked.map(t => c.cars.find(r => r.car === t)).filter(Boolean).map(x => `
     <div class="runner" style="--c:${colorOf(x.car)}">
       <div class="runner-top"><span class="num">#${esc(x.car)} P${x.class_pos}</span><small>in class · ${esc(x.driver)}</small>${x.in_pit ? `<span class="pit">IN PIT</span>` : ""}</div>
-      <dl><dt>Gap</dt><dt>Last lap</dt><dt>Best lap</dt><dt>Stops</dt>
-        <dd>${x.class_pos === 1 ? "Leader" : esc(x.gap)}</dd><dd>${lapStr(x.last_lap)}</dd><dd>${lapStr(x.best_lap)}</dd><dd>${x.pit_stops ?? "–"}</dd></dl>
+      <dl><dt>${l.is_race ? "Gap" : "To fastest"}</dt><dt>Last lap</dt><dt>Best lap</dt><dt>Stops</dt>
+        <dd>${gapOf(x, "Leader")}</dd><dd>${lapStr(x.last_lap)}</dd><dd>${lapStr(x.best_lap)}</dd><dd>${x.pit_stops ?? "–"}</dd></dl>
       ${strategyHTML(strat[x.car])}${stintHTML(x.stint)}
     </div>`).join("");
 
   // --- whole-class timing
-  const timing = `<div class="scroll"><table class="timing"><thead><tr><th>Pos</th><th>Car</th><th class="l">Driver</th><th>Laps</th><th>Gap</th><th>Last</th><th>Best</th><th>Pace</th><th>Trend</th>${l.is_race ? "<th>Stint</th>" : ""}<th>Stops</th>${l.is_race ? `<th title="Estimated class position after a stop now">Pit now</th>` : ""}</tr></thead><tbody>`
+  const timing = `<div class="scroll"><table class="timing"><thead><tr><th>Pos</th><th>Car</th><th class="l">Driver</th><th>Laps</th><th>${l.is_race ? "Gap" : "To fastest"}</th><th>Last</th><th>Best</th><th>Pace</th><th>Trend</th>${l.is_race ? "<th>Stint</th>" : ""}<th>Stops</th>${l.is_race ? `<th title="Estimated class position after a stop now">Pit now</th>` : ""}</tr></thead><tbody>`
     + c.cars.map(r => { const x = strat[r.car] || {};
       return `<tr class="${d.tracked.includes(r.car) ? "tracked" : ""}" style="--c:${colorOf(r.car)}">
         <td>${r.class_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}<div>${esc(r.vehicle)}</div></td>
-        <td>${r.laps ?? "–"}</td><td class="dim">${r.class_pos === 1 ? "—" : esc(r.gap)}</td><td>${lapStr(r.last_lap)}</td><td>${lapStr(r.best_lap)}</td>
+        <td>${r.laps ?? "–"}</td><td class="dim">${gapOf(r, "—")}</td><td>${lapStr(r.last_lap)}</td><td>${lapStr(r.best_lap)}</td>
         <td>${lapTime(x.pace)}</td><td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td>
         ${l.is_race ? `<td class="dim">${r.stint?.laps ?? "–"}</td>` : ""}<td class="dim">${r.pit_stops ?? "–"}</td>${l.is_race ? `<td class="dim">${x.rejoin ? "P" + x.rejoin : "–"}</td>` : ""}</tr>`; }).join("")
     + `</tbody></table></div>`;
@@ -355,7 +363,7 @@ function renderLive(l, c, d) {
     <p class="note">${l.finished && l.is_race ? "Provisional until IMSA publishes the official points. " : ""}`
       + `From IMSA live timing, updated ${new Date(l.updated).toLocaleTimeString()}. `
       + (st ? `Pace, trends and pit-now estimates are recalculated every 5 minutes (last ${new Date(st.updated).toLocaleTimeString()})`
-        + (st.pit_loss ? `, using ${Math.round(st.pit_loss)}s in the pit lane per stop. ` : ". ") : "")
+        + (st.pit_loss && l.is_race ? `, using ${Math.round(st.pit_loss)}s in the pit lane per stop. ` : ". ") : "")
       + (l.is_race ? (c.quali_counted ? "Includes qualifying points. " : "Qualifying points not included. ") + "Ties and penalties aren't accounted for. " : "")
       + (m && l.is_race ? `Pit windows: full-tank stints of ${m.short}–${m.long} laps (typically ${m.typical}) from ${esc(m.source)}. A yellow or a short fill moves them.` : "")
       + `</p>`;

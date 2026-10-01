@@ -211,6 +211,15 @@ function render() {
     + `Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing.`;
 }
 
+// Seconds per % of energy, from fills of 40%+ across the class (small top-ups are mostly
+// hook-up time and skew the rate). Returns null until there are two such fills.
+function fillModel(lc) {
+  const big = lc.cars.flatMap(r => r.energy?.refills || []).filter(f => f.to - f.from >= 40 && f.secs > 5);
+  if (big.length < 2) return null;
+  const per = big.map(f => f.secs / (f.to - f.from)).sort((a, b) => a - b);
+  return { perPct: per[Math.floor(per.length / 2)], n: big.length };
+}
+
 function kpi(k, v, s, extra = "") { return `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div>${extra}<div class="s">${s}</div></div>`; }
 
 function renderKpis(me, st, lc) {
@@ -220,9 +229,12 @@ function renderKpis(me, st, lc) {
       `<div class="ebar" role="img" aria-label="${e.now.toFixed(0)}% energy"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></div>`));
     out.push(kpi("Laps left on this tank", e.laps_left != null ? Math.floor(e.laps_left) : "–", e.full_tank_laps ? `a full tank lasts ~${Math.floor(e.full_tank_laps)} laps` : "needs a few laps of data"));
     out.push(kpi("Next stop", e.next_stop_lap ? `Lap ${e.next_stop_lap}` : "–", e.eta_min != null ? `in ~${e.eta_min} min at current pace` : e.refuelling ? "refuelling now" : ""));
-    const last = e.refills.at(-1);
-    out.push(kpi("Next fill time", e.next_fill_secs ? `~${e.next_fill_secs}<small>s</small>` : "–",
-      (last ? `last fill ${last.secs}s (${last.from.toFixed(0)}→${last.to.toFixed(0)}%)` : "no refuels seen yet") + (lc.fill_rate ? ` · class fills ${lc.fill_rate.toFixed(2)}%/s` : "")));
+    const last = e.refills.at(-1), fm = fillModel(lc);
+    const arrive = e.use_per_lap && e.laps_left != null ? Math.max(0, e.now - e.use_per_lap * Math.floor(e.laps_left)) : null;
+    const nextFill = fm && arrive != null ? Math.round(fm.perPct * (100 - arrive)) : null;
+    out.push(kpi("Next fill time (est.)", nextFill ? `~${nextFill}<small>s</small>` : "–",
+      (last ? `last fill ${last.secs}s (${last.from.toFixed(0)}→${last.to.toFixed(0)}%)` : "no refuels seen yet")
+      + (fm ? ` · from ${fm.n} class fills of 40%+` : " · needs two class fills of 40%+")));
   } else if (s) {
     out.push(kpi("Stint", s.laps ?? "–", s.typical ? `typical full stint ${s.typical} laps (no telemetry)` : "no telemetry for this car"));
     out.push(kpi("Next stop", s.laps_to_typical != null ? `~${Math.max(s.laps_to_typical, 0)} laps` : "–", s.eta_min ? `~${s.eta_min} min` : ""));
@@ -427,7 +439,7 @@ function paceModel(d) {
   let pts = d.laps.filter(([n]) => n > 1 && !pit.has(n));
   if (!pts.length) return null;
   const best = Math.min(...pts.map(p => p[1]));
-  pts = pts.filter(p => p[1] <= best * 1.07);                       // yellows, traffic, incidents
+  pts = pts.filter(p => p[1] <= best * 1.05);                       // yellows, traffic, warm-up/cool-down laps
   const lastStopBefore = n => stops.filter(s => s < n).at(-1) || 0;
   pts = pts.map(([n, t]) => ({ n, t, sl: n - lastStopBefore(n) }));
   const drop = pts.length >= 15 ? Math.max(3, Math.round(pts.length * 0.1)) : 0;
@@ -438,7 +450,10 @@ function paceModel(d) {
     const mx = kept.reduce((a, p) => a + p.sl, 0) / kept.length, my = pace;
     const sxx = kept.reduce((a, p) => a + (p.sl - mx) ** 2, 0);
     const b = kept.reduce((a, p) => a + (p.sl - mx) * (p.t - my), 0) / sxx;
-    fit = { a: my - b * mx, b, at: sl => my + b * (sl - mx), maxSl: Math.max(...kept.map(p => p.sl)) };
+    const minSl = Math.min(...kept.map(p => p.sl)), maxSl = Math.max(...kept.map(p => p.sl));
+    // Only interpolate within the stint laps actually seen, and never faster than the car's best lap.
+    const raw = sl => my + b * (Math.min(maxSl, Math.max(minSl, sl)) - mx);
+    fit = { a: my - b * mx, b, minSl, maxSl, at: sl => Math.max(best, raw(sl)) };
   }
   const lastLap = d.laps.at(-1)[0];
   return { pace, best, n: kept.length, dropped: drop, fit, kept, stintLap: lastLap - (stops.filter(s => s <= lastLap).at(-1) || 0), lastLap };
@@ -456,6 +471,8 @@ function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
   $("cmp").onchange = e => { cmpChoice = e.target.value; render(); };
   const them = models[cmp];
   const worn = lc.stint_model?.typical || 40, fresh = 3;
+  const freshOf = f => f.at(Math.max(f.minSl, fresh));
+  const wornOf = f => f.maxSl >= worn * 0.6 ? f.at(Math.min(worn, f.maxSl)) : null;   // need data well into a stint
 
   // Headline: pace now and over the next 10 laps, and when the advantage flips.
   const proj = (m, row) => {
@@ -484,6 +501,7 @@ function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
   } else {
     sub = "Pace needs about 8 clean laps per car, so it fills in a few laps into a session.";
   }
+  if (me && them && !live.is_race) sub += ` <span class="dim">Practice and qualifying mix run plans, fuel loads and a rubbering-in track, so treat these as rough until the race.</span>`;
   $("pace-sub").innerHTML = sub;
 
   // Chart 1: lap time against laps since the last stop, with each car's fitted line.
@@ -491,7 +509,7 @@ function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
   for (const [car, m, color] of [[sel.car, me, C.me], [cmp, them, C.ahead]]) {
     if (!m) continue;
     stintSeries.push({ name: `#${car}`, pts: m.kept.map(p => [p.sl, p.t]), color, dots: true });
-    if (m.fit) stintSeries.push({ pts: [[2, m.fit.at(2)], [m.fit.maxSl, m.fit.at(m.fit.maxSl)]], color, width: 2, end: `${signed(m.fit.b, 3)}s/lap` });
+    if (m.fit) stintSeries.push({ pts: [[m.fit.minSl, m.fit.at(m.fit.minSl)], [m.fit.maxSl, m.fit.at(m.fit.maxSl)]], color, width: 2, end: `${signed(m.fit.b, 3)}s/lap` });
   }
   lineChart("ch-stint", { series: stintSeries, yFmt: lapTime, xName: "Stint lap", empty: "Needs a few clean laps." });
   $("lg-stint").innerHTML = [[sel.car, C.me], [cmp, C.ahead]].map(([c, col]) => `<span style="--c:${col}">#${esc(c)}</span>`).join("")
@@ -508,17 +526,17 @@ function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
   // Class table.
   const corvettes = standings.cars.filter(c => c.class === sel.class).map(c => c.car);
   const ranked = rows.filter(r => models[r.car]).sort((a, b) => models[a.car].pace - models[b.car].pace);
-  $("pace-table").innerHTML = `<thead><tr><th>#</th><th>Car</th><th>Pos</th><th>Race pace</th><th>Best</th><th title="Projected at stint lap ${fresh}">Fresh tyres</th><th title="Projected at stint lap ${worn}">Worn (L${worn})</th><th>Loses</th><th>Stint lap</th><th>Now</th><th>vs #${esc(sel.car)}</th><th>Laps used</th></tr></thead><tbody>`
+  $("pace-table").innerHTML = `<thead><tr><th>#</th><th>Car</th><th>Pos</th><th>Race pace</th><th>Best</th><th title="Trend value early in a stint">Fresh tyres</th><th title="Trend value late in a stint (shown once a car has run at least 60% of a typical ${worn}-lap stint)">Worn</th><th>Loses</th><th>Stint lap</th><th>Now</th><th>vs #${esc(sel.car)}</th><th>Laps used</th></tr></thead><tbody>`
     + ranked.map((r, i) => { const m = models[r.car], f = m.fit, now = f ? f.at(Math.max(2, m.stintLap)) : null;
       const mine = models[sel.car]?.fit ? models[sel.car].fit.at(Math.max(2, models[sel.car].stintLap)) : null;
       return `<tr class="${corvettes.includes(r.car) ? "tracked" : ""}" style="--c:${r.car === sel.car ? C.me : corvettes.includes(r.car) ? "var(--series-2)" : C.ctx}">
         <td>${i + 1}</td><td>#${esc(r.car)}</td><td class="dim">P${r.class_pos}</td><td class="total">${lapTime(m.pace)}</td><td class="dim">${lapTime(m.best)}</td>
-        <td>${f ? lapTime(f.at(fresh)) : "–"}</td><td>${f ? lapTime(f.at(worn)) : "–"}</td>
+        <td>${f ? lapTime(freshOf(f)) : "–"}</td><td>${f && wornOf(f) ? lapTime(wornOf(f)) : "–"}</td>
         <td class="${f && f.b > 0.02 ? "down" : "dim"}">${f ? signed(f.b, 3) + "s/lap" : "–"}</td><td class="dim">${m.stintLap}</td>
         <td>${now ? lapTime(now) : "–"}</td><td class="${now && mine ? (now < mine ? "down" : now > mine ? "up" : "dim") : "dim"}">${now && mine && r.car !== sel.car ? signed(now - mine) : "–"}</td>
         <td class="dim">${m.n}${m.dropped ? ` (−${m.dropped})` : ""}</td></tr>`; }).join("")
     + `</tbody>`;
-  $("pace-note").textContent = `Clean laps exclude the first lap, in- and out-laps and anything over 107% of the car's best; then the slowest 10% are dropped. `
+  $("pace-note").textContent = `Clean laps exclude the first lap, in- and out-laps and anything over 105% of the car's best; then the slowest 10% are dropped. `
     + `"Stint lap" is laps since the last stop, a stand-in for tyre age (teams sometimes double-stint tyres), and the trend includes fuel burning off. `
     + `"vs #${sel.car}": how much slower (+) or quicker (−) each car should be than #${sel.car} on its current stint lap; green is good for #${sel.car}.`;
 }
