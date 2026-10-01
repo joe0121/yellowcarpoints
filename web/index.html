@@ -363,7 +363,7 @@ function renderLive(l, c, d) {
     <p class="note">${l.finished && l.is_race ? "Provisional until IMSA publishes the official points. " : ""}`
       + `From IMSA live timing, updated ${new Date(l.updated).toLocaleTimeString()}. `
       + (st ? `Pace, trends and pit-now estimates are recalculated every 5 minutes (last ${new Date(st.updated).toLocaleTimeString()})`
-        + (st.pit_loss && l.is_race ? `, using ${Math.round(st.pit_loss)}s in the pit lane per stop. ` : ". ") : "")
+        + (st.pit_loss && l.is_race ? `, using ${Math.round(st.pit_loss)}s in the pit lane per stop (${st.pit_loss_source === "telemetry" ? "timed from this race's stops" : "last year's race here"}). ` : ". ") : "")
       + (l.is_race ? (c.quali_counted ? "Includes qualifying points. " : "Qualifying points not included. ") + "Ties and penalties aren't accounted for. " : "")
       + (m && l.is_race ? `Pit windows: full-tank stints of ${m.short}–${m.long} laps (typically ${m.typical}) from ${esc(m.source)}. A yellow or a short fill moves them.` : "")
       + `</p>`;

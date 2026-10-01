@@ -160,7 +160,7 @@ def clean_laps(st):
     if not laps:
         return []
     best = min(t for n, t in laps)
-    return [(n, t) for n, t in laps if t <= best * 1.07]
+    return [(n, t) for n, t in laps if t <= best * 1.05]
 
 
 def stint_info(st, lap, model):
@@ -205,7 +205,7 @@ def energy_use(lap_energy):
     return statistics.median(drops[-5:]) if len(drops) >= 2 else None
 
 
-def energy_info(tel, row, pace, remaining_secs, fill_rate):
+def energy_info(tel, row, pace, remaining_secs, fill_per_pct):
     if not tel or tel.get("energy") is None:
         return None
     now, use = tel["energy"], energy_use(tel["lap_energy"])
@@ -217,9 +217,9 @@ def energy_info(tel, row, pace, remaining_secs, fill_rate):
         out.update(laps_left=round(laps_left, 1), full_tank_laps=round(full, 1),
                    next_stop_lap=int(row.get("L") or 0) + int(laps_left),
                    eta_min=round(laps_left * pace / 60) if pace else None)
-        if fill_rate:
+        if fill_per_pct:
             arrive = max(now - use * int(laps_left), 0)
-            out["next_fill_secs"] = round((100 - arrive) / fill_rate)
+            out["next_fill_secs"] = round((100 - arrive) * fill_per_pct)
     return out
 
 
@@ -412,9 +412,18 @@ def stint_model(cls, state, baseline):
     return b and {**b, "source": baseline["source"]}
 
 
-def strategy(cls, rows, state, baseline, is_race):
-    pits = [p for st in state["cars"].values() if st["cls"] == cls for p in st["pit_secs"]]
-    pit_loss = statistics.median(pits) if len(pits) >= 3 else (baseline or {}).get("pit_lane", {}).get(cls)
+def pit_loss_for(cls, tel, baseline, is_race):
+    """Class pit-lane time per stop: this race's telemetry-timed visits once there are 3+,
+    otherwise last year's race here. Practice/qualifying visits (garage time) are never used."""
+    visits = [v for t in tel["cars"].values() if t["cls"] == cls for v in t.get("pit_visits", [])]
+    if is_race and len(visits) >= 3:
+        return round(statistics.median(visits), 1), "telemetry"
+    b = (baseline or {}).get("pit_lane", {}).get(cls)
+    return (b, "last year") if b else (None, None)
+
+
+def strategy(cls, rows, state, baseline, is_race, tel):
+    pit_loss, pit_source = pit_loss_for(cls, tel, baseline, is_race)
     paces = {r["N"]: strategy_pace(state["cars"][r["N"]]) for r in rows if r["N"] in state["cars"]}
     class_pace = statistics.median([p for p in paces.values() if p]) if any(paces.values()) else None
     gaps = {r["N"]: gap_secs(r, class_pace) for r in rows}
@@ -439,7 +448,7 @@ def strategy(cls, rows, state, baseline, is_race):
             "rejoin": rejoin,
             "clean_laps": len(clean_laps(st)),
         }
-    return {"updated": now_iso(), "pit_loss": pit_loss, "class_pace": class_pace, "cars": cars}
+    return {"updated": now_iso(), "pit_loss": pit_loss, "pit_loss_source": pit_source, "class_pace": class_pace, "cars": cars}
 
 
 # --- main step ---------------------------------------------------------------------
@@ -497,7 +506,7 @@ def step():
     baseline = read("baseline.json")
     baseline = baseline if baseline and baseline.get("event") == info.get("E") else None
     if now - _s["strategy_at"] >= STRATEGY_EVERY:
-        _s["strategy"] = {cls: strategy(cls, rows, state, baseline, is_race) for cls, rows in by_class.items()}
+        _s["strategy"] = {cls: strategy(cls, rows, state, baseline, is_race, TELEMETRY.snapshot()) for cls, rows in by_class.items()}
         _s["strategy_at"] = now
 
     standings = read("standings.json") if is_race else None
@@ -507,17 +516,19 @@ def step():
     classes = {}
     for cls, rows in by_class.items():
         model = stint_model(cls, state, baseline)
-        rates = [r["rate"] for n, t in tel["cars"].items() if t["cls"] == cls for r in t["refills"]]
-        fill_rate = statistics.median(rates) if len(rates) >= 2 else None
+        # Seconds per % of energy from fills of 40%+ (small top-ups are mostly hook-up time).
+        per = [r["secs"] / (r["to"] - r["from"]) for t in tel["cars"].values() if t["cls"] == cls
+               for r in t["refills"] if r["to"] - r["from"] >= 40]
+        fill_per_pct = statistics.median(per) if len(per) >= 2 else None
         paces = {r["N"]: strategy_pace(state["cars"][r["N"]]) for r in rows}
         class_pace = statistics.median([p for p in paces.values() if p]) if any(paces.values()) else None
-        energies = {r["N"]: energy_info(tel["cars"].get(r["N"]), r, paces[r["N"]], remaining, fill_rate) for r in rows}
+        energies = {r["N"]: energy_info(tel["cars"].get(r["N"]), r, paces[r["N"]], remaining, fill_per_pct) for r in rows}
         stops = {r["N"]: stops_to_flag(r, energies[r["N"]], state["cars"][r["N"]], model, remaining,
                                        paces[r["N"]] or class_pace) for r in rows}
         for n, e in energies.items():
             if e:
                 e["stops_remaining"] = stops[n]
-        pit_loss = (_s["strategy"].get(cls) or {}).get("pit_loss") or (baseline or {}).get("pit_lane", {}).get(cls)
+        pit_loss = pit_loss_for(cls, tel, baseline, is_race)[0]
         gaps = {r["N"]: gap_secs(r, class_pace) for r in rows}
         owed = owed_stops(rows, state, stops, model, remaining, class_pace) if is_race else {}
         net = net_order(rows, gaps, owed, pit_loss, flag) if is_race else None
@@ -533,7 +544,7 @@ def step():
                 "energy": energies[r["N"]], "stops_remaining": stops[r["N"]],
                 "net_pos": net.index(r["N"]) + 1 if net else None, "owes_stop": owed.get(r["N"], 0),
             } for r in rows],
-            "fill_rate": fill_rate, "pit_loss": pit_loss,
+            "fill_secs_per_pct": fill_per_pct, "pit_loss": pit_loss,
         }
         proj = None
         if standings and cls in standings["classes"]:

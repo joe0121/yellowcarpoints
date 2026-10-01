@@ -127,7 +127,8 @@ class Telemetry:
         now = f.get("time") or time.time()
         energy = f.get("energy_remaining")
         lap = int(f.get("lap_number") or 0)
-        st = self.cars.setdefault(number, {"cls": cls, "lap_energy": [], "refills": [], "refill": None, "pit_since": None})
+        st = self.cars.setdefault(number, {"cls": cls, "lap_energy": [], "refills": [], "refill": None,
+                                           "pit_since": None, "pit_visits": []})
         # Energy at each lap crossing (the first reading on a new lap).
         if energy is not None and lap and (not st["lap_energy"] or lap > st["lap_energy"][-1][0]):
             st["lap_energy"].append([lap, round(energy, 1)])
@@ -142,10 +143,15 @@ class Telemetry:
                 st["refills"].append({"lap": r["lap"], "secs": round(secs, 1), "from": r["from"], "to": energy,
                                       "rate": round((energy - r["from"]) / secs, 3)})
             st["refill"] = None
-        # Time in the pit lane for the current visit.
+        # Pit-lane visits, timed at the telemetry's ~1 Hz (entry to exit). Garage visits and
+        # drive-throughs are kept out by the bounds; live.py uses the class median as the pit loss.
         if f.get("pit_lane") and not st["pit_since"]:
             st["pit_since"] = now
-        elif not f.get("pit_lane"):
+        elif not f.get("pit_lane") and st["pit_since"]:
+            visit = now - st["pit_since"]
+            if 20 <= visit <= 240:
+                st.setdefault("pit_visits", []).append(round(visit, 1))
+                st["pit_visits"] = st["pit_visits"][-20:]
             st["pit_since"] = None
         st.update(energy=energy, lap=lap, pit_lane=bool(f.get("pit_lane")), recharging=bool(f.get("is_recharging")),
                   speed=f.get("speed"), seen=now)
