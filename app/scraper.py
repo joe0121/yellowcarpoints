@@ -42,7 +42,12 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 # Live timing: the JSONP files behind imsa.com/scoring. Unofficial and undocumented.
 LIVE_URL = "https://dcqsrdkhg933g.cloudfront.net/"
 LIVE_SERIES = "WeatherTech Championship"
-LIVE_INTERVAL = int(os.environ.get("LIVE_INTERVAL_SECONDS", "30"))
+# Polling is deliberately gentle: an occasional check when nothing is on, a minute during
+# WeatherTech sessions, 30s during the race, and exponential backoff when requests fail.
+LIVE_IDLE = int(os.environ.get("LIVE_IDLE_SECONDS", "300"))
+LIVE_SESSION = int(os.environ.get("LIVE_SESSION_SECONDS", "60"))
+LIVE_RACE = int(os.environ.get("LIVE_RACE_SECONDS", "30"))
+MAX_BACKOFF = 900
 LIVE_SESSIONS = re.compile(os.environ.get("LIVE_SESSIONS", r"\bRace\b"))
 # Race points by class finishing position; qualifying pays a tenth of the same table.
 RACE_POINTS = [350, 320, 300, 280, 260] + list(range(250, 0, -10))
@@ -394,16 +399,18 @@ _race_state = None
 
 
 def live_once():
-    """Poll IMSA live timing. Returns True while a tracked race is running."""
+    """Poll IMSA live timing. Returns how many seconds to wait before the next poll."""
     global _race_state
     info = _jsonp("SessionInfo")
     name = info.get("S", "")
     is_quali, is_race = "Qualif" in name, bool(LIVE_SESSIONS.search(name))
-    if not name.startswith(LIVE_SERIES) or not (is_quali or is_race):
-        return False
+    if not name.startswith(LIVE_SERIES):
+        return LIVE_IDLE
+    if not (is_quali or is_race):
+        return LIVE_SESSION
     feed = [c for c in _jsonp("RaceResults").get("B", []) if c.get("C") in CLASSES and c.get("PIC")]
     if not feed:
-        return False
+        return LIVE_SESSION
     by_class = {}
     for c in feed:
         by_class.setdefault(c["C"], []).append(c)
@@ -415,7 +422,7 @@ def live_once():
         for cls, cars in by_class.items():
             quali["classes"][cls] = {c["N"]: c["PIC"] for c in cars}
         _write("quali.json", quali)
-        return False
+        return LIVE_SESSION
 
     key = f'{info.get("E")}|{name}'
     if not _race_state or _race_state.get("key") != key:
@@ -426,7 +433,7 @@ def live_once():
 
     standings = _read("standings.json")
     if not standings:
-        return True
+        return LIVE_RACE
     baseline = _read("baseline.json")
     baseline = baseline and baseline.get("event") == info.get("E") and \
         {**baseline["classes"], "source": baseline["source"]}
@@ -445,7 +452,7 @@ def live_once():
                     for cls in CLASSES if cls in standings["classes"]},
     })
     log.info("live: %s %s, %s, %d cars", info.get("E"), name, flag, len(feed))
-    return True
+    return LIVE_RACE
 
 
 def refresh_history():
@@ -508,7 +515,7 @@ def run_once(last_hash=None):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    last, next_pdf = None, 0.0
+    last, next_pdf, failures = None, 0.0, 0
     while True:
         if time.monotonic() >= next_pdf:
             next_pdf = time.monotonic() + INTERVAL
@@ -520,13 +527,14 @@ def main():
                 refresh_history()
             except Exception:
                 log.exception("history failed")
-        racing = False
         try:
-            racing = live_once()
+            wait = live_once()
+            failures = 0
         except Exception:
-            log.exception("live timing failed")
-        # Poll faster during a race so pit stops are timed more closely.
-        time.sleep(min(LIVE_INTERVAL, 15) if racing else LIVE_INTERVAL)
+            failures += 1
+            wait = min(LIVE_RACE * 2 ** failures, MAX_BACKOFF)
+            log.exception("live timing failed (%d in a row), retrying in %ds", failures, wait)
+        time.sleep(wait)
 
 
 if __name__ == "__main__":

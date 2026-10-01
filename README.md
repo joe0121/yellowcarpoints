@@ -7,13 +7,14 @@ of the page, or link straight to one with `#13`).
 - `scraper` finds the newest `00_Championship Points` PDF on IMSA's Al Kamel results site every
   `INTERVAL_MINUTES`, parses the class's Teams and Drivers tables, and writes `standings.json`.
 - During a WeatherTech race it also polls IMSA's live timing (the JSON behind imsa.com/scoring)
-  every `LIVE_INTERVAL_SECONDS` (30) and writes `live.json`: the championship if the race finished
+  every `LIVE_RACE_SECONDS` (30; 60 during other WeatherTech sessions, 300 when nothing is on,
+  backing off up to 15 minutes when requests fail) and writes `live.json`: the championship if the race finished
   now, plus the worst class finish that still wins the title. Qualifying class positions are saved
   to `quali.json` during qualifying so their points are included. The page shows a live card until
   the official points PDF for that race is published.
 - After each race it reads Al Kamel's race reports (results, grid, lap and pit stop time cards) for
   every round this season and writes `history.json`: class finish, grid, best lap and its class rank,
-  stops and their times, stint lengths and laps per driver. Each race is fetched once and cached in
+  stops and their times, stint lengths and laps per driver. Each race is fetched once Provisional results are out (again for Official) and cached in
   `history/`.
 - Pit windows: `baseline.json` holds the full-tank stint lengths (25th percentile, median, 90th
   percentile) from last season's race at the next event's track. During a race the scraper records

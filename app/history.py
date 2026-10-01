@@ -195,7 +195,9 @@ def update(http, base, page, options, data_dir, series, cars, classes, season=No
             out[event] = cached
             continue
         files = race_files(page(season, event), series)
-        if "results" not in files:
+        # Wait for Provisional/Official results: during the race Al Kamel re-publishes large
+        # Unofficial snapshots every hour, and there's no need to download each one.
+        if files.get("results", (None, None))[1] not in ("Official", "Provisional"):
             continue
         # During and just after a race the files are re-published hour by hour; redo when they move.
         if cached and cached.get("results_path") == files["results"][0] \
