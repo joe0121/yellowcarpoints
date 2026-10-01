@@ -202,7 +202,7 @@ const roundPts = r => r ? (r.q || 0) + (r.r || 0) : 0;
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
-let standings = null, live = null, hist = null;
+let standings = null, live = null, hist = null, entries = null;
 
 // The selected car comes from the URL (#13), then the last choice, then the first configured car.
 function selected() {
@@ -232,7 +232,7 @@ async function getJSON(path) {
 }
 
 async function load() {
-  [standings, hist] = await Promise.all([getJSON("data/standings.json"), getJSON("data/history.json")]);
+  [standings, hist, entries] = await Promise.all([getJSON("data/standings.json"), getJSON("data/history.json"), getJSON("data/entries.json")]);
   if (!standings || !standings.classes) {
     $("cars").innerHTML = `<div class="card err">Standings aren't available yet. Check back shortly.</div>`;
     return;
@@ -271,9 +271,17 @@ function render(d) {
 
   // --- hero card for the selected car
   const t = st.find(s => s.car === car);
+  // This weekend's entry (team, drivers, car) from the latest session's official results.
+  const entry = entries?.cars?.[car];
+  const weekend = entry ? `<div class="drivers">At ${esc(entries.event)}: ${esc(entry.drivers.join(" · "))}</div>`
+    : entries ? `<div class="drivers">Not entered at ${esc(entries.event)}.</div>` : "";
   if (!t) {
-    $("cars").innerHTML = `<div class="card car" style="--c:${colorOf(car)}"><div class="car-no"><i></i>#${esc(car)}</div>
-      <p class="verdict">Not scored in the ${d.season} ${cls} team standings. Live timing and pit windows still show here when it races.</p></div>`;
+    const where = entry ? `Entered in ${esc(CLASS_NAMES[entry.class] || entry.class)} at ${esc(entries.event)} (${esc(entry.vehicle)}).` : "";
+    $("cars").innerHTML = `<article class="card car" style="--c:${colorOf(car)}">
+      <div class="car-head"><div class="car-no"><i></i>#${esc(car)} <small class="drivers">${esc(entry?.team || "")}</small></div><span class="status" style="color:var(--text-3)">No ${esc(cls)} points</span></div>
+      ${entry ? `<div class="drivers">${esc(entry.drivers.join(" · "))}</div>` : ""}
+      <p class="verdict">${where} It hasn't scored ${esc(cls)} championship points in ${d.season}, so it isn't in the standings. Live timing, lap times and pit windows still show here when it's on track.</p>
+    </article>`;
   } else {
     const ahead = st.find(s => s.pos === t.pos - 1), behind = st.find(s => s.pos === t.pos + 1);
     const left = d.max_points_remaining;
@@ -299,6 +307,7 @@ function render(d) {
     $("cars").innerHTML = `<article class="card car" style="--c:${colorOf(car)}">
       <div class="car-head"><div class="car-no"><i></i>#${esc(car)} <small class="drivers">${esc(t.team)}</small></div><span class="status" style="color:${color}">${status}</span></div>
       <div class="drivers">${esc(t.drivers.join(" · "))}</div>
+      ${weekend}
       <div class="hero"><span class="num pos">P${t.pos}</span><span class="num pts">${fmt(t.points)}<small>pts</small></span></div>
       <p class="verdict">${verdict}</p>
       <div class="facts">

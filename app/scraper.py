@@ -221,6 +221,22 @@ def build(cls, events, teams, drivers):
 
 # --- race history ------------------------------------------------------------------
 
+def refresh_entries(season, event):
+    """Team, car and driver line-up per tracked-class car, from the latest session's results."""
+    html = _page(season, event)
+    files = sorted(set(unquote(h) for h in re.findall(r'href="([^"]+)"', html)
+                       if re.search(rf"_{re.escape(quote(SERIES))}/\d{{12}}_[^/]+/03_Results_[^/]*\.JSON$", h)))
+    if not files:
+        return
+    latest = max(files, key=lambda f: re.search(r"/(\d{12})_", f).group(1))
+    results = json.loads(http.get(BASE + quote(latest), timeout=60).content.decode("utf-8-sig"))
+    cars = {r["number"]: {"class": r["class"], "team": r["team"], "vehicle": r["vehicle"],
+                          "drivers": [f'{d["firstname"]} {d["surname"]}' for d in r.get("drivers", [])]}
+            for r in results["classification"] if r["class"] in CLASSES}
+    write("entries.json", {"updated": now_iso(), "event": event.split("_", 1)[1],
+                           "session": results["session"].get("session_name"), "cars": cars})
+
+
 def refresh_history():
     """Season race-by-race summaries for the tracked cars, and the pit-window baseline."""
     races = history.update(http, BASE, _page, _options, DATA_DIR, SERIES, CAR_CLASS, CLASSES)
@@ -235,6 +251,11 @@ def refresh_history():
     # Baseline for the latest event (the one in progress or next): last season's race at the same track.
     events, _ = _options(_page(current), "evvent")
     track = events[-1].split("_", 1)[1] if events else None
+    if events:
+        try:
+            refresh_entries(current, events[-1])
+        except Exception:
+            log.exception("entry list failed")
     prev = [s for s in seasons if s < current]
     old_base = read("baseline.json") or {}
     if not track or not prev or (old_base.get("event") == track and "pit_lane" in old_base):
