@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site Status</title>
+<meta name="description" content="Local health page for yellowcarpoints.win: feeds, telemetry, tunnel, traffic and recent errors.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23eda100'/><text x='16' y='23' font-size='18' font-family='Arial' font-weight='700' text-anchor='middle' fill='%23111'>S</text></svg>">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f5f4f0; --surface: #fcfcfb; --line: #e2e0d9; --text: #0b0b0b; --text-2: #52514e; --text-3: #7a7974;
+  --good: #0ca30c; --warn: #b77a00; --critical: #d03b3b; --idle: #8f8e86; --accent: #eda100;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --line: #2e2e2b; --text: #fff; --text-2: #c3c2b7; --text-3: #8f8e86;
+    --warn: #f5c04a; --critical: #ef6a6a; --good: #3fbf3f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --line: #2e2e2b; --text: #fff; --text-2: #c3c2b7; --text-3: #8f8e86;
+  --warn: #f5c04a; --critical: #ef6a6a; --good: #3fbf3f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { margin: 0; font-size: 22px; }
+h1 span { color: var(--accent); }
+.sub { color: var(--text-2); margin: 2px 0 16px; font-size: 13px; }
+.overall { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); margin-bottom: 14px; font-weight: 600; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.tile h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); }
+.state { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.state small { font-weight: 500; color: var(--text-3); }
+.big { font-size: 22px; font-weight: 650; margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+.detail { color: var(--text-2); font-size: 12px; margin-top: 4px; }
+.meter { height: 6px; border-radius: 3px; background: var(--line); margin-top: 8px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--c); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.t { white-space: nowrap; color: var(--text-3); font-variant-numeric: tabular-nums; }
+td.lv { font-weight: 600; white-space: nowrap; }
+.wide { grid-column: 1 / -1; }
+.empty { color: var(--text-3); }
+footer { margin-top: 16px; color: var(--text-3); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Yellow Car Points <span>status</span></h1>
+  <p class="sub">This PC only (http://localhost:8089), not reachable through the public site. Refreshes every 5 seconds. Read-only.</p>
+  <div class="overall" id="overall"></div>
+  <div class="grid" id="grid"></div>
+  <footer id="foot"></footer>
+</main>
+<script>
+const UPLOAD_LIMIT = 4.1e6;   // bytes/s, measured through the VPN on 2026-10-01
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const S = { good: ["var(--good)", "OK"], warn: ["var(--warn)", "Check"], crit: ["var(--critical)", "Problem"], idle: ["var(--idle)", "Idle"] };
+
+function ago(t, now) {
+  if (!t) return "never";
+  const s = Math.max(0, Math.round(now - t));
+  return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${(s / 3600).toFixed(1)} h ago`;
+}
+const clock = t => new Date(t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+const day = iso => new Date(iso).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+const mb = b => b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : (b / 1e3).toFixed(0) + " KB";
+const grade = (age, ok, warn) => age == null ? "crit" : age <= ok ? "good" : age <= warn ? "warn" : "crit";
+
+function tile(title, state, label, big = "", detail = "", extra = "", wide = false) {
+  const [c, word] = S[state];
+  return `<section class="tile${wide ? " wide" : ""}" style="--c:${c}"><h2>${title}</h2>
+    <div class="state"><span class="dot" aria-hidden="true"></span>${word}<small>${label ? "· " + label : ""}</small></div>
+    ${big ? `<div class="big">${big}</div>` : ""}${detail ? `<div class="detail">${detail}</div>` : ""}${extra}</section>`;
+}
+
+// Prometheus text -> sum of a metric's samples matching label filters.
+function metric(text, name, filter = {}) {
+  let sum = 0, found = false;
+  for (const line of text.split("\n")) {
+    if (!line.startsWith(name)) continue;
+    const m = line.match(/^([a-z_]+)(\{([^}]*)\})?\s+([0-9.eE+-]+)/);
+    if (!m || m[1] !== name) continue;
+    const labels = Object.fromEntries([...(m[3] || "").matchAll(/(\w+)="([^"]*)"/g)].map(x => [x[1], x[2]]));
+    if (Object.entries(filter).every(([k, v]) => labels[k] === v)) { sum += +m[4]; found = true; }
+  }
+  return found ? sum : null;
+}
+
+let prev = null;   // previous metrics sample, for rates
+async function text(u) { try { const r = await fetch(u, { cache: "no-store" }); return r.ok ? await r.text() : null; } catch (e) { return null; } }
+
+async function refresh() {
+  const [statusText, caddy, tunnel] = await Promise.all([text("data/status.json"), text("metrics"), text("tunnel-metrics")]);
+  const now = Date.now() / 1000;
+  let st = null;
+  try { st = statusText && JSON.parse(statusText); } catch (e) {}
+  const tiles = [], states = [];
+  const add = (state, ...args) => { states.push(state); tiles.push(tile(args[0], state, ...args.slice(1))); };
+
+  // --- scraper heartbeat
+  const hb = st ? now - st.now : null;
+  add(grade(hb, 45, 120), "Scraper", hb == null ? "no status file" : `heartbeat ${ago(st.now, now)}`,
+    "", st ? `Running since ${new Date(st.started * 1000).toLocaleString()}` : "The scraper container isn't writing status. Check it in lazydocker.");
+
+  if (st) {
+    const L = st.live || {}, ok = st.ok || {};
+    const inWindow = !!L.window;
+    // --- session
+    add(inWindow ? "good" : "idle", "Live session", inWindow ? "polling" : "waiting for the next session",
+      esc(inWindow ? L.window : (L.next_session ? "Next " + day(L.next_session) : "No session scheduled")),
+      inWindow ? `IMSA feed shows: ${esc(L.feed_session || "–")} · flag ${esc(L.flag || "–")}${L.window_end ? ` · window ends ${day(L.window_end)} + 30 min` : ""}`
+        : `Next poll ${L.wait_until ? clock(L.wait_until) : "–"}`);
+    // --- leaderboard feed
+    const feedAge = ok.feed ? now - ok.feed.t : null;
+    add(inWindow ? grade(feedAge, 130, 300) : "idle", "Leaderboard feed", inWindow ? `last poll ${ago(ok.feed?.t, now)}` : "not polling outside sessions",
+      "", ok.feed ? `${esc(ok.feed.session)} · ${ok.feed.cars} cars in the last poll` : "No poll yet since the scraper started."
+        + (L.failures ? ` · ${L.failures} failed polls in a row (backing off)` : ""));
+    // --- telemetry
+    const T = st.telemetry || {}, telAge = T.last_data ? now - T.last_data : null;
+    add(inWindow ? (T.connected ? grade(telAge, 30, 120) : "crit") : (T.connected ? "good" : "idle"), "Telemetry stream",
+      T.connected ? `connected · last message ${ago(T.last_data, now)}` : "closed",
+      "", T.connected ? `${T.cars} GTD/GTD PRO cars seen · stream session: ${esc(T.series || "–")} ${esc(T.session || "")}` : "Opens 10 minutes before each WeatherTech session.");
+    // --- points / history / schedule
+    const pAge = ok.points ? now - ok.points.t : null;
+    add(grade(pAge, 2700, 7200), "Championship points", `checked ${ago(ok.points?.t, now)}`, "", `Latest points PDF: ${esc(ok.points?.event || "–")} · checked every 30 min`);
+    const hAge = ok.history ? now - ok.history.t : null, sAge = ok.schedule ? now - ok.schedule.t : null;
+    const worst = [grade(hAge, 2700, 7200), grade(sAge, 7 * 3600, 13 * 3600)].sort((a, b) => ["good", "warn", "crit"].indexOf(b) - ["good", "warn", "crit"].indexOf(a))[0];
+    add(worst, "Race history & schedule", `history ${ago(ok.history?.t, now)} · schedule ${ago(ok.schedule?.t, now)}`, "",
+      `${ok.schedule?.sessions ?? "–"} WeatherTech sessions on IMSA's weekend schedule (refreshed every 6 h)`);
+    // --- recordings & disk
+    const R = st.recorder || {}, D = st.disk || {};
+    const files = Object.entries(R.files || {}).map(([n, b]) => `${esc(n)} ${mb(b)}`).join(" · ");
+    add(D.free < 2e9 ? "crit" : D.free < 1e10 ? "warn" : (R.dir ? "good" : "idle"), "Session recording", R.dir ? "recording" : "not recording (no session)",
+      "", `${R.dir ? `${esc(R.dir)}: ${files || "starting…"}<br>` : ""}Disk free: ${mb(D.free)} of ${mb(D.total)}`);
+  }
+
+  // --- tunnel
+  const conns = tunnel ? metric(tunnel, "cloudflared_tunnel_ha_connections") : null;
+  add(conns == null ? "crit" : conns >= 4 ? "good" : conns > 0 ? "warn" : "crit", "Cloudflare tunnel",
+    conns == null ? "metrics unreachable (cloudflared down?)" : `${conns} of 4 connections`, "",
+    tunnel ? `${metric(tunnel, "cloudflared_tunnel_total_requests") ?? "–"} requests served since the connector started` : "");
+
+  // --- traffic (public site only)
+  if (caddy) {
+    const sample = { t: now, req: metric(caddy, "caddy_http_requests_total", { server: "public" }) || 0,
+                     bytes: metric(caddy, "caddy_http_response_size_bytes_sum", { server: "public" }) || 0 };
+    if (prev && sample.t > prev.t && sample.req >= prev.req) {
+      const dt = sample.t - prev.t, rpm = (sample.req - prev.req) / dt * 60, bps = (sample.bytes - prev.bytes) / dt;
+      const pct = bps / UPLOAD_LIMIT * 100;
+      add(pct < 50 ? "good" : pct < 80 ? "warn" : "crit", "Public traffic", `${rpm.toFixed(0)} requests/min`,
+        `${(bps / 1e3).toFixed(1)} KB/s`, `${pct.toFixed(1)}% of your ~${(UPLOAD_LIMIT / 1e6).toFixed(1)} MB/s upload · ${sample.req.toFixed(0)} requests since the web server started`,
+        `<div class="meter" role="img" aria-label="${pct.toFixed(0)}% of upload"><i style="width:${Math.min(100, pct)}%"></i></div>`);
+    } else {
+      add("idle", "Public traffic", "measuring…", "", "Rates appear after the second sample (5 s).");
+    }
+    prev = sample;
+  } else {
+    add("crit", "Public traffic", "web server metrics unreachable", "", "");
+  }
+
+  // --- problems
+  const P = st?.problems || [];
+  const recent = P.filter(p => now - p.t < 3600);
+  tiles.push(tile("Warnings & errors", recent.some(p => p.level === "ERROR") ? "crit" : recent.length ? "warn" : "good",
+    recent.length ? `${recent.length} in the last hour` : "none in the last hour", "", "",
+    P.length ? `<table>${P.slice(0, 15).map(p => `<tr><td class="t">${clock(p.t)}</td><td class="lv">${esc(p.level)}</td><td>${esc(p.msg)}</td></tr>`).join("")}</table>`
+      : `<p class="detail empty">Nothing logged since the scraper started.</p>`, true));
+  states.push(recent.some(p => p.level === "ERROR") ? "crit" : recent.length ? "warn" : "good");
+
+  const overall = states.includes("crit") ? "crit" : states.includes("warn") ? "warn" : "good";
+  const [c] = S[overall];
+  $("overall").style.setProperty("--c", c);
+  $("overall").innerHTML = `<span class="dot" style="--c:${c}" aria-hidden="true"></span>${{ good: "All systems OK", warn: "Something needs a look", crit: "Something is wrong" }[overall]}`;
+  $("grid").innerHTML = tiles.join("");
+  $("foot").textContent = `Last refreshed ${new Date().toLocaleTimeString()}. Scraper log: ~/Work/yellowcarpoints/archive/scraper.log`;
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

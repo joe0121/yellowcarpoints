@@ -9,6 +9,7 @@ services:
       INTERVAL_MINUTES: ${INTERVAL_MINUTES:-30}
     volumes:
       - data:/data
+      - status:/status
       # Session recordings and the scraper log, readable on the host for debugging/replay.
       - ./archive:/data/archive
 
@@ -17,13 +18,16 @@ services:
     restart: unless-stopped
     volumes:
       - data:/srv/data:ro
+      - status:/srv-status/data:ro
     ports:
-      - "127.0.0.1:8088:80"   # local preview only; the public route is the tunnel
+      - "127.0.0.1:8088:80"     # local preview only; the public route is the tunnel
+      - "127.0.0.1:8089:8089"   # status page, this PC only (not in the tunnel's ingress)
 
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    # --metrics: connection counters for the status page (Docker network only, not published).
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --config /etc/cloudflared/config.yml run
     # Runs as the host user so it can read the credentials file in ~/.cloudflared (mode 600).
     user: "${TUNNEL_UID:-1000}:${TUNNEL_GID:-1000}"
     volumes:
@@ -34,3 +38,4 @@ services:
 
 volumes:
   data:
+  status:

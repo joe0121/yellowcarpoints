@@ -24,6 +24,7 @@ import pdfplumber
 
 import history
 import live
+import status
 from common import CAR_CLASS, CARS, CLASSES, DATA_DIR, http, now_iso, read, write
 
 BASE = "https://imsa.results.alkamelcloud.com/"
@@ -310,25 +311,30 @@ def main():
     fh = logging.handlers.RotatingFileHandler(DATA_DIR / "archive" / "scraper.log", maxBytes=5_000_000, backupCount=5)
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     logging.getLogger().addHandler(fh)
+    status.start()
     last, next_pdf, failures = None, 0.0, 0
     while True:
         if time.monotonic() >= next_pdf:
             next_pdf = time.monotonic() + INTERVAL
             try:
                 last = run_once(last)
+                status.mark("points", event=(read("standings.json") or {}).get("event"))
             except Exception:
                 log.exception("scrape failed")
             try:
                 refresh_history()
+                status.mark("history")
             except Exception:
                 log.exception("history failed")
         try:
             wait = live.step()
             failures = 0
+            status.live(last_step=time.time(), wait_until=time.time() + wait, failures=0)
         except Exception:
             failures += 1
             wait = min(live.RACE_POLL * 2 ** failures, MAX_BACKOFF)
             log.exception("live timing failed (%d in a row), retrying in %ds", failures, wait)
+            status.live(last_step=time.time(), wait_until=time.time() + wait, failures=failures)
         time.sleep(wait)
 
 

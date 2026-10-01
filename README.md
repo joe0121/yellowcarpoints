@@ -90,3 +90,14 @@ and `outputs.jsonl.gz` (live.json / laps.json every 5 minutes). The scraper log 
 
     docker compose exec scraper python replay.py /data/archive/<folder> /tmp/replay
     # or locally: DATA_DIR is set by the script; --data points at a copy of standings/baseline/quali
+
+## Status page (this PC only)
+
+http://localhost:8089 shows, refreshed every 5 s: scraper heartbeat, live session window, leaderboard
+feed and telemetry freshness, points/history/schedule checks, the current recording and disk space,
+Cloudflare tunnel connections, public requests/min and upload use, and recent warnings/errors.
+
+It is a separate Caddy site on `127.0.0.1:8089` (not in the tunnel's ingress, so not public). The
+scraper writes `status.json` every 15 s to the `status` volume (`app/status.py`); traffic comes from
+Caddy's metrics and tunnel connections from cloudflared's metrics (`--metrics`, Docker network only).
+Read-only by design: restarts and logs stay in lazydocker.

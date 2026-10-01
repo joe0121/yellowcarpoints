@@ -1,3 +1,15 @@
+{
+	# Request/byte counters for the status page (served on :8089 only).
+	metrics
+	servers :80 {
+		name public
+	}
+	servers :8089 {
+		name status
+	}
+}
+
+# Public site (the Cloudflare tunnel points here).
 :80 {
 	root * /srv
 	encode gzip
@@ -5,4 +17,20 @@
 	header Cache-Control "no-cache"
 	header -Server
 	file_server
+}
+
+# Local-only status page: published on 127.0.0.1:8089 and never routed through the tunnel.
+:8089 {
+	header Cache-Control "no-cache"
+	handle /metrics {
+		metrics
+	}
+	handle /tunnel-metrics {
+		rewrite * /metrics
+		reverse_proxy cloudflared:2000
+	}
+	handle {
+		root * /srv-status
+		file_server
+	}
 }

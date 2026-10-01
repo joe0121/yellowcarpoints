@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 import history
 import telemetry
+import status
 from archive import RECORDER
 from common import CAR_CLASS, CLASSES, http, now_iso, read, write
 
@@ -96,6 +97,8 @@ def refresh_schedule(now):
         sessions = []
     _s["schedule"] = sessions
     write("schedule.json", {"updated": now_iso(), "sessions": sessions})
+    if sessions:
+        status.mark("schedule", sessions=len(sessions))
     log.info("schedule: %s", ", ".join(f'{s["name"]} {s["start"]}' for s in sessions) or "no WeatherTech sessions")
 
 
@@ -449,12 +452,15 @@ def step():
     active, upcoming = session_window(now_dt)
     TELEMETRY.ensure(bool(active))
     RECORDER.start(active and f'{active["start"][:10]}_{active["name"]}')
+    status.live(window=active and active["name"], window_end=active and active["end"],
+                next_session=upcoming and upcoming.isoformat())
     if _s["schedule"] and not active:
         wait = (upcoming - LEAD - now_dt).total_seconds() if upcoming else SCHEDULE_EVERY
         return max(60, min(wait, SCHEDULE_EVERY))
 
     info = jsonp("SessionInfo")
     name = info.get("S", "")
+    status.live(feed_session=name, flag=info.get("F"))
     if not name.startswith(SERIES):
         # Before the green flag, or a support race overrunning into the slot.
         return SESSION_POLL if active else NO_SCHEDULE_POLL
@@ -464,6 +470,7 @@ def step():
     is_race, is_quali = bool(RACE_SESSIONS.search(name)), "Qualif" in name
     results = jsonp("RaceResults")
     RECORDER.feed(info, results)
+    status.mark("feed", session=name, cars=len(results.get("B", [])))
     feed = [c for c in results.get("B", []) if c.get("C") in CLASSES and c.get("PIC")]
     if not feed:
         return SESSION_POLL
