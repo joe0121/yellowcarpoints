@@ -1,0 +1,33 @@
+# Images are built by .github/workflows/images.yml and pulled from GitHub's registry.
+# Update: docker compose pull && docker compose up -d
+services:
+  scraper:
+    image: ghcr.io/joe0121/yellowcarpoints-scraper:latest
+    restart: unless-stopped
+    environment:
+      CLASS: ${CLASS:-GTDPRO}
+      CARS: ${CARS:-4}
+      INTERVAL_MINUTES: ${INTERVAL_MINUTES:-30}
+    volumes:
+      - data:/data
+
+  web:
+    image: ghcr.io/joe0121/yellowcarpoints-web:latest
+    restart: unless-stopped
+    volumes:
+      - data:/srv/data:ro
+    ports:
+      - "127.0.0.1:8088:80"   # local preview only; the public route is the tunnel
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - web
+    profiles: ["tunnel"]
+
+volumes:
+  data:
