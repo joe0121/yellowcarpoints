@@ -23,6 +23,7 @@ FILES = {
     "laps": r"23_Time Cards_Race(_Unofficial)?\.JSON",
 }
 RANK = {"Official": 0, "Provisional": 1, "Unofficial": 2, None: 3}
+VERSION = 2  # bump when the summary format changes, so cached races are rebuilt
 
 
 def secs(t):
@@ -137,6 +138,9 @@ def summarise(http, base, files, cars, classes):
             # Stints that ended in a stop; the run to the flag is usually a short fill.
             full += stints[:len(ends)]
         out["class_stints"][cls] = full
+        # Time in the pit lane per stop (drive-throughs and long repairs dropped).
+        out.setdefault("class_pit_secs", {})[cls] = [t for r in rows for s in pits.get(r["number"], [])
+                                                     if (t := secs(s["pit_time"])) and 20 < t < 200]
         for i, r in enumerate(rows):
             if r["number"] not in cars or cars[r["number"]] != cls:
                 continue
@@ -166,6 +170,7 @@ def summarise(http, base, files, cars, classes):
             }
     out["results_status"] = files["results"][1]
     out["results_path"] = files["results"][0]
+    out["version"] = VERSION
     return out
 
 
@@ -191,6 +196,8 @@ def update(http, base, page, options, data_dir, series, cars, classes, season=No
     for event in only or events:
         path = cache / f"{season}__{event}.json"
         cached = json.loads(path.read_text()) if path.exists() else None
+        if cached and cached.get("version") != VERSION:
+            cached = None
         if cached and cached.get("results_status") == "Official":
             out[event] = cached
             continue

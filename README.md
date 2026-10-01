@@ -6,12 +6,17 @@ of the page, or link straight to one with `#13`).
 
 - `scraper` finds the newest `00_Championship Points` PDF on IMSA's Al Kamel results site every
   `INTERVAL_MINUTES`, parses the class's Teams and Drivers tables, and writes `standings.json`.
-- During a WeatherTech race it also polls IMSA's live timing (the JSON behind imsa.com/scoring)
-  every `LIVE_RACE_SECONDS` (30; 60 during other WeatherTech sessions, 300 when nothing is on,
-  backing off up to 15 minutes when requests fail) and writes `live.json`: the championship if the race finished
-  now, plus the worst class finish that still wins the title. Qualifying class positions are saved
-  to `quali.json` during qualifying so their points are included. The page shows a live card until
-  the official points PDF for that race is published.
+- Live timing (`app/live.py`) is driven by IMSA's published weekend schedule (read from imsa.com
+  every 6 hours into `schedule.json`). It only polls the JSON behind imsa.com/scoring from 10 minutes
+  before each WeatherTech session until 30 minutes after its scheduled end, and not at all otherwise
+  (if the schedule can't be read, it checks every 30 minutes instead). While a session runs:
+  - every `LIVE_RACE_SECONDS` (30) in the race / `LIVE_SESSION_SECONDS` (60) otherwise: every car's
+    lap times and pit stops in the tracked classes (`laps.json`, `race_state.json`), the class
+    timing, and in the race the championship if it finished now (`live.json`). Qualifying class
+    positions go to `quali.json` so their points are included;
+  - every `STRATEGY_SECONDS` (300): pace over the last 5 clean laps and its trend, pace against the
+    cars either side, and where each car would rejoin if it pitted now.
+  Failed requests back off exponentially up to 15 minutes.
 - After each race it reads Al Kamel's race reports (results, grid, lap and pit stop time cards) for
   every round this season and writes `history.json`: class finish, grid, best lap and its class rank,
   stops and their times, stint lengths and laps per driver. Each race is fetched once Provisional results are out (again for Official) and cached in
