@@ -114,6 +114,31 @@ th.rnd, td.rnd { color: var(--text-2); min-width: 44px; }
 footer { margin-top: 24px; color: var(--text-3); font-size: 12px; }
 footer a { color: inherit; }
 .err { padding: 40px 20px; text-align: center; color: var(--text-2); }
+
+.live { border: 1px solid var(--accent); margin-bottom: 16px; }
+.live-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13px; color: var(--text-2); }
+.live-head b { color: var(--text); }
+.pulse { font-weight: 700; letter-spacing: .08em; color: var(--critical); }
+.pulse::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; animation: blink 1.4s infinite; }
+.live.done .pulse { color: var(--text-3); }
+.live.done .pulse::before { animation: none; }
+@keyframes blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .pulse::before { animation: none; } }
+.flag { padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; border: 1px solid var(--f); color: var(--f); }
+.ttg { margin-left: auto; font-variant-numeric: tabular-nums; }
+.live-verdict { font-family: Oswald, Impact, sans-serif; font-weight: 600; font-size: clamp(22px, 4.5vw, 30px); line-height: 1.15; margin: 12px 0 4px; text-transform: uppercase; }
+.live-verdict em { font-style: normal; color: var(--accent-ink); }
+.live-sub { margin: 0; color: var(--text-2); font-size: 14px; }
+.runners { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin: 16px 0 4px; }
+.runner { border-left: 4px solid var(--c); padding: 2px 0 2px 12px; }
+.runner-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.runner-top .num { font-size: 28px; line-height: 1; }
+.runner-top small { color: var(--text-3); font-size: 12px; }
+.pit { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 4px; background: var(--accent); color: #111; }
+.runner dl { display: grid; grid-template-columns: repeat(4, auto); gap: 2px 14px; margin: 8px 0 0; font-size: 12px; justify-content: start; }
+.runner dt { color: var(--text-3); }
+.runner dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 500; }
+.live .note { color: var(--text-3); font-size: 12px; margin: 10px 0 0; }
 @media (max-width: 560px) {
   .meta { text-align: left; }
   .pos { font-size: 52px; }
@@ -132,6 +157,7 @@ footer a { color: inherit; }
     </div>
     <div class="meta" id="meta"></div>
   </header>
+  <section class="card live" id="live" hidden aria-live="polite"></section>
   <section class="cars" id="cars"></section>
   <section class="card" id="chart-card" hidden>
     <h2>Points behind the leader</h2>
@@ -157,11 +183,90 @@ async function load() {
   try {
     const res = await fetch("data/standings.json", { cache: "no-cache" });
     if (!res.ok) throw new Error(res.status);
-    render(await res.json());
+    standings = await res.json();
+    render(standings);
+    loadLive();
   } catch (e) {
     $("cars").innerHTML = `<div class="card err">Standings aren't available yet. Check back shortly.</div>`;
   }
 }
+
+// --- live race projection (data/live.json, written by the scraper during a race)
+let standings = null;
+const FLAG_COLORS = { green: "var(--good)", yellow: "var(--accent-ink)", fcy: "var(--accent-ink)", red: "var(--critical)" };
+
+async function loadLive() {
+  let live = null;
+  try {
+    const res = await fetch("data/live.json", { cache: "no-cache" });
+    if (res.ok) live = await res.json();
+  } catch (e) { /* no live data */ }
+  // Show it only while the official points still predate this race, and not for stale files.
+  const fresh = live && standings && live.base_event === standings.event
+    && Date.now() - new Date(live.updated) < 48 * 3600e3;
+  $("live").hidden = !fresh;
+  if (fresh) renderLive(live, standings);
+}
+
+function renderLive(l, d) {
+  const colorOf = car => COLORS[d.tracked.indexOf(car)] || "var(--context)";
+  const rows = l.standings, final = l.max_points_after === 0;
+  const flagKey = Object.keys(FLAG_COLORS).find(k => l.flag.toLowerCase().includes(k));
+  const left = (l.remaining || "").replace(/^00:/, "");
+  const sess = l.session.replace(/^WeatherTech Championship - /, "");
+
+  const car = d.tracked.find(c => rows.some(r => r.car === c && r.running));
+  let verdict = "", sub = "";
+  if (car) {
+    const me = rows.find(r => r.car === car), top = rows[0], second = rows[1];
+    const worst = l.worst_winning_finish[car];
+    const word = final ? "champion" : "championship leader";
+    if (me.proj_pos === 1) {
+      const lead = me.projected - second.projected;
+      verdict = `#${esc(car)} <em>${word}</em> by ${fmt(lead)} if it ends like this`;
+      sub = worst ? `Can finish as low as <strong>P${worst}</strong> in class and still ${final ? "win the title" : "clinch"}, if everyone else holds position.`
+        : final ? "" : `Not enough to clinch yet: ${fmt(l.max_points_after)} points still to come after this race.`;
+    } else {
+      verdict = `#${esc(top.car)} ${final ? "takes the title" : "leads"} by ${fmt(me.proj_gap)} as it stands`;
+      sub = worst ? `#${esc(car)} needs <strong>P${worst}</strong> or better in class, with everyone else holding position.`
+        : `Even a class win isn't enough for #${esc(car)} unless the cars ahead drop back.`;
+    }
+  }
+
+  const runners = d.tracked.map(c => rows.find(r => r.car === c && r.running)).filter(Boolean).map(r => {
+    const x = r.running;
+    return `<div class="runner" style="--c:${colorOf(r.car)}">
+      <div class="runner-top"><span class="num">#${esc(r.car)} P${x.class_pos}</span><small>in class · ${esc(x.driver || "")}</small>${x.in_pit ? `<span class="pit">IN PIT</span>` : ""}</div>
+      <dl><dt>Gap</dt><dt>Last lap</dt><dt>Best lap</dt><dt>Stops</dt>
+        <dd>${x.class_pos === 1 ? "Leader" : esc(x.gap)}</dd><dd>${esc(x.last_lap)}</dd><dd>${esc(x.best_lap)}</dd><dd>${x.pit_stops ?? "–"}</dd></dl>
+    </div>`;
+  }).join("");
+
+  const shown = rows.filter((r, i) => i < 6 || r.tracked);
+  const table = `<div class="scroll"><table><thead><tr><th>Pos</th><th>Car</th><th class="l">Team</th><th>Running</th><th>This race</th><th>Total</th><th>Gap</th></tr></thead><tbody>`
+    + shown.map(r => `<tr class="${r.tracked ? "tracked" : ""}" style="--c:${colorOf(r.car)}">
+        <td>${r.proj_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.team)}</td>
+        <td>${r.running ? "P" + r.running.class_pos : "–"}</td><td class="dim">+${fmt(r.race_pts + r.quali_pts)}</td>
+        <td class="total">${fmt(r.projected)}</td><td class="dim">${r.proj_gap ? "−" + fmt(r.proj_gap) : "—"}</td></tr>`).join("")
+    + `</tbody></table></div>`;
+
+  const el = $("live");
+  el.classList.toggle("done", l.finished);
+  el.innerHTML = `<div class="live-head"><span class="pulse">${l.finished ? "FINISHED" : "LIVE"}</span>
+      <b>${esc(l.event)}</b> · ${esc(sess)}
+      <span class="flag" style="--f:${FLAG_COLORS[flagKey] || "var(--text-2)"}">${esc(l.flag)}</span>
+      ${l.finished ? "" : `<span class="ttg">${esc(left)} to go</span>`}</div>
+    <div class="live-verdict">${verdict}</div>
+    <p class="live-sub">${sub}</p>
+    <div class="runners">${runners}</div>
+    <h2 style="margin-top:16px">Championship if it finished now</h2>
+    ${table}
+    <p class="note">${l.finished ? "Provisional until IMSA publishes the official points. " : ""}`
+      + `Projection from IMSA live timing, class positions as of ${new Date(l.updated).toLocaleTimeString()}. `
+      + (l.quali_counted ? "Includes qualifying points. " : "Qualifying points not included. ")
+      + `Ties and penalties aren't accounted for.</p>`;
+}
+setInterval(loadLive, 30e3);
 
 function render(d) {
   const cls = CLASS_NAMES[d.class] || d.class;

@@ -32,6 +32,14 @@ CARS = [c.strip() for c in os.environ.get("CARS", "4").split(",") if c.strip()]
 INTERVAL = int(os.environ.get("INTERVAL_MINUTES", "30")) * 60
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
+# Live timing: the JSONP files behind imsa.com/scoring. Unofficial and undocumented.
+LIVE_URL = "https://dcqsrdkhg933g.cloudfront.net/"
+LIVE_SERIES = "WeatherTech Championship"
+LIVE_INTERVAL = int(os.environ.get("LIVE_INTERVAL_SECONDS", "30"))
+LIVE_SESSIONS = re.compile(os.environ.get("LIVE_SESSIONS", r"\bRace\b"))
+# Race points by class finishing position; qualifying pays a tenth of the same table.
+RACE_POINTS = [350, 320, 300, 280, 260] + list(range(250, 0, -10))
+
 log = logging.getLogger("scraper")
 http = requests.Session()
 http.headers["User-Agent"] = "yellowcarpoints.win standings tracker"
@@ -223,11 +231,124 @@ def build(meta, events, teams, drivers):
     }
 
 
-def write_json(data):
+# --- live timing -------------------------------------------------------------------
+
+def _jsonp(name):
+    r = http.get(f"{LIVE_URL}{name}_JSONP.json", params={"callback": "cb"}, timeout=15)
+    r.raise_for_status()
+    text = r.content.decode("utf-8")
+    try:
+        text = text.encode("latin-1").decode("utf-8")  # the feed double-encodes UTF-8
+    except UnicodeError:
+        pass
+    return json.loads(text[text.index("(") + 1:text.rindex(")")])
+
+
+def _pts(pos, scale=1):
+    return RACE_POINTS[pos - 1] // scale if pos and pos <= len(RACE_POINTS) else 0
+
+
+def _read(name):
+    try:
+        return json.loads((DATA_DIR / name).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _write(name, data):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = DATA_DIR / "standings.json.tmp"
+    tmp = DATA_DIR / f"{name}.tmp"
     tmp.write_text(json.dumps(data, indent=1))
-    tmp.replace(DATA_DIR / "standings.json")
+    tmp.replace(DATA_DIR / name)
+
+
+def project(base, quali, order):
+    """Championship totals if the race finished with the class in `order` (car numbers)."""
+    totals = {car: b["points"] + _pts(quali.get(car), 10) for car, b in base.items()}
+    for car in order:
+        totals.setdefault(car, _pts(quali.get(car), 10))
+    for i, car in enumerate(order):
+        totals[car] += _pts(i + 1)
+    return totals
+
+
+def worst_winning_finish(car, base, quali, order, margin):
+    """Lowest class finish that still leaves `car` more than `margin` clear, rivals holding station."""
+    rest = [c for c in order if c != car]
+    worst = None
+    for p in range(1, len(order) + 1):
+        totals = project(base, quali, rest[:p - 1] + [car] + rest[p - 1:])
+        if totals[car] - max(v for c, v in totals.items() if c != car) > margin:
+            worst = p
+        else:
+            break
+    return worst
+
+
+def build_live(info, cars, standings, quali):
+    base = {s["car"]: s for s in standings["standings"]}
+    q = quali["positions"] if quali and quali.get("event") == info.get("E") else {}
+    cars = sorted(cars, key=lambda c: c.get("PIC") or 999)
+    order = [c["N"] for c in cars]
+    totals = project(base, q, order)
+    after = max(standings["rounds_remaining"] - 1, 0) * standings["max_points_per_round"]
+    ranked = sorted(totals, key=lambda car: -totals[car])
+    leader = totals[ranked[0]]
+    feed = {c["N"]: c for c in cars}
+    rows = []
+    for i, car in enumerate(ranked):
+        f, b = feed.get(car), base.get(car)
+        rows.append({
+            "car": car,
+            "team": b["team"] if b else (f or {}).get("V", ""),
+            "points_before": b["points"] if b else 0,
+            "quali_pts": _pts(q.get(car), 10),
+            "race_pts": _pts(order.index(car) + 1) if car in order else 0,
+            "projected": totals[car],
+            "proj_pos": i + 1,
+            "proj_gap": leader - totals[car],
+            "tracked": car in CARS,
+            "running": f and {
+                "class_pos": f.get("PIC"), "laps": f.get("L"), "gap": f.get("DIC"), "interval": f.get("GIC"),
+                "last_lap": f.get("LL"), "best_lap": f.get("BL"), "pit_stops": f.get("PS"),
+                "in_pit": bool(f.get("P")), "driver": f.get("F"),
+            },
+        })
+    flag = info.get("F", "")
+    return {
+        "updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "event": info.get("E"),
+        "session": info.get("S"),
+        "flag": flag,
+        "elapsed": info.get("TT"),
+        "remaining": info.get("TR"),
+        "finished": bool(re.search(r"check|finish", flag, re.I)),
+        "base_event": standings["event"],
+        "quali_counted": bool(q),
+        "max_points_after": after,
+        "worst_winning_finish": {car: worst_winning_finish(car, base, q, order, after) for car in CARS if car in order},
+        "standings": rows,
+    }
+
+
+def live_once():
+    info = _jsonp("SessionInfo")
+    name = info.get("S", "")
+    is_quali, is_race = "Qualif" in name, bool(LIVE_SESSIONS.search(name))
+    if not name.startswith(LIVE_SERIES) or not (is_quali or is_race):
+        return
+    cars = [c for c in _jsonp("RaceResults").get("B", []) if c.get("C") == CLASS and c.get("PIC")]
+    if not cars:
+        return
+    if is_quali:
+        # Class qualifying can be split across sessions; keep whatever this class last showed.
+        _write("quali.json", {"event": info.get("E"), "session": name,
+                              "positions": {c["N"]: c["PIC"] for c in cars}})
+    if is_race:
+        standings = _read("standings.json")
+        if standings:
+            _write("live.json", build_live(info, cars, standings, _read("quali.json")))
+            log.info("live: %s %s, %s, %d %s cars", info.get("E"), name, info.get("F"), len(cars), CLASS)
 
 
 def run_once(last_hash=None):
@@ -244,20 +365,26 @@ def run_once(last_hash=None):
     events, teams, drivers = parse_points(r.content, CLASS)
     if not teams:
         raise RuntimeError(f"no {CLASS} teams table in {unquote(meta['url'])}")
-    write_json(build(meta, events, teams, drivers))
+    _write("standings.json", build(meta, events, teams, drivers))
     log.info("updated: %s %s (%s), %d cars", meta["season"], meta["event"], meta["status"], len(teams))
     return digest
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    last = None
+    last, next_pdf = None, 0.0
     while True:
+        if time.monotonic() >= next_pdf:
+            next_pdf = time.monotonic() + INTERVAL
+            try:
+                last = run_once(last)
+            except Exception:
+                log.exception("scrape failed")
         try:
-            last = run_once(last)
+            live_once()
         except Exception:
-            log.exception("scrape failed")
-        time.sleep(INTERVAL)
+            log.exception("live timing failed")
+        time.sleep(LIVE_INTERVAL)
 
 
 if __name__ == "__main__":

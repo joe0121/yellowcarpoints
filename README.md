@@ -4,6 +4,11 @@ Championship standings for the Corvette Racing entries in the IMSA WeatherTech S
 
 - `scraper` finds the newest `00_Championship Points` PDF on IMSA's Al Kamel results site every
   `INTERVAL_MINUTES`, parses the class's Teams and Drivers tables, and writes `standings.json`.
+- During a WeatherTech race it also polls IMSA's live timing (the JSON behind imsa.com/scoring)
+  every `LIVE_INTERVAL_SECONDS` (30) and writes `live.json`: the championship if the race finished
+  now, plus the worst class finish that still wins the title. Qualifying class positions are saved
+  to `quali.json` during qualifying so their points are included. The page shows a live card until
+  the official points PDF for that race is published.
 - `web` (Caddy) serves `web/index.html` plus that JSON on `127.0.0.1:8088`.
 - `cloudflared` publishes `web` through a Cloudflare Tunnel (no port forwarding; works behind the VPN).
 
