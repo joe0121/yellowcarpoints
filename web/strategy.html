@@ -16,7 +16,7 @@
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub" id="sub">Race strategy</p>
-      <nav class="tabs"><a id="to-standings" href="./">Standings</a><a href="strategy.html" aria-current="page">Strategy</a><a href="about.html">About</a></nav>
+      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Standings</a><a href="strategy.html" aria-current="page">Strategy</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -394,5 +394,6 @@ let width = innerWidth;
 addEventListener("resize", () => { if (Math.abs(innerWidth - width) > 40) { width = innerWidth; render(); } });
 load();
 </script>
+<script src="countdown.js" defer></script>
 </body>
 </html>

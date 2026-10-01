@@ -182,3 +182,10 @@ tr.tracked .mini i { background: var(--s1); }
 .event { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--s4); font-size: 13px; color: var(--text-2); }
 .event b { color: var(--text); }
 .owes { font-size: 10px; font-weight: 700; color: var(--text-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+
+/* header countdown to the next session / time left in the live one */
+.navrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; }
+.navrow .tabs { margin-top: 0; }
+.countdown { font-size: 12px; font-weight: 600; color: var(--text-2); padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.countdown[data-state="live"] { color: var(--text); border-color: var(--critical); }
+.countdown[data-state="live"]::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--critical); margin-right: 6px; vertical-align: 1px; }

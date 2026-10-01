@@ -33,7 +33,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub">About this site</p>
-      <nav class="tabs"><a href="./">Standings</a><a href="strategy.html">Strategy</a><a href="about.html" aria-current="page">About</a></nav>
+      <div class="navrow"><nav class="tabs"><a href="./">Standings</a><a href="strategy.html">Strategy</a><a href="about.html" aria-current="page">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
   </header>
 
@@ -136,5 +136,6 @@ dl.terms dd { margin: 0; color: var(--text-2); }
   } catch (e) { /* schedule unavailable: leave the card hidden */ }
 })();
 </script>
+<script src="countdown.js" defer></script>
 </body>
 </html>
