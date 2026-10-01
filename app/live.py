@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import history
+import telemetry
 from common import CAR_CLASS, CLASSES, http, now_iso, read, write
 
 FEED = "https://dcqsrdkhg933g.cloudfront.net/"
@@ -40,6 +41,7 @@ RACE_SESSIONS = re.compile(os.environ.get("LIVE_SESSIONS", r"\bRace\b"))
 RACE_POINTS = [350, 320, 300, 280, 260] + list(range(250, 0, -10))
 
 log = logging.getLogger("scraper.live")
+TELEMETRY = telemetry.Telemetry()
 _s = {"schedule": None, "schedule_at": 0.0, "state": None, "strategy": {}, "strategy_at": 0.0}
 
 
@@ -122,7 +124,7 @@ def track(state, feed, now):
         if st is None:
             # First seen mid-session (scraper started late): earlier stops are at unknown laps.
             st = state["cars"][n] = {"cls": c["C"], "ps": ps, "stops": [], "from_start": ps == 0, "laps": [],
-                                     "last_lap": lap, "pit_in_at": None, "pit_secs": []}
+                                     "gaps": [], "last_lap": lap, "pit_in_at": None, "pit_secs": []}
         if ps > st["ps"]:
             st["stops"].append(lap)
             st["ps"] = ps
@@ -136,6 +138,9 @@ def track(state, feed, now):
             t = secs(c.get("LL"))
             if t:
                 st["laps"].append([lap, round(t, 3)])
+            gap = 0.0 if c.get("PIC") == 1 else secs(c.get("DIC"))
+            if gap is not None:
+                st.setdefault("gaps", []).append([lap, round(gap, 3)])
             st["last_lap"] = lap
 
 
@@ -181,6 +186,40 @@ def gap_secs(row, pace):
     if m:
         return int(m.group(1)) * (pace or 0)
     return secs(g)
+
+
+# --- energy (telemetry) ------------------------------------------------------------
+
+def energy_use(lap_energy):
+    """Median energy (% per lap) over the last 5 laps of the current tank."""
+    drops = []
+    for (l0, e0), (l1, e1) in zip(lap_energy, lap_energy[1:]):
+        if e1 > e0 + 1:      # refuelled: start over
+            drops = []
+        elif l1 == l0 + 1 and e0 - e1 > 0.2:
+            drops.append(e0 - e1)
+    return statistics.median(drops[-5:]) if len(drops) >= 2 else None
+
+
+def energy_info(tel, row, pace, remaining_secs, fill_rate):
+    if not tel or tel.get("energy") is None:
+        return None
+    now, use = tel["energy"], energy_use(tel["lap_energy"])
+    out = {"now": now, "use_per_lap": use and round(use, 2), "pit_lane": tel.get("pit_lane"),
+           "refuelling": tel.get("recharging"), "refills": tel["refills"][-5:]}
+    if use:
+        laps_left = now / use
+        full = 100 / use
+        out.update(laps_left=round(laps_left, 1), full_tank_laps=round(full, 1),
+                   next_stop_lap=int(row.get("L") or 0) + int(laps_left),
+                   eta_min=round(laps_left * pace / 60) if pace else None)
+        if fill_rate:
+            arrive = max(now - use * int(laps_left), 0)
+            out["next_fill_secs"] = round((100 - arrive) / fill_rate)
+        if pace and remaining_secs:
+            on_tank, per_tank = laps_left * pace, full * pace
+            out["stops_remaining"] = 0 if remaining_secs <= on_tank else int(-(-(remaining_secs - on_tank) // per_tank))
+    return out
 
 
 # --- championship projection -------------------------------------------------------
@@ -283,6 +322,7 @@ def step():
     now_dt = datetime.now(timezone.utc)
     refresh_schedule(now)
     active, upcoming = session_window(now_dt)
+    TELEMETRY.ensure(bool(active))
     if _s["schedule"] and not active:
         wait = (upcoming - LEAD - now_dt).total_seconds() if upcoming else SCHEDULE_EVERY
         return max(60, min(wait, SCHEDULE_EVERY))
@@ -292,6 +332,7 @@ def step():
     if not name.startswith(SERIES):
         # Before the green flag, or a support race overrunning into the slot.
         return SESSION_POLL if active else NO_SCHEDULE_POLL
+    TELEMETRY.ensure(True)
     is_race, is_quali = bool(RACE_SESSIONS.search(name)), "Qualif" in name
     feed = [c for c in jsonp("RaceResults").get("B", []) if c.get("C") in CLASSES and c.get("PIC")]
     if not feed:
@@ -325,9 +366,13 @@ def step():
 
     standings = read("standings.json") if is_race else None
     flag = info.get("F", "")
+    tel = TELEMETRY.snapshot()
+    remaining = history.secs(info.get("TR")) if is_race else None
     classes = {}
     for cls, rows in by_class.items():
         model = stint_model(cls, state, baseline)
+        rates = [r["rate"] for n, t in tel["cars"].items() if t["cls"] == cls for r in t["refills"]]
+        fill_rate = statistics.median(rates) if len(rates) >= 2 else None
         out = {
             "stint_model": model,
             "strategy": _s["strategy"].get(cls),
@@ -337,7 +382,9 @@ def step():
                 "pit_stops": r.get("PS"), "in_pit": bool(r.get("P")), "driver": r.get("F"),
                 "vehicle": r.get("V"), "tracked": CAR_CLASS.get(r["N"]) == cls,
                 "stint": stint_info(state["cars"][r["N"]], int(r.get("L") or 0), model) if is_race else None,
+                "energy": energy_info(tel["cars"].get(r["N"]), r, strategy_pace(state["cars"][r["N"]]), remaining, fill_rate),
             } for r in rows],
+            "fill_rate": fill_rate,
         }
         if standings and cls in standings["classes"]:
             out.update(projection(cls, [r["N"] for r in rows], standings["classes"][cls], read("quali.json"), info))
@@ -347,10 +394,13 @@ def step():
         "flag": flag, "elapsed": info.get("TT"), "remaining": info.get("TR"),
         "finished": bool(re.search(r"check|finish", flag, re.I)),
         "scheduled_end": active and active["end"],
+        "telemetry": {"connected": tel["connected"], "age": round(now - tel["last_data"]) if tel["last_data"] else None},
         "base_event": standings and standings["event"], "classes": classes,
     })
     write("laps.json", {"updated": now_iso(), "session": name, "classes": {
-        cls: {n: {"laps": st["laps"], "stops": st["stops"]} for n, st in state["cars"].items() if st["cls"] == cls}
+        cls: {n: {"laps": st["laps"], "stops": st["stops"], "gaps": st.get("gaps", []),
+                  "energy": tel["cars"].get(n, {}).get("lap_energy", [])}
+              for n, st in state["cars"].items() if st["cls"] == cls}
         for cls in CLASSES}})
     log.info("live: %s %s, %s, %d cars", info.get("E"), name, flag, len(feed))
     return RACE_POLL if is_race else SESSION_POLL

@@ -17,6 +17,15 @@ of the page, or link straight to one with `#13`).
   - every `STRATEGY_SECONDS` (300): pace over the last 5 clean laps and its trend, pace against the
     cars either side, and where each car would rejoin if it pitted now.
   Failed requests back off exponentially up to 15 minutes.
+- Telemetry (`app/telemetry.py`): during the same session windows it keeps one WebSocket open to the
+  stream behind imsa.com/telemetry (AppSync Events, using the public key that page ships with; about
+  1 Hz, push only). Per car it records energy remaining at each lap, every refuel (duration and energy
+  added) and pit-lane time. From that, `live.json` gets energy use per lap, laps left on the tank, the
+  next stop lap, the next fill time (from the class's observed fill rate) and, in the race, the stops
+  still needed to reach the flag. Unofficial: if it stops working the pages fall back to lap-count
+  estimates.
+- `web/strategy.html`: per-car strategy page (same car picker) with those numbers as tiles, lap time,
+  gap and energy charts with trend lines, and a strategy board for the whole class.
 - After each race it reads Al Kamel's race reports (results, grid, lap and pit stop time cards) for
   every round this season and writes `history.json`: class finish, grid, best lap and its class rank,
   stops and their times, stint lengths and laps per driver. Each race is fetched once Provisional results are out (again for Official) and cached in
