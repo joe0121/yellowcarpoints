@@ -1,0 +1,12 @@
+# Locally managed Cloudflare Tunnel (created with `cloudflared tunnel create yellowcarpoints`).
+# The credentials file is NOT in the repo: it lives in ~/.cloudflared/ and is mounted by compose.
+tunnel: f199bcbf-ceae-4912-a7d8-d6ac0786cbed
+credentials-file: /etc/cloudflared/creds.json
+# TCP (HTTP/2) instead of QUIC: steadier through the VPN.
+protocol: http2
+ingress:
+  - hostname: yellowcarpoints.win
+    service: http://web:80
+  - hostname: www.yellowcarpoints.win
+    service: http://web:80
+  - service: http_status:404

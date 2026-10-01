@@ -23,12 +23,14 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    # Runs as the host user so it can read the credentials file in ~/.cloudflared (mode 600).
+    user: "${TUNNEL_UID:-1000}:${TUNNEL_GID:-1000}"
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ${HOME}/.cloudflared/f199bcbf-ceae-4912-a7d8-d6ac0786cbed.json:/etc/cloudflared/creds.json:ro
     depends_on:
       - web
-    profiles: ["tunnel"]
 
 volumes:
   data:
