@@ -211,6 +211,17 @@ function render() {
     + `Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing.`;
 }
 
+// What happened in a stop, from telemetry: refuel seconds, air jacks (tyres), driver change.
+function stopWords(st) {
+  return [st.fuel ? `${Math.round(st.fuel)}s fuel` : "no fuel", st.tyres ? "tyres" : null,
+          st.driver_change ? `driver change${st.driver_out ? " → " + esc(st.driver_out.split(" ").at(-1)) : ""}` : null].filter(Boolean).join(" · ");
+}
+function stopTags(st) {
+  const tag = (t, title) => `<span class="owes" title="${title}">${t}</span>`;
+  return `${Math.round(st.lane)}s ` + (st.fuel ? tag("F", `${Math.round(st.fuel)}s refuelling`) : "") + (st.tyres ? tag("T", "tyres (car on the air jacks)") : "")
+    + (st.driver_change ? tag("D", "driver change") : "");
+}
+
 // Seconds per % of energy, from fills of 40%+ across the class (small top-ups are mostly
 // hook-up time and skew the rate). Returns null until there are two such fills.
 function fillModel(lc) {
@@ -241,13 +252,17 @@ function renderKpis(me, st, lc) {
   } else {
     out.push(kpi("Energy", "–", "no telemetry for this car yet"));
   }
+  const ls = e?.stops?.at(-1);
+  if (ls) out.push(kpi("Last stop", `${Math.round(ls.lane)}<small>s in lane</small>`, stopWords(ls) + ` · lap ${ls.lap}`));
   const done = me.pit_stops ?? 0;
   out.push(kpi("Stops", e?.stops_remaining != null ? `${done} + ~${e.stops_remaining}` : done,
     e?.stops_remaining != null ? `~${done + e.stops_remaining} in total by the flag` : "estimate shows during the race"));
   out.push(kpi("Pace", st?.pace ? lapTime(st.pace) : "–",
     st?.trend == null ? "last 5 clean laps" : st.trend < -0.05 ? `▲ ${Math.abs(st.trend).toFixed(2)}s quicker than the 5 before` : st.trend > 0.05 ? `▼ ${st.trend.toFixed(2)}s slower than the 5 before` : "steady over the last 10 laps"));
   $("kpis").innerHTML = out.join("");
-  $("kpi-note").textContent = lc.strategy ? `Pace and trends recalculated every 5 minutes (last ${new Date(lc.strategy.updated).toLocaleTimeString()}). Energy and stops update every poll.` : "";
+  const pt = lc.strategy?.pit_types;
+  $("kpi-note").textContent = (lc.strategy ? `Pace and trends recalculated every 5 minutes (last ${new Date(lc.strategy.updated).toLocaleTimeString()}). Energy and stops update every poll.` : "")
+    + (pt && (pt.n_fuel_only || pt.n_full) ? ` Class pit-lane times so far: fuel-only ${pt.fuel_only ?? "–"}s (${pt.n_fuel_only} stops), full service ${pt.full ?? "–"}s (${pt.n_full} stops).` : "");
 }
 
 // --- generic line chart with crosshair tooltip (one y axis) ------------------------
@@ -369,7 +384,7 @@ function drawLeaderChart(S) {
 function renderBoard(rows, strat, sel, lapsCls, clsName, fc) {
   const corvettes = standings.cars.filter(c => c.class === sel.class).map(c => c.car);
   $("board-title").textContent = `${clsName} strategy board`;
-  $("board").innerHTML = `<thead><tr><th>Pos</th><th title="Class position once every car has made the stops it owes in this pit cycle">Net</th><th>Car</th><th class="l">Driver</th><th class="l">Energy</th><th>Use/lap</th><th>Laps left</th><th>Next stop</th><th>Stops</th><th>Last fill</th><th>Pace</th><th>Trend</th><th title="Change in gap to the class leader per lap, last 10 laps">Gap trend</th></tr></thead><tbody>`
+  $("board").innerHTML = `<thead><tr><th>Pos</th><th title="Class position once every car has made the stops it owes in this pit cycle">Net</th><th>Car</th><th class="l">Driver</th><th class="l">Energy</th><th>Use/lap</th><th>Laps left</th><th>Next stop</th><th>Stops</th><th title="Last stop: time in the pit lane · F refuel · T tyres · D driver change">Last stop</th><th>Pace</th><th>Trend</th><th title="Change in gap to the class leader per lap, last 10 laps">Gap trend</th></tr></thead><tbody>`
     + rows.map(r => { const e = r.energy || {}, x = strat[r.car] || {}, g = fit(lapsCls[r.car]?.gaps || []);
       const last = e.refills?.at(-1);
       return `<tr class="${corvettes.includes(r.car) ? "tracked" : ""}" style="--c:${r.car === sel.car ? C.me : corvettes.includes(r.car) ? "var(--series-2)" : C.ctx}">
@@ -378,7 +393,7 @@ function renderBoard(rows, strat, sel, lapsCls, clsName, fc) {
         <td class="l">${e.now != null ? `<span class="mini"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></span>${e.now.toFixed(0)}%` : "–"}</td>
         <td>${e.use_per_lap ?? "–"}</td><td>${e.laps_left != null ? Math.floor(e.laps_left) : "–"}</td><td>${e.next_stop_lap ? "L" + e.next_stop_lap : "–"}</td>
         <td>${r.pit_stops ?? "–"}${e.stops_remaining != null ? ` <span class="dim">+${e.stops_remaining}</span>` : ""}</td>
-        <td class="dim">${last ? last.secs + "s" : "–"}</td><td>${lapTime(x.pace)}</td>
+        <td class="dim">${e.stops?.length ? stopTags(e.stops.at(-1)) : last ? `fill ${last.secs}s` : "–"}</td><td>${lapTime(x.pace)}</td>
         <td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td>
         <td class="${g && g.slope < -0.05 ? "up" : g && g.slope > 0.05 ? "down" : "dim"}">${g ? signed(g.slope) + "s" : "–"}</td></tr>`; }).join("")
     + `</tbody>`;

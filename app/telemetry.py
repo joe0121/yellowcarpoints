@@ -27,6 +27,10 @@ URL = f"wss://{API}.appsync-realtime-api.us-east-1.amazonaws.com/event/realtime"
 KEY = "da2-zjztqnoq7zfsxjenuhapcprllu"  # public key embedded in imsa.com/telemetry
 CHANNELS = ("/telemetry/message", "/telemetry/session")
 STALE = 300  # reconnect if nothing arrives for this long
+# is_jacked_up's scale isn't documented: count time above this as "on the jacks" (likely a tyre
+# change) and keep the per-stop maximum so the threshold can be checked against recordings.
+JACK_ON = 0.5
+TYRES_MIN_SECS = 5
 
 log = logging.getLogger("scraper.telemetry")
 
@@ -118,6 +122,7 @@ class Telemetry:
                 for f in payload:
                     self._car(f)
                 RECORDER.telemetry_cars(payload)
+                RECORDER.telemetry_pit(payload)
 
     def _car(self, f):
         sc = f.get("scoring") or {}
@@ -128,7 +133,7 @@ class Telemetry:
         energy = f.get("energy_remaining")
         lap = int(f.get("lap_number") or 0)
         st = self.cars.setdefault(number, {"cls": cls, "lap_energy": [], "refills": [], "refill": None,
-                                           "pit_since": None, "pit_visits": []})
+                                           "pit_since": None, "pit_visits": [], "stops": [], "visit": None})
         # Energy at each lap crossing (the first reading on a new lap).
         if energy is not None and lap and (not st["lap_energy"] or lap > st["lap_energy"][-1][0]):
             st["lap_energy"].append([lap, round(energy, 1)])
@@ -143,15 +148,41 @@ class Telemetry:
                 st["refills"].append({"lap": r["lap"], "secs": round(secs, 1), "from": r["from"], "to": energy,
                                       "rate": round((energy - r["from"]) / secs, 3)})
             st["refill"] = None
-        # Pit-lane visits, timed at the telemetry's ~1 Hz (entry to exit). Garage visits and
-        # drive-throughs are kept out by the bounds; live.py uses the class median as the pit loss.
-        if f.get("pit_lane") and not st["pit_since"]:
-            st["pit_since"] = now
-        elif not f.get("pit_lane") and st["pit_since"]:
-            visit = now - st["pit_since"]
-            if 20 <= visit <= 240:
-                st.setdefault("pit_visits", []).append(round(visit, 1))
+        # Pit-lane visits, timed at the telemetry's ~1 Hz (entry to exit), with what happened in them:
+        # seconds refuelling, seconds on the air jacks (tyres) and whether the driver changed.
+        # Garage visits and drive-throughs are kept out by the bounds.
+        a = sc.get("activeDriver") or {}
+        driver = f'{a.get("firstName") or ""} {a.get("lastName") or ""}'.strip() or None
+        jack = f.get("is_jacked_up") or 0
+        if f.get("pit_lane"):
+            v = st.get("visit")
+            if not v:
+                st["pit_since"] = now
+                v = st["visit"] = {"lap": lap, "start": now, "last": now, "fuel": 0.0, "jack": 0.0, "jack_max": 0.0,
+                                   "driver_in": driver, "e_in": energy}
+            dt = min(max(now - v["last"], 0), 3)
+            if f.get("is_recharging"):
+                v["fuel"] += dt
+            if jack > JACK_ON:
+                v["jack"] += dt
+            v["jack_max"] = max(v["jack_max"], jack)
+            v["last"] = now
+            if driver:
+                v["driver_out"] = driver
+        elif st.get("visit"):
+            v = st["visit"]
+            lane = now - v["start"]
+            if 20 <= lane <= 300:
+                st.setdefault("pit_visits", []).append(round(lane, 1))
                 st["pit_visits"] = st["pit_visits"][-20:]
+                st.setdefault("stops", []).append({
+                    "lap": v["lap"], "lane": round(lane, 1), "fuel": round(v["fuel"], 1), "jack": round(v["jack"], 1),
+                    "jack_max": round(v["jack_max"], 3), "tyres": v["jack"] >= TYRES_MIN_SECS,
+                    "driver_change": bool(v.get("driver_in") and v.get("driver_out") and v["driver_in"] != v["driver_out"]),
+                    "driver_in": v.get("driver_in"), "driver_out": v.get("driver_out"),
+                    "e_in": v["e_in"], "e_out": energy})
+                st["stops"] = st["stops"][-20:]
+            st["visit"] = None
             st["pit_since"] = None
         st.update(energy=energy, lap=lap, pit_lane=bool(f.get("pit_lane")), recharging=bool(f.get("is_recharging")),
                   speed=f.get("speed"), seen=now)

@@ -210,7 +210,7 @@ def energy_info(tel, row, pace, remaining_secs, fill_per_pct):
         return None
     now, use = tel["energy"], energy_use(tel["lap_energy"])
     out = {"now": now, "use_per_lap": use and round(use, 2), "pit_lane": tel.get("pit_lane"),
-           "refuelling": tel.get("recharging"), "refills": tel["refills"][-5:]}
+           "refuelling": tel.get("recharging"), "refills": tel["refills"][-5:], "stops": tel.get("stops", [])[-5:]}
     if use:
         laps_left = now / use
         full = 100 / use
@@ -412,12 +412,25 @@ def stint_model(cls, state, baseline):
     return b and {**b, "source": baseline["source"]}
 
 
+def pit_types(cls, tel):
+    """Median pit-lane time for fuel-only stops and for full service (tyres and/or driver change)."""
+    stops = [s for t in tel["cars"].values() if t["cls"] == cls for s in t.get("stops", [])]
+    fuel_only = [s["lane"] for s in stops if not s["tyres"] and not s["driver_change"]]
+    full = [s["lane"] for s in stops if s["tyres"] or s["driver_change"]]
+    med = lambda xs: round(statistics.median(xs), 1) if xs else None
+    return {"fuel_only": med(fuel_only), "full": med(full), "n_fuel_only": len(fuel_only), "n_full": len(full)}
+
+
 def pit_loss_for(cls, tel, baseline, is_race):
-    """Class pit-lane time per stop: this race's telemetry-timed visits once there are 3+,
-    otherwise last year's race here. Practice/qualifying visits (garage time) are never used."""
-    visits = [v for t in tel["cars"].values() if t["cls"] == cls for v in t.get("pit_visits", [])]
-    if is_race and len(visits) >= 3:
-        return round(statistics.median(visits), 1), "telemetry"
+    """Class pit-lane time per stop for the net order and pit-now estimates: in the race, the median
+    of the class's most common stop type (fuel-only or full service) once there are 3+ telemetry-timed
+    stops; otherwise last year's race here. Practice/qualifying visits (garage time) are never used."""
+    if is_race:
+        types = pit_types(cls, tel)
+        n = types["n_fuel_only"] + types["n_full"]
+        if n >= 3:
+            common = "full" if types["n_full"] >= types["n_fuel_only"] else "fuel_only"
+            return types[common], f"telemetry, {common.replace('_', '-')} stops"
     b = (baseline or {}).get("pit_lane", {}).get(cls)
     return (b, "last year") if b else (None, None)
 
@@ -448,7 +461,8 @@ def strategy(cls, rows, state, baseline, is_race, tel):
             "rejoin": rejoin,
             "clean_laps": len(clean_laps(st)),
         }
-    return {"updated": now_iso(), "pit_loss": pit_loss, "pit_loss_source": pit_source, "class_pace": class_pace, "cars": cars}
+    return {"updated": now_iso(), "pit_loss": pit_loss, "pit_loss_source": pit_source,
+            "pit_types": pit_types(cls, tel) if is_race else None, "class_pace": class_pace, "cars": cars}
 
 
 # --- main step ---------------------------------------------------------------------

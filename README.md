@@ -20,7 +20,11 @@ of the page, or link straight to one with `#13`).
 - Telemetry (`app/telemetry.py`): during the same session windows it keeps one WebSocket open to the
   stream behind imsa.com/telemetry (AppSync Events, using the public key that page ships with; about
   1 Hz, push only). Per car it records energy remaining at each lap, every refuel (duration and energy
-  added) and pit-lane time. From that, `live.json` gets energy use per lap, laps left on the tank, the
+  added) and every pit-lane visit with what happened in it: seconds refuelling, seconds on the air
+  jacks (`is_jacked_up` above 0.5 for 5 s+ is taken as a tyre change; its scale isn't documented, so the
+  per-stop maximum is kept for checking) and whether the active driver changed. In the race the pit
+  loss used for the net order is the class median of the most common stop type (fuel-only or full
+  service) once there are 3 timed stops. From that, `live.json` gets energy use per lap, laps left on the tank, the
   next stop lap, the next fill time (from the class's observed fill rate) and, in the race, the stops
   still needed to reach the flag. Unofficial: if it stops working the pages fall back to lap-count
   estimates.
@@ -84,7 +88,7 @@ margin per lap is in `laps.json` (`margins`).
 ## Recordings and replay
 
 Every WeatherTech session is recorded to `./archive/<date>_<session>/` (bind-mounted into the
-scraper): `feed.jsonl.gz` (every leaderboard poll), `telemetry.jsonl.gz` (tracked classes every 10 s)
+scraper): `feed.jsonl.gz` (every leaderboard poll), `telemetry.jsonl.gz` (tracked classes every 10 s), `pit.jsonl.gz` (about 1 Hz while a tracked-class car is in the pit lane)
 and `outputs.jsonl.gz` (live.json / laps.json every 5 minutes). The scraper log is
 `./archive/scraper.log`. To rebuild what the live code computed:
 

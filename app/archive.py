@@ -61,6 +61,21 @@ class Recorder:
         if keep:
             self._append("telemetry.jsonl.gz", {"t": now, "cars": keep})
 
+    def telemetry_pit(self, cars):
+        """Every message (about 1 Hz) for tracked-class cars in the pit lane: enough to check fuel,
+        jack and driver-change timing afterwards without recording the whole stream at 1 Hz."""
+        keep = []
+        for f in cars:
+            sc = f.get("scoring") or {}
+            if f.get("pit_lane") and sc.get("class") in CLASSES:
+                a = sc.get("activeDriver") or {}
+                keep.append({"car": sc.get("number"), "lap": f.get("lap_number"), "time": f.get("time"),
+                             "speed": f.get("speed"), "energy": f.get("energy_remaining"),
+                             "recharging": f.get("is_recharging"), "jacked": f.get("is_jacked_up"),
+                             "driver": f'{a.get("firstName") or ""} {a.get("lastName") or ""}'.strip()})
+        if keep:
+            self._append("pit.jsonl.gz", {"t": time.time(), "cars": keep})
+
     def output(self, name, data):
         now = time.time()
         if now - self.last_out.get(name, 0) < OUTPUT_EVERY:
