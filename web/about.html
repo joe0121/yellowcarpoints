@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About Yellow Car Points</title>
+<meta name="description" content="What Yellow Car Points does, how to use the standings and strategy pages, and where the data comes from.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23eda100'/><text x='16' y='23' font-size='18' font-family='Arial' font-weight='700' text-anchor='middle' fill='%23111'>4</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.about { max-width: 760px; }
+.about .card { margin-bottom: 16px; }
+.about p, .about li { color: var(--text-2); }
+.about p { margin: 6px 0 10px; }
+.about ul { margin: 6px 0 4px; padding-left: 20px; }
+.about li { margin: 4px 0; }
+.about strong { color: var(--text); }
+.about h3 { font: 600 14px Inter, sans-serif; margin: 14px 0 2px; color: var(--text); }
+dl.terms { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 8px 0 0; }
+dl.terms dt { font-weight: 600; color: var(--text); }
+dl.terms dd { margin: 0; color: var(--text-2); }
+@media (max-width: 560px) { dl.terms { grid-template-columns: 1fr; gap: 2px 0; } dl.terms dd { margin-bottom: 8px; } }
+.next { border: 1px solid var(--accent); }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; margin: -4px 0 16px; }
+.toc a { color: var(--text-2); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Yellow Car <span>Points</span></h1>
+      <p class="sub">About this site</p>
+      <nav class="tabs"><a href="./">Standings</a><a href="strategy.html">Strategy</a><a href="about.html" aria-current="page">About</a></nav>
+    </div>
+  </header>
+
+  <div class="about">
+    <nav class="toc" aria-label="On this page"><a href="#what">What it is</a><a href="#use">How to use it</a><a href="#race">On race day</a><a href="#terms">Terms</a><a href="#data">Where the data comes from</a><a href="#limits">Limitations</a></nav>
+
+    <section class="card next" id="next" hidden></section>
+
+    <section class="card" id="what">
+      <h2>What it is</h2>
+      <p>Yellow Car Points follows the Corvettes in the <strong>IMSA WeatherTech SportsCar Championship</strong>: where they stand in the championship, how each race went, and what's happening live during a session, with a focus on the championship fight.</p>
+      <p>It covers the Corvettes in two classes: <strong>GTD PRO</strong> (#4, #3, #74) and <strong>GTD</strong> (#13, #36, #81). Pick a car with the buttons at the top of the Standings or Strategy page. The site remembers your choice, and you can share a link to a specific car, like <a href="./#13">yellowcarpoints.win/#13</a>.</p>
+      <p>It's an unofficial fan project, not affiliated with IMSA, GM, Chevrolet or Corvette Racing.</p>
+    </section>
+
+    <section class="card" id="use">
+      <h2>How to use it</h2>
+
+      <h3>Standings</h3>
+      <ul>
+        <li><strong>Car card:</strong> the selected car's championship position, points, gap to the cars around it, and whether it can still win the title with the points left. Also its drivers this weekend.</li>
+        <li><strong>Points behind the leader:</strong> a chart of each car's gap to the championship leader after every round. The selected car is yellow, the other Corvettes in its class blue. Hover to see the order after any round.</li>
+        <li><strong>Team standings:</strong> the full class table with points from every round.</li>
+        <li><strong>Race by race:</strong> the selected car's season: finishing and starting position, best lap and how it ranked, pit stops and average stop time, every stint length, and laps per driver.</li>
+      </ul>
+
+      <h3>Strategy</h3>
+      <p>For the selected car during a session (it shows the last session between events):</p>
+      <ul>
+        <li><strong>Tiles:</strong> energy left and energy used per lap, laps left on this tank, the next pit stop (lap and minutes away), estimated refuel time, stops made plus stops still needed to the finish, and recent pace.</li>
+        <li><strong>Championship if it finished now</strong> (race only): title position, margin to the car just ahead and just behind in the championship, what one place is worth in points, and what each side needs.</li>
+        <li><strong>Charts:</strong> lap times, the gap to the car ahead and to the leader, energy by lap, and the gap to the class leader. Dashed lines are trends over the last 10 laps. Hover any chart for exact values.</li>
+        <li><strong>Strategy board:</strong> the whole class at a glance: running and net position, energy, next stop, stops, last refuel time, pace and trends. Corvettes are highlighted, title rivals tagged.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="race">
+      <h2>On race day</h2>
+      <p>During a WeatherTech session a <strong>LIVE</strong> card appears at the top of the Standings page and the Strategy page fills in. Both refresh every 30 seconds by themselves; no need to reload.</p>
+      <ul>
+        <li>In the race, the headline tells you where the title stands if the race ended now, for example "#4 champion by 23 if it ends like this", and the lowest finish the car can afford.</li>
+        <li>The site works out which rivals matter <em>right now</em>. If a different car becomes the closest threat in the championship mid-race, a banner says so.</li>
+        <li>Practice and qualifying show live timing, lap times and pace for the selected car's class. The championship maths only runs in the race.</li>
+        <li>After the checkered flag the result is marked <strong>provisional</strong> until IMSA publishes the official points, and then the standings update by themselves.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="terms">
+      <h2>Terms used on the site</h2>
+      <dl class="terms">
+        <dt>If it finished now</dt><dd>Championship points as if the race ended at this moment, using IMSA's points for finishing position (350 for a class win, 320 for 2nd, 300 for 3rd…) plus qualifying points (a tenth of that).</dd>
+        <dt>Net order</dt><dd>During a round of pit stops the running order is misleading: a car that has just stopped looks a long way back. The net order moves back the cars that still owe a stop by the time a stop costs, so it shows the order once everyone has pitted. It's switched off under yellow flags.</dd>
+        <dt>Title threat / target</dt><dd>The car just behind / just ahead of the selected car in the championship-if-it-finished-now, recalculated through the race.</dd>
+        <dt>A place is worth</dt><dd>Points gained by moving up one class position, and lost by dropping one.</dd>
+        <dt>Needs P5</dt><dd>The lowest class finish that's still enough, assuming everyone else holds position.</dd>
+        <dt>Energy</dt><dd>IMSA meters fuel as "energy" in percent. The site tracks how much each car uses per lap to estimate how far its tank will go.</dd>
+        <dt>Stint / pit window</dt><dd>A stint is the run between pit stops. The pit window is the range of laps in which a stop is due, from this race's stints or, early on, last year's race at the same track.</dd>
+        <dt>Trend</dt><dd>How lap time or gap is changing per lap over the last 10 laps. Green means quicker or closing, red slower or losing time.</dd>
+      </dl>
+    </section>
+
+    <section class="card" id="data">
+      <h2>Where the data comes from</h2>
+      <ul>
+        <li><strong>Championship points and race results:</strong> IMSA's official results published by Al Kamel Systems, IMSA's timing provider. Checked every 30 minutes.</li>
+        <li><strong>Live timing:</strong> the public feed behind IMSA's live scoring page, read every 30 seconds in the race and every minute in practice and qualifying.</li>
+        <li><strong>Energy and refuelling:</strong> IMSA's public live telemetry, the same data as imsa.com's telemetry page.</li>
+        <li><strong>Session times:</strong> IMSA's weekend schedule. The site only follows live timing during WeatherTech sessions.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="limits">
+      <h2>Limitations</h2>
+      <ul>
+        <li><strong>Live numbers are estimates.</strong> Projections assume everyone holds position and keeps their current pace and energy use. Full-course yellows, short fills, penalties and strategy calls change them. Ties aren't modelled.</li>
+        <li><strong>About 30 seconds behind,</strong> so a little behind TV and IMSA's own timing.</li>
+        <li><strong>Unofficial feeds.</strong> If IMSA changes them, parts of the live view can stop working until the site is updated.</li>
+        <li><strong>Hosted on a home server,</strong> so the site can occasionally be unavailable.</li>
+        <li><strong>IMSA's results are the final word.</strong> If anything here disagrees with them, IMSA is right.</li>
+      </ul>
+    </section>
+  </div>
+  <footer>Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing.</footer>
+</main>
+<script>
+// Next WeatherTech session (or the one running), from the scraper's copy of IMSA's schedule.
+(async () => {
+  try {
+    const r = await fetch("data/schedule.json", { cache: "no-cache" });
+    if (!r.ok) return;
+    const now = new Date(), sessions = (await r.json()).sessions || [];
+    const s = sessions.find(x => new Date(x.end) > now);
+    if (!s) return;
+    const live = new Date(s.start) <= now;
+    const fmt = d => new Date(d).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" });
+    const el = document.getElementById("next");
+    el.innerHTML = `<h2>${live ? "On track now" : "Next live session"}</h2><p><strong>${s.name.replace(/ - WeatherTech Championship$/, "")}</strong> · ${fmt(s.start)} to ${new Date(s.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} (your time). `
+      + `${live ? 'Open <a href="./">Standings</a> or <a href="strategy.html">Strategy</a> to follow it live.' : "The live card and strategy page come alive then."}</p>`;
+    el.hidden = false;
+  } catch (e) { /* schedule unavailable: leave the card hidden */ }
+})();
+</script>
+</body>
+</html>
