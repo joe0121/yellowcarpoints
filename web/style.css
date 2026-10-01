@@ -192,3 +192,4 @@ tr.tracked .mini i { background: var(--s1); }
 .pace-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .cmp { font-size: 13px; color: var(--text-2); }
 .cmp select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; margin-left: 6px; }
+.legend span.sw::before { display: none; }

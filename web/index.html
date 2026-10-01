@@ -230,6 +230,7 @@ const secsOf = t => { if (!t) return null; let s = 0; for (const p of String(t).
 // --- live timing (data/live.json + data/laps.json, written by the scraper during WeatherTech sessions)
 const FLAG_COLORS = { green: "var(--good)", yellow: "var(--accent-ink)", fcy: "var(--accent-ink)", red: "var(--critical)" };
 let laps = null;
+const lapStr = t => !t || /^[0:.\s-]*$/.test(String(t)) ? "–" : esc(t);   // feed sends 0.000 before a timed lap
 const lapTime = t => t == null ? "–" : `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
 const signed = (v, unit = "s") => v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v).toFixed(2)}${unit}`;
 
@@ -302,7 +303,7 @@ function renderLive(l, c, d) {
         : `#${esc(car)} can't reach the top from here unless cars ahead drop back. Projected ${ord(me.proj_pos)} in the championship.`;
     }
   } else if (mine) {
-    verdict = `#${esc(car)} P${mine.class_pos} in ${esc(cls)}` + (mine.best_lap ? ` · best ${esc(mine.best_lap)}` : "");
+    verdict = `#${esc(car)} P${mine.class_pos} in ${esc(cls)}` + (lapStr(mine.best_lap) !== "–" ? ` · best ${lapStr(mine.best_lap)}` : "");
   } else {
     verdict = `#${esc(car)} isn't in this session`;
   }
@@ -312,7 +313,7 @@ function renderLive(l, c, d) {
     <div class="runner" style="--c:${colorOf(x.car)}">
       <div class="runner-top"><span class="num">#${esc(x.car)} P${x.class_pos}</span><small>in class · ${esc(x.driver)}</small>${x.in_pit ? `<span class="pit">IN PIT</span>` : ""}</div>
       <dl><dt>Gap</dt><dt>Last lap</dt><dt>Best lap</dt><dt>Stops</dt>
-        <dd>${x.class_pos === 1 ? "Leader" : esc(x.gap)}</dd><dd>${esc(x.last_lap)}</dd><dd>${esc(x.best_lap)}</dd><dd>${x.pit_stops ?? "–"}</dd></dl>
+        <dd>${x.class_pos === 1 ? "Leader" : esc(x.gap)}</dd><dd>${lapStr(x.last_lap)}</dd><dd>${lapStr(x.best_lap)}</dd><dd>${x.pit_stops ?? "–"}</dd></dl>
       ${strategyHTML(strat[x.car])}${stintHTML(x.stint)}
     </div>`).join("");
 
@@ -321,7 +322,7 @@ function renderLive(l, c, d) {
     + c.cars.map(r => { const x = strat[r.car] || {};
       return `<tr class="${d.tracked.includes(r.car) ? "tracked" : ""}" style="--c:${colorOf(r.car)}">
         <td>${r.class_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}<div>${esc(r.vehicle)}</div></td>
-        <td>${r.laps ?? "–"}</td><td class="dim">${r.class_pos === 1 ? "—" : esc(r.gap)}</td><td>${esc(r.last_lap)}</td><td>${esc(r.best_lap)}</td>
+        <td>${r.laps ?? "–"}</td><td class="dim">${r.class_pos === 1 ? "—" : esc(r.gap)}</td><td>${lapStr(r.last_lap)}</td><td>${lapStr(r.best_lap)}</td>
         <td>${lapTime(x.pace)}</td><td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td>
         ${l.is_race ? `<td class="dim">${r.stint?.laps ?? "–"}</td>` : ""}<td class="dim">${r.pit_stops ?? "–"}</td>${l.is_race ? `<td class="dim">${x.rejoin ? "P" + x.rejoin : "–"}</td>` : ""}</tr>`; }).join("")
     + `</tbody></table></div>`;
@@ -362,15 +363,41 @@ function renderLive(l, c, d) {
 }
 
 // Lap time chart: the selected car, the other Corvettes in its class, and the class leader.
+// Each line differs by colour AND dash pattern AND marker shape, and is labelled at its end,
+// so the cars stay distinguishable with only a few laps, in print, or with colour-blindness.
+const LAP_STYLES = [
+  { color: "var(--s1)", dash: "", marker: "circle", width: 2.5 },        // selected car
+  { color: "var(--s2)", dash: "7 4", marker: "square", width: 2 },       // other Corvette
+  { color: "var(--s3)", dash: "2 4", marker: "triangle", width: 2 },     // other Corvette
+  { color: "var(--text-3)", dash: "9 4 2 4", marker: "diamond", width: 1.75 }, // class leader
+];
+function marker(shape, cx, cy, color, r = 3.5) {
+  const ring = `stroke="var(--surface)" stroke-width="1.5"`;
+  if (shape === "square") return `<rect x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}" fill="${color}" ${ring}/>`;
+  if (shape === "triangle") return `<path d="M${cx} ${cy - r * 1.2}L${cx + r * 1.1} ${cy + r * .8}L${cx - r * 1.1} ${cy + r * .8}Z" fill="${color}" ${ring}/>`;
+  if (shape === "diamond") return `<path d="M${cx} ${cy - r * 1.25}L${cx + r} ${cy}L${cx} ${cy + r * 1.25}L${cx - r} ${cy}Z" fill="${color}" ${ring}/>`;
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" ${ring}/>`;
+}
+function swatch(st) {
+  return `<svg width="30" height="12" aria-hidden="true" style="vertical-align:middle;margin-right:4px;overflow:visible">`
+    + `<line x1="1" x2="29" y1="6" y2="6" stroke="${st.color}" stroke-width="${st.width}" stroke-dasharray="${st.dash}"/>${marker(st.marker, 15, 6, st.color, 3)}</svg>`;
+}
+
 function drawLaps(d, colorOf) {
   const el = $("lapchart"), cls = laps?.classes?.[d.class];
   if (!el || !cls) return;
   const leader = live.classes[d.class].cars[0]?.car;
   const cars = [...new Set([...d.tracked, leader])].filter(c => cls[c]?.laps?.length);
-  if (!cars.length) { el.insertAdjacentHTML("afterbegin", `<p class="note">No laps recorded yet.</p>`); return; }
+  el.querySelector("svg")?.remove();
+  el.querySelector("p.note")?.remove();
+  if (!cars.length) { el.insertAdjacentHTML("afterbegin", `<p class="note">No laps recorded yet.</p>`); $("lap-legend").innerHTML = ""; return; }
+  // Fixed style per role: selected first, then the other Corvettes in picker order, then the leader.
+  const styleOf = {};
+  let k = 1;
+  for (const c of cars) styleOf[c] = c === d.tracked[0] ? LAP_STYLES[0] : d.tracked.includes(c) ? LAP_STYLES[Math.min(k++, 2)] : LAP_STYLES[3];
   const all = cars.flatMap(c => cls[c].laps.map(l => l[1]));
   const best = Math.min(...all), cap = best * 1.07;   // slower laps (pits, yellows) pinned to the top edge
-  const W = Math.max(320, el.clientWidth), H = W < 600 ? 200 : 240, m = { t: 10, r: 16, b: 24, l: 48 };
+  const W = Math.max(320, el.clientWidth), H = W < 600 ? 210 : 250, m = { t: 12, r: 44, b: 24, l: 48 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   const maxLap = Math.max(...cars.flatMap(c => cls[c].laps.map(l => l[0])));
   const x = n => m.l + (maxLap <= 1 ? iw / 2 : ((n - 1) / (maxLap - 1)) * iw);
@@ -382,25 +409,30 @@ function drawLaps(d, colorOf) {
   }
   const step = Math.max(1, Math.ceil(maxLap / Math.floor(iw / 50)));
   for (let n = 1; n <= maxLap; n += step) g += `<text x="${x(n)}" y="${H - 6}" text-anchor="middle">${n}</text>`;
+  // Draw the leader and other Corvettes first, the selected car on top.
   const order = cars.slice().sort((a, b) => (a === d.tracked[0]) - (b === d.tracked[0]));
-  let lines = "";
+  let lines = "", marks = "";
+  const ends = [];
   for (const c of order) {
-    const col = c === leader && !d.tracked.includes(c) ? "var(--context)" : colorOf(c);
-    const pts = cls[c].laps.map(([n, t]) => `${x(n)},${y(t)}`).join(" ");
-    lines += `<polyline fill="none" stroke="${col}" stroke-width="${c === d.tracked[0] ? 2 : 1.25}" stroke-linejoin="round" points="${pts}"/>`;
-    for (const s of cls[c].stops) lines += `<line x1="${x(s)}" x2="${x(s)}" y1="${m.t + ih}" y2="${m.t + ih - 6}" stroke="${col}" stroke-width="2"/>`;
+    const st = styleOf[c], L = cls[c].laps;
+    lines += `<polyline fill="none" stroke="${st.color}" stroke-width="${st.width}" stroke-dasharray="${st.dash}" stroke-linejoin="round" stroke-linecap="round" points="${L.map(([n, t]) => `${x(n)},${y(t)}`).join(" ")}"/>`;
+    const every = Math.max(1, Math.ceil(L.length / 30));     // markers on every lap early, thinned out later
+    L.forEach(([n, t], i) => { if (i % every === 0 || i === L.length - 1) marks += marker(st.marker, x(n), y(t), st.color); });
+    for (const s of cls[c].stops) lines += `<line x1="${x(s)}" x2="${x(s)}" y1="${m.t + ih}" y2="${m.t + ih - 7}" stroke="${st.color}" stroke-width="2"/>`;
+    const last = L.at(-1);
+    ends.push({ x: x(last[0]) + 8, y: y(last[1]) + 4, t: `#${c}` });
   }
-  el.querySelector("svg")?.remove();
-  el.querySelector("p.note")?.remove();
-  el.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Lap times by lap">${g}${lines}<rect id="laphit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`);
-  $("lap-legend").innerHTML = cars.map(c => `<span style="--c:${c === leader && !d.tracked.includes(c) ? "var(--context)" : colorOf(c)}">#${esc(c)}${c === leader ? " (class leader)" : ""}</span>`).join("")
-    + `<span style="--c:var(--text-3)">Ticks: pit stops · laps over 107% of the best are pinned to the top</span>`;
+  ends.sort((a, b) => a.y - b.y).forEach((l, i, a) => { if (i && l.y - a[i - 1].y < 13) l.y = a[i - 1].y + 13; });
+  const labels = ends.map(l => `<text class="lbl" x="${Math.min(l.x, W - 4)}" y="${l.y}" text-anchor="${l.x > W - 30 ? "end" : "start"}">${esc(l.t)}</text>`).join("");
+  el.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Lap times by lap">${g}${lines}${marks}${labels}<rect id="laphit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`);
+  $("lap-legend").innerHTML = cars.map(c => `<span class="sw">${swatch(styleOf[c])}#${esc(c)}${c === d.tracked[0] ? " (selected)" : c === leader ? " (class leader)" : ""}</span>`).join("")
+    + `<span class="sw" style="color:var(--text-3)">Ticks on the axis: pit stops · laps over 107% of the best are pinned to the top</span>`;
   const svg = el.querySelector("svg"), tip = $("laptip");
   svg.querySelector("#laphit").addEventListener("pointermove", ev => {
     const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * (W / r.width);
     const n = Math.max(1, Math.min(maxLap, Math.round(1 + (px - m.l) / iw * (maxLap - 1))));
     tip.innerHTML = `<b>Lap ${n}</b>` + cars.map(c => { const l = cls[c].laps.find(l => l[0] === n);
-      return `<div><span><i style="--c:${colorOf(c)}"></i>#${esc(c)}</span><span>${l ? lapTime(l[1]) : "–"}</span></div>`; }).join("");
+      return `<div><span>${swatch(styleOf[c])}#${esc(c)}</span><span>${l ? lapTime(l[1]) : "–"}</span></div>`; }).join("");
     tip.style.display = "block";
     tip.style.left = Math.min(x(n) / W * r.width + 12, r.width - tip.offsetWidth) + "px";
     tip.style.top = "8px";
