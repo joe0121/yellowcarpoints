@@ -194,3 +194,7 @@ tr.tracked .mini i { background: var(--s1); }
 .cmp select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; margin-left: 6px; }
 .legend span.sw::before { display: none; }
 td.fast { font-weight: 700; color: var(--text); }
+.chip { font: 600 12px Inter, sans-serif; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px; margin-right: 6px; cursor: pointer; }
+.chip:hover { border-color: var(--text-3); }
+ul.vs { margin: 6px 0 4px; padding-left: 18px; }
+ul.vs li { margin: 2px 0; }

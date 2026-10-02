@@ -42,7 +42,7 @@
   <section class="card" id="pace-card" style="margin-bottom:16px">
     <div class="pace-head">
       <h2>Pace</h2>
-      <label class="cmp">Compare with <select id="cmp"></select></label>
+      <div class="cmp"><span id="pace-chips"></span><select id="cmp" aria-label="Add a car to the pace charts"></select></div>
     </div>
     <p class="live-sub" id="pace-sub"></p>
     <div class="charts" style="margin-top:12px">
@@ -305,6 +305,8 @@ function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = fal
     if (!s.pts.length) continue;
     if (s.dots) lines += s.pts.map(p => `<circle cx="${x(p[0])}" cy="${y(Math.max(y0, Math.min(y1, p[1])))}" r="2.5" fill="${s.color}" fill-opacity=".55"/>`).join("");
     else lines += `<polyline fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" ${s.dash ? `stroke-dasharray="${s.dash}"` : ""} stroke-linejoin="round" stroke-linecap="round" points="${s.pts.map(p => `${x(p[0])},${y(Math.max(y0, Math.min(y1, p[1])))}`).join(" ")}"/>`;
+    if (s.marker && !s.dots) { const every = Math.max(1, Math.ceil(s.pts.length / 20));
+      lines += s.pts.filter((p, i) => i % every === 0 || i === s.pts.length - 1).map(p => shape(s.marker, x(p[0]), y(Math.max(y0, Math.min(y1, p[1]))), s.color)).join(""); }
     if (s.end) { const p = s.pts.at(-1); ends.push({ x: x(p[0]) + 6, y: y(Math.max(y0, Math.min(y1, p[1]))) + 4, t: s.end }); }
   }
   // Keep end labels at least 13px apart vertically.
@@ -485,22 +487,55 @@ function paceModel(d) {
   return { pace, best, n: kept.length, dropped: drop, fit, kept, stintLap: lastLap - (stops.filter(s => s <= lastLap).at(-1) || 0), lastLap };
 }
 
-let cmpChoice = null;
+// Comparison cars on the pace charts: race threat + championship threat by default, plus any
+// cars the viewer adds. Each car gets a fixed colour + dash + marker so lines stay distinguishable.
+const PACE_STYLES = [
+  { color: "var(--s1)", dash: "", marker: "circle", width: 2.5 },          // selected car
+  { color: "var(--s3)", dash: "7 4", marker: "square", width: 2 },         // race threat
+  { color: "var(--s4)", dash: "9 4 2 4", marker: "diamond", width: 2 },    // championship threat
+  { color: "var(--s2)", dash: "2 4", marker: "triangle", width: 2 },       // added cars…
+  { color: "var(--text-3)", dash: "4 3", marker: "circle", width: 1.75 },
+  { color: "var(--s2)", dash: "10 3", marker: "square", width: 1.75 },
+];
+function shape(kind, cx, cy, color, r = 3.2) {
+  const ring = `stroke="var(--surface)" stroke-width="1.2"`;
+  if (kind === "square") return `<rect x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}" fill="${color}" ${ring}/>`;
+  if (kind === "triangle") return `<path d="M${cx} ${cy - r * 1.2}L${cx + r * 1.1} ${cy + r * .8}L${cx - r * 1.1} ${cy + r * .8}Z" fill="${color}" ${ring}/>`;
+  if (kind === "diamond") return `<path d="M${cx} ${cy - r * 1.25}L${cx + r} ${cy}L${cx} ${cy + r * 1.25}L${cx - r} ${cy}Z" fill="${color}" ${ring}/>`;
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" ${ring}/>`;
+}
+const swatchOf = st => `<svg width="30" height="12" aria-hidden="true" style="vertical-align:middle;margin-right:4px;overflow:visible"><line x1="1" x2="29" y1="6" y2="6" stroke="${st.color}" stroke-width="${st.width}" stroke-dasharray="${st.dash}"/>${shape(st.marker, 15, 6, st.color, 3)}</svg>`;
+const trendText = b => b == null ? "–" : Math.abs(b) < 0.005 ? "steady" : b < 0 ? `▲ ${Math.abs(b).toFixed(3)} s/lap quicker` : `▼ ${b.toFixed(3)} s/lap slower`;
+
+let paceExtra = [];          // cars the viewer added
+let paceCompare = null;      // main comparison car (used by the sectors line too)
 function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
   const models = Object.fromEntries(rows.map(r => [r.car, paceModel(lapsCls[r.car])]));
   const me = models[sel.car];
-  const others = rows.filter(r => r.car !== sel.car);
-  const def = [fc.champ_behind, fc.champ_ahead, fc.ahead, fc.ref].find(c => c && models[c]) || others[0]?.car;
-  const cmp = cmpChoice && rows.some(r => r.car === cmpChoice) && cmpChoice !== sel.car ? cmpChoice : def;
-  const role = c => c === fc.champ_behind ? "title threat" : c === fc.champ_ahead ? "title target" : c === fc.ahead ? "car ahead" : c === fc.ref ? fc.ref_role : "";
-  $("cmp").innerHTML = others.map(r => `<option value="${esc(r.car)}"${r.car === cmp ? " selected" : ""}>#${esc(r.car)} P${r.class_pos}${role(r.car) ? " · " + esc(role(r.car)) : ""}</option>`).join("");
-  $("cmp").onchange = e => { cmpChoice = e.target.value; render(); };
-  const them = models[cmp];
-  const worn = lc.stint_model?.typical || 40, fresh = 3;
-  const freshOf = f => f.at(Math.max(f.minSl, fresh));
-  const wornOf = f => f.maxSl >= worn * 0.6 ? f.at(Math.min(worn, f.maxSl)) : null;   // need data well into a stint
+  const rowOf = c => rows.find(r => r.car === c);
+  // Default comparison cars: race threat (leader, or car behind when leading) and title threat.
+  const raceThreat = fc.ref || (rows[0]?.car !== sel.car ? rows[0]?.car : rows[1]?.car);
+  const titleThreat = fc.champ_behind || fc.champ_ahead;
+  paceExtra = paceExtra.filter(c => c !== sel.car && rowOf(c));
+  const picks = [];
+  const add = (car, role) => { if (car && car !== sel.car && rowOf(car) && !picks.some(p => p.car === car)) picks.push({ car, role }); };
+  add(raceThreat, raceThreat === rows[0]?.car ? "race leader" : "car behind on track");
+  add(titleThreat, fc.champ_behind ? "title threat" : "title target");
+  paceExtra.forEach(c => add(c, "added"));
+  const cars = [{ car: sel.car, role: "selected" }, ...picks];
+  cars.forEach((c, i) => {
+    c.style = c.role === "selected" ? PACE_STYLES[0] : c.role === "race leader" || c.role === "car behind on track" ? PACE_STYLES[1] : c.role.startsWith("title") ? PACE_STYLES[2] : PACE_STYLES[Math.min(3 + paceExtra.indexOf(c.car), PACE_STYLES.length - 1)];
+  });
+  paceCompare = picks.find(p => p.role.startsWith("title"))?.car || picks[0]?.car || null;
 
-  // Headline: pace now and over the next 10 laps, and when the advantage flips.
+  // "Add car" picker + removable chips for added cars.
+  const options = rows.filter(r => !cars.some(c => c.car === r.car));
+  $("cmp").innerHTML = `<option value="">Add a car…</option>` + options.map(r => `<option value="${esc(r.car)}">#${esc(r.car)} P${r.class_pos}</option>`).join("");
+  $("cmp").onchange = e => { if (e.target.value) { paceExtra.push(e.target.value); render(); } };
+  $("pace-chips").innerHTML = picks.filter(p => p.role === "added").map(p => `<button class="chip" data-car="${esc(p.car)}" title="Remove #${esc(p.car)}">#${esc(p.car)} ×</button>`).join("");
+  $("pace-chips").querySelectorAll(".chip").forEach(b => b.onclick = () => { paceExtra = paceExtra.filter(c => c !== b.dataset.car); render(); });
+
+  // Projection over the next 20 laps, resetting at each car's next stop.
   const proj = (m, row) => {
     if (!m?.fit) return null;
     const nextStop = row?.energy?.next_stop_lap ?? (row?.stint?.laps_to_typical != null ? m.lastLap + Math.max(1, row.stint.laps_to_typical) : null);
@@ -509,61 +544,66 @@ function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
       return [lap, m.fit.at(Math.max(2, sl)), nextStop];
     });
   };
-  const rowOf = c => rows.find(r => r.car === c);
-  const pm = proj(me, rowOf(sel.car)), pt = proj(them, rowOf(cmp));
-  let sub = "";
-  if (me && them) {
-    sub = `Race pace (slowest 10% of clean laps thrown away): <b>#${esc(sel.car)} ${lapTime(me.pace)}</b> vs <b>#${esc(cmp)} ${lapTime(them.pace)}</b> `
-      + `(${Math.abs(me.pace - them.pace).toFixed(2)} s/lap ${me.pace <= them.pace ? "quicker" : "slower"}).`;
-    if (pm && pt) {
-      const byLap = new Map(pt.map(p => [p[0], p[1]]));
-      const deltas = pm.filter(p => byLap.has(p[0])).map(p => [p[0], p[1] - byLap.get(p[0])]);
+  cars.forEach(c => { c.m = models[c.car]; c.p = proj(c.m, rowOf(c.car)); });
+  const mine = cars[0];
+
+  // Headline: one line per comparison car.
+  const lines = picks.map(p => {
+    const c = cars.find(x => x.car === p.car), them = c.m;
+    if (!me || !them) return `<li>vs <b>#${esc(p.car)}</b> · ${esc(p.role)}: needs about 8 clean laps.</li>`;
+    // Always phrased from the selected car's point of view.
+    let t = `<li>vs <b>#${esc(p.car)}</b> · ${esc(p.role)}: #${esc(sel.car)} is ${Math.abs(me.pace - them.pace).toFixed(2)} s/lap ${me.pace <= them.pace ? "quicker" : "slower"} on race pace`;
+    if (mine.p && c.p) {
+      const byLap = new Map(c.p.map(q => [q[0], q[1]]));
+      const deltas = mine.p.filter(q => byLap.has(q[0])).map(q => [q[0], q[1] - byLap.get(q[0])]);
       const next10 = deltas.slice(1, 11), avg = next10.reduce((a, d) => a + d[1], 0) / (next10.length || 1);
       const flip = deltas.slice(1).find(d => Math.sign(d[1]) !== Math.sign(deltas[0][1]) && Math.abs(d[1]) > 0.02);
-      sub += ` Next 10 laps: <b>#${esc(sel.car)} about ${Math.abs(avg).toFixed(2)} s/lap ${avg <= 0 ? "quicker" : "slower"}</b>`
-        + ` (stint lap ${me.stintLap} vs ${them.stintLap}).`
-        + (flip ? ` The advantage flips around <b>lap ${flip[0]}</b>${pm[0][2] && flip[0] > pm[0][2] ? ` after #${esc(sel.car)} pits` : pt[0][2] && flip[0] > pt[0][2] ? ` after #${esc(cmp)} pits` : " as tyres age"}.` : "");
+      t += `, and about ${Math.abs(avg).toFixed(2)} s/lap ${avg <= 0 ? "quicker" : "slower"} over the next 10 laps (stint lap ${me.stintLap} vs ${them.stintLap})`
+        + (flip ? `, flips around lap ${flip[0]}` : "");
     }
-  } else {
-    sub = "Pace needs about 8 clean laps per car, so it fills in a few laps into a session.";
-  }
-  if (me && them && !live.is_race) sub += ` <span class="dim">Practice and qualifying mix run plans, fuel loads and a rubbering-in track, so treat these as rough until the race.</span>`;
-  $("pace-sub").innerHTML = sub;
+    return t + ".</li>";
+  });
+  $("pace-sub").innerHTML = (me ? `#${esc(sel.car)} race pace <b>${lapTime(me.pace)}</b> (slowest 10% of clean laps thrown away).` : `#${esc(sel.car)} needs about 8 clean laps.`)
+    + (lines.length ? `<ul class="vs">${lines.join("")}</ul>` : "")
+    + (!live.is_race ? `<span class="dim">Practice and qualifying mix run plans, fuel loads and a rubbering-in track, so treat these as rough until the race.</span>` : "");
 
-  // Chart 1: lap time against laps since the last stop, with each car's fitted line.
+  // Chart 1: lap time through a stint (dots) with each car's trend line.
   const stintSeries = [];
-  for (const [car, m, color] of [[sel.car, me, C.me], [cmp, them, C.ahead]]) {
-    if (!m) continue;
-    stintSeries.push({ name: `#${car}`, pts: m.kept.map(p => [p.sl, p.t]), color, dots: true });
-    if (m.fit) stintSeries.push({ pts: [[m.fit.minSl, m.fit.at(m.fit.minSl)], [m.fit.maxSl, m.fit.at(m.fit.maxSl)]], color, width: 2, end: `${signed(m.fit.b, 3)}s/lap` });
+  for (const c of cars) {
+    if (!c.m) continue;
+    stintSeries.push({ name: `#${c.car}`, pts: c.m.kept.map(q => [q.sl, q.t]), color: c.style.color, dots: true });
+    if (c.m.fit) stintSeries.push({ pts: [[c.m.fit.minSl, c.m.fit.at(c.m.fit.minSl)], [c.m.fit.maxSl, c.m.fit.at(c.m.fit.maxSl)]],
+      color: c.style.color, width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}` });
   }
   lineChart("ch-stint", { series: stintSeries, yFmt: lapTime, xName: "Stint lap", empty: "Needs a few clean laps." });
-  $("lg-stint").innerHTML = [[sel.car, C.me], [cmp, C.ahead]].map(([c, col]) => `<span style="--c:${col}">#${esc(c)}</span>`).join("")
-    + `<span style="--c:var(--text-3)">dots: clean laps by laps since the last stop · line: trend (tyres + fuel)</span>`;
+  const legend = cars.map(c => `<span class="sw">${swatchOf(c.style)}#${esc(c.car)} <span class="dim">${esc(c.role === "selected" ? "" : c.role)}</span></span>`).join("");
+  $("lg-stint").innerHTML = legend + `<span class="sw dim">dots: clean laps by laps since the last stop · lines: trend (tyres + fuel)</span>`;
 
-  // Chart 2: projected lap times for the next 20 laps, resetting at each car's next stop.
-  const projSeries = [];
-  if (pm) projSeries.push({ name: `#${sel.car}`, pts: pm.map(p => [p[0], p[1]]), color: C.me, end: `#${sel.car}` });
-  if (pt) projSeries.push({ name: `#${cmp}`, pts: pt.map(p => [p[0], p[1]]), color: C.ahead, end: `#${cmp}` });
+  // Chart 2: projected lap times for the next 20 laps.
+  const projSeries = cars.filter(c => c.p).map(c => ({ name: `#${c.car}`, pts: c.p.map(q => [q[0], q[1]]), color: c.style.color,
+    width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}` }));
   lineChart("ch-proj", { series: projSeries, yFmt: lapTime, empty: "Projection needs each car's stint trend (about 8 clean laps over several stint laps)." });
-  $("lg-proj").innerHTML = [[sel.car, C.me, pm], [cmp, C.ahead, pt]].map(([c, col, p]) => `<span style="--c:${col}">#${esc(c)}${p?.[0]?.[2] ? ` · pits ~L${p[0][2]}` : ""}</span>`).join("")
-    + `<span style="--c:var(--text-3)">lower is quicker · drops back to fresh-tyre pace after a stop</span>`;
+  $("lg-proj").innerHTML = cars.map(c => `<span class="sw">${swatchOf(c.style)}#${esc(c.car)}${c.p?.[0]?.[2] ? ` · pits ~L${c.p[0][2]}` : ""}</span>`).join("")
+    + `<span class="sw dim">lower is quicker · back to fresh-tyre pace after a stop</span>`;
 
   // Class table.
   const corvettes = standings.cars.filter(c => c.class === sel.class).map(c => c.car);
+  const worn = lc.stint_model?.typical || 40, fresh = 3;
+  const freshOf = f => f.at(Math.max(f.minSl, fresh));
+  const wornOf = f => f.maxSl >= worn * 0.6 ? f.at(Math.min(worn, f.maxSl)) : null;
   const ranked = rows.filter(r => models[r.car]).sort((a, b) => models[a.car].pace - models[b.car].pace);
-  $("pace-table").innerHTML = `<thead><tr><th>#</th><th>Car</th><th>Pos</th><th>Race pace</th><th>Best</th><th title="Trend value early in a stint">Fresh tyres</th><th title="Trend value late in a stint (shown once a car has run at least 60% of a typical ${worn}-lap stint)">Worn</th><th>Loses</th><th>Stint lap</th><th>Now</th><th>vs #${esc(sel.car)}</th><th>Laps used</th></tr></thead><tbody>`
+  const myNow = me?.fit ? me.fit.at(Math.max(2, me.stintLap)) : null;
+  $("pace-table").innerHTML = `<thead><tr><th>#</th><th>Car</th><th>Pos</th><th>Race pace</th><th>Best</th><th title="Trend value early in a stint">Fresh tyres</th><th title="Trend value late in a stint (shown once a car has run at least 60% of a typical ${worn}-lap stint)">Worn</th><th class="l" title="How lap time changes per lap through a stint (tyres wearing and fuel burning off together)">Lap trend</th><th>Stint lap</th><th>Now</th><th>vs #${esc(sel.car)}</th><th>Laps used</th></tr></thead><tbody>`
     + ranked.map((r, i) => { const m = models[r.car], f = m.fit, now = f ? f.at(Math.max(2, m.stintLap)) : null;
-      const mine = models[sel.car]?.fit ? models[sel.car].fit.at(Math.max(2, models[sel.car].stintLap)) : null;
       return `<tr class="${corvettes.includes(r.car) ? "tracked" : ""}" style="--c:${r.car === sel.car ? C.me : corvettes.includes(r.car) ? "var(--series-2)" : C.ctx}">
         <td>${i + 1}</td><td>#${esc(r.car)}</td><td class="dim">P${r.class_pos}</td><td class="total">${lapTime(m.pace)}</td><td class="dim">${lapTime(m.best)}</td>
         <td>${f ? lapTime(freshOf(f)) : "–"}</td><td>${f && wornOf(f) ? lapTime(wornOf(f)) : "–"}</td>
-        <td class="${f && f.b > 0.02 ? "down" : "dim"}">${f ? signed(f.b, 3) + "s/lap" : "–"}</td><td class="dim">${m.stintLap}</td>
-        <td>${now ? lapTime(now) : "–"}</td><td class="${now && mine ? (now < mine ? "down" : now > mine ? "up" : "dim") : "dim"}">${now && mine && r.car !== sel.car ? signed(now - mine) : "–"}</td>
+        <td class="l ${f ? (f.b < -0.005 ? "up" : f.b > 0.005 ? "down" : "dim") : "dim"}">${f ? trendText(f.b) : "–"}</td><td class="dim">${m.stintLap}</td>
+        <td>${now ? lapTime(now) : "–"}</td><td class="${now && myNow ? (now < myNow ? "down" : now > myNow ? "up" : "dim") : "dim"}">${now && myNow && r.car !== sel.car ? signed(now - myNow) : "–"}</td>
         <td class="dim">${m.n}${m.dropped ? ` (−${m.dropped})` : ""}</td></tr>`; }).join("")
     + `</tbody>`;
   $("pace-note").textContent = `Clean laps exclude the first lap, in- and out-laps and anything over 105% of the car's best; then the slowest 10% are dropped. `
-    + `"Stint lap" is laps since the last stop, a stand-in for tyre age (teams sometimes double-stint tyres), and the trend includes fuel burning off. `
+    + `"Lap trend" is how much quicker or slower each lap gets through a stint; it includes tyres wearing and fuel burning off, and "stint lap" (laps since the last stop) stands in for tyre age since teams sometimes double-stint tyres. `
     + `"vs #${sel.car}": how much slower (+) or quicker (−) each car should be than #${sel.car} on its current stint lap; green is good for #${sel.car}.`;
 }
 
@@ -588,7 +628,7 @@ function renderSectors(sel, clsName) {
   if (me) {
     sub += `#${esc(sel.car)} is ${[0, 1, 2].map(i => `<b>P${rank(i, "best")}</b> in S${i + 1}`).join(", ")} on best times`
       + (me.typical ? ` and ${[0, 1, 2].map(i => `P${rank(i, "typical")}`).join(" / ")} on typical laps` : "") + ".";
-    const other = cmpChoice && sc.cars[cmpChoice] ? cmpChoice : null;
+    const other = paceCompare && sc.cars[paceCompare] ? paceCompare : null;
     const them = other && sc.cars[other];
     if (them?.typical && me.typical) {
       const d = [0, 1, 2].map(i => me.typical[i] - them.typical[i]);
