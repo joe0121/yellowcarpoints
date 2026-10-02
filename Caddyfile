@@ -16,7 +16,20 @@
 	# Always revalidate so visitors get a new page/data as soon as it's deployed.
 	header Cache-Control "no-cache"
 	header -Server
-	file_server
+	# Anonymous profiles and the guest book. Admin routes are never served publicly, and any
+	# X-Admin header a visitor sends is stripped before it reaches the API.
+	handle /api/admin/* {
+		respond 404
+	}
+	handle /api/* {
+		header Cache-Control "no-store"
+		reverse_proxy api:8000 {
+			header_up -X-Admin
+		}
+	}
+	handle {
+		file_server
+	}
 }
 
 # Local-only status page: published on 127.0.0.1:8089 and never routed through the tunnel.
@@ -24,6 +37,12 @@
 	header Cache-Control "no-cache"
 	handle /metrics {
 		metrics
+	}
+	# Guest book moderation from the status page: this local server adds the admin token.
+	handle /api/admin/* {
+		reverse_proxy api:8000 {
+			header_up X-Admin {$ADMIN_TOKEN}
+		}
 	}
 	handle /tunnel-metrics {
 		rewrite * /metrics

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guest Book · Yellow Car Points</title>
+<meta name="description" content="Sign the Yellow Car Points guest book.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23eda100'/><text x='16' y='23' font-size='18' font-family='Arial' font-weight='700' text-anchor='middle' fill='%23111'>4</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+<script src="account.js"></script>
+<style>
+.gb { max-width: 720px; margin: 0 auto 16px; }
+.gb label { display: block; font-weight: 600; font-size: 13px; margin: 12px 0 4px; }
+.gb input, .gb select, .gb textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.gb textarea { min-height: 110px; resize: vertical; }
+.gb .two { display: grid; grid-template-columns: 2fr 1fr; gap: 0 12px; }
+.gb button.send { margin-top: 14px; font: 600 14px Inter, sans-serif; padding: 9px 18px; border-radius: 99px; border: 0; background: var(--accent); color: var(--on-accent); cursor: pointer; }
+.gb .hp { position: absolute; left: -5000px; }
+.gb .count { float: right; font-weight: 400; color: var(--text-3); }
+.entries { list-style: none; margin: 8px 0 0; padding: 0; }
+.entries li { padding: 12px 0; border-top: 1px solid var(--line); }
+.entries li:first-child { border-top: 0; }
+.entries .who { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; color: var(--text-3); }
+.entries .who b { color: var(--text); font-size: 14px; }
+.entries p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.carchip { font: 600 12px Oswald, sans-serif; padding: 0 7px; border-radius: 6px; border: 1px solid var(--line); color: var(--text-2); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Yellow Car <span>Points</span></h1>
+      <p class="sub">Guest book</p>
+      <div class="navrow"><nav class="tabs"><a href="./">Championship</a><a href="strategy.html">Race</a><a href="about.html">About</a><a href="guestbook.html" aria-current="page">Guest book</a></nav><span class="countdown" id="countdown" hidden></span></div>
+    </div>
+  </header>
+  <section class="card gb" id="sign">
+    <h2>Sign the guest book</h2>
+    <p class="dim">Say hi, tell us which car you're cheering for, or where you're watching from. Messages appear once they've been approved.</p>
+    <form id="gbform">
+      <div class="two">
+        <div><label for="name">Name (optional)</label><input id="name" maxlength="40" autocomplete="nickname"></div>
+        <div><label for="car">Favourite car</label><select id="car"><option value="">–</option>
+          <option>4</option><option>3</option><option>74</option><option>13</option><option>36</option><option>81</option><option>73</option></select></div>
+      </div>
+      <label for="msg">Message <span class="count" id="count">0 / 500</span></label>
+      <textarea id="msg" maxlength="500" required></textarea>
+      <input class="hp" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <div id="ts-box"></div>
+      <button class="send" type="submit">Sign</button>
+      <p id="gbmsg" aria-live="polite"></p>
+    </form>
+  </section>
+  <section class="card gb" id="book">
+    <h2>Guest book</h2>
+    <ul class="entries" id="entries"><li class="dim">Loading…</li></ul>
+  </section>
+  <footer>Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing. <a href="https://www.imsa.com/" target="_blank" rel="noopener">IMSA</a> · <a href="https://www.youtube.com/@IMSAOfficial" target="_blank" rel="noopener">IMSA on YouTube</a></footer>
+  <nav class="footlinks" aria-label="About this site">
+    <a href="https://github.com/joe0121/yellowcarpoints" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1 1.6 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .6 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>Source on GitHub</a>
+    <a href="https://www.instagram.com/c6zoooh6/" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.4" cy="6.6" r="1.3" fill="currentColor"/></svg>@C6ZOOOH6</a>
+    <a href="contact.html">Contact</a>
+  </nav>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let tsToken = null;
+async function load() {
+  try {
+    const r = await fetch("/api/guestbook", { cache: "no-store" }), d = await r.json();
+    $("entries").innerHTML = d.entries.length ? d.entries.map(e => `<li><div class="who"><b>${esc(e.name || "Anonymous fan")}</b>${e.car ? `<span class="carchip">#${esc(e.car)}</span>` : ""}
+      <span>${new Date(e.created * 1000).toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" })}</span></div><p>${esc(e.message)}</p></li>`).join("")
+      : `<li class="dim">No messages yet. Be the first!</li>`;
+  } catch (e) { $("entries").innerHTML = `<li class="dim">The guest book isn't available right now.</li>`; }
+}
+// Cloudflare Turnstile spam check, when the site has it switched on.
+fetch("/api/config").then(r => r.json()).then(c => {
+  if (!c.turnstile_sitekey) return;
+  window.onTurnstile = () => turnstile.render("#ts-box", { sitekey: c.turnstile_sitekey, callback: t => { tsToken = t; } });
+  const sc = document.createElement("script"); sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstile"; sc.async = true; document.head.appendChild(sc);
+}).catch(() => {});
+$("msg").addEventListener("input", () => { $("count").textContent = `${$("msg").value.length} / 500`; });
+$("gbform").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = $("gbmsg");
+  out.textContent = "Sending…";
+  try {
+    const r = await fetch("/api/guestbook", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("name").value, car: $("car").value, message: $("msg").value, website: $("website").value, turnstile: tsToken }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Couldn't send that");
+    out.textContent = "Thanks! Your message will appear here once it's been approved.";
+    $("msg").value = ""; $("count").textContent = "0 / 500";
+    if (typeof window.turnstile?.reset === "function") window.turnstile.reset();
+  } catch (err) { out.textContent = err.message; }
+});
+load();
+</script>
+<script src="countdown.js" defer></script>
+</body>
+</html>

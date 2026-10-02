@@ -79,6 +79,14 @@ Set `CARS` in `.env` as `CLASS:NUMBER` pairs, e.g. `CARS=GTDPRO:4,GTD:13`, then 
 Each car's log of stops, driver changes and position changes (`ev` in `laps.json`) and per-driver drive
 time (`drivers` in `live.json`, with ratings from the entry list and the event's drive-time rules in
 `DRIVE_RULES`) are kept in `race_state.json`, so restarts and page reloads lose nothing.
+`api/` is a small FastAPI service (SQLite in the `api-db` volume) for anonymous profiles and the guest
+book. A profile is a random sync code (stored only as an HMAC keyed by `API_SECRET`) and/or passkeys
+(WebAuthn, `RP_ID`/`ORIGINS`); it holds display settings only. Guest book posts wait for approval on the
+local status page: Caddy's :8089 server adds `X-Admin: $ADMIN_TOKEN` for `/api/admin/*`, while the public
+:80 server refuses that path and strips the header. Set `API_SECRET` and `ADMIN_TOKEN` in `.env`
+(random, private). Optional Cloudflare Turnstile spam check: `TURNSTILE_SITEKEY` / `TURNSTILE_SECRET`.
+Client IPs are used in memory for rate limiting only.
+
 `app/watch.py` reads YouTube's public RSS feed for IMSA's channel (no API key) to find WeatherTech
 session streams for the Race page's Watch card (embedded with YouTube's player, nothing re-hosted), and
 notes which cars IMSA.tv lists with an in-car camera (linked, never embedded: IMSA.tv uses its own

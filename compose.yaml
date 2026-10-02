@@ -14,9 +14,25 @@ services:
       # Session recordings and the scraper log, readable on the host for debugging/replay.
       - ./archive:/data/archive
 
+  # Anonymous profiles (sync code / passkey), saved settings and the guest book. SQLite in the api-db volume.
+  api:
+    image: ghcr.io/joe0121/yellowcarpoints-api:latest
+    restart: unless-stopped
+    environment:
+      API_SECRET: ${API_SECRET:?set API_SECRET in .env}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      RP_ID: ${RP_ID:-yellowcarpoints.win}
+      ORIGINS: ${ORIGINS:-https://yellowcarpoints.win,https://www.yellowcarpoints.win}
+      TURNSTILE_SITEKEY: ${TURNSTILE_SITEKEY:-}
+      TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
+    volumes:
+      - api-db:/db
+
   web:
     image: ghcr.io/joe0121/yellowcarpoints-web:latest
     restart: unless-stopped
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}   # added by the local status server only
     volumes:
       - data:/srv/data:ro
       - status:/srv-status/data:ro
@@ -40,3 +56,4 @@ services:
 volumes:
   data:
   status:
+  api-db:

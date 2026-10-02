@@ -48,14 +48,31 @@ td.lv { font-weight: 600; white-space: nowrap; }
 .wide { grid-column: 1 / -1; }
 .empty { color: var(--text-3); }
 footer { margin-top: 16px; color: var(--text-3); font-size: 12px; }
+.dim { color: var(--text-3); }
+.gbq { margin-top: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.gbq h2 { margin: 0 0 8px; font-size: 15px; }
+.gbq h2 span { font: 400 12px Inter, sans-serif; color: var(--text-3); margin-left: 8px; }
+.gbitem { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.gbitem:first-child { border-top: 0; }
+.gbitem .meta { font-size: 12px; color: var(--text-3); }
+.gbitem .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.gbitem .acts { grid-row: span 2; display: flex; gap: 6px; align-items: start; }
+.gbitem button { font: 600 12px Inter, sans-serif; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+.gbitem button.ok { border-color: #0ca30c; }
+.gbitem button.del { border-color: #d03b3b; }
+.gbitem.approved { opacity: .7; }
 </style>
 </head>
 <body>
 <main>
   <h1>Yellow Car Points <span>status</span></h1>
-  <p class="sub">This PC only (http://localhost:8089), not reachable through the public site. Refreshes every 5 seconds. Read-only.</p>
+  <p class="sub">This PC only (http://localhost:8089), not reachable through the public site. Refreshes every 5 seconds. The guest book queue below is the only thing you can change here.</p>
   <div class="overall" id="overall"></div>
   <div class="grid" id="grid"></div>
+  <section class="gbq" id="gbq">
+    <h2>Guest book <span id="gbstats"></span></h2>
+    <div id="gblist"><p class="dim">Loading…</p></div>
+  </section>
   <footer id="foot"></footer>
 </main>
 <script>
@@ -184,6 +201,27 @@ async function refresh() {
 }
 refresh();
 setInterval(refresh, 5000);
+
+// Guest book moderation: approve or delete. Only this local page can reach the admin API.
+async function guestbook() {
+  try {
+    const r = await fetch("/api/admin/guestbook", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json(), pending = d.entries.filter(e => e.status === "pending");
+    $("gbstats").textContent = `${pending.length} waiting · ${d.entries.length - pending.length} approved · ${d.stats.accounts} saved profiles (${d.stats.passkeys} passkeys)`;
+    $("gblist").innerHTML = d.entries.length ? d.entries.map(e => `<div class="gbitem ${e.status}">
+        <div class="meta"><b>${esc(e.name || "Anonymous fan")}</b>${e.car ? ` · #${esc(e.car)}` : ""} · ${new Date(e.created * 1000).toLocaleString()} · ${e.status}</div>
+        <div class="acts">${e.status === "pending" ? `<button class="ok" data-id="${e.id}" data-act="approve">Approve</button>` : ""}<button class="del" data-id="${e.id}" data-act="delete">Delete</button></div>
+        <div class="text">${esc(e.message)}</div></div>`).join("") : `<p class="dim">No messages yet.</p>`;
+    $("gblist").querySelectorAll("button").forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      await fetch(`/api/admin/guestbook/${b.dataset.id}/${b.dataset.act}`, { method: "POST" });
+      guestbook();
+    });
+  } catch (e) { $("gblist").innerHTML = `<p class="dim">Guest book API not reachable (${esc(e.message)}).</p>`; }
+}
+guestbook();
+setInterval(guestbook, 30000);
 </script>
 </body>
 </html>

@@ -403,3 +403,18 @@ header .meta { text-align: center; }
 .footlinks { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; margin-top: 14px; font-size: 13px; }
 .footlinks a { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); text-decoration: none; }
 .footlinks a:hover { color: var(--accent-ink); }
+/* anonymous profile: button in the tab row and its panel */
+.acct-btn { font: 600 12px Inter, sans-serif; color: var(--text-2); background: none; border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; cursor: pointer; }
+.acct-btn:hover { color: var(--text); border-color: var(--text-3); }
+dialog.acct { max-width: min(520px, calc(100vw - 32px)); background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; box-shadow: 0 12px 40px rgb(0 0 0 / .35); }
+dialog.acct::backdrop { background: rgb(0 0 0 / .5); }
+dialog.acct h2 { margin: 0 0 8px; font-size: 18px; }
+dialog.acct p { color: var(--text-2); font-size: 14px; margin: 8px 0; }
+dialog.acct .acct-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+dialog.acct input { flex: 1 1 220px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+dialog.acct .acct-main { font: 600 13px Inter, sans-serif; padding: 7px 14px; border-radius: 99px; border: 0; background: var(--accent); color: var(--on-accent); cursor: pointer; }
+dialog.acct .acct-code { font: 600 15px ui-monospace, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; user-select: all; }
+dialog.acct .chip.danger { border-color: var(--critical); color: var(--critical); }
+dialog.acct .acct-msg { min-height: 1.2em; color: var(--text); }
+dialog.acct .acct-msg.bad { color: var(--critical); }
+dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
