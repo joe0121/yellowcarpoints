@@ -475,3 +475,5 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .lookaway { margin: 2px 0 0; font-size: 13px; color: var(--text-2); }
 .picker .allow { margin: 4px 0 0; font-size: 12px; color: var(--text-3); }
 .picker .allow .linkbtn { margin: 0 0 0 6px; padding: 0; font-size: 12px; }
+.qnote { margin-top: 6px; font-size: 13px; color: var(--text-2); }
+.qnote b { color: var(--flag-yellow); }
