@@ -193,3 +193,4 @@ tr.tracked .mini i { background: var(--s1); }
 .cmp { font-size: 13px; color: var(--text-2); }
 .cmp select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; margin-left: 6px; }
 .legend span.sw::before { display: none; }
+td.fast { font-weight: 700; color: var(--text); }

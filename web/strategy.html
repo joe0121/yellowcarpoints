@@ -62,6 +62,13 @@
     <p class="note" id="pace-note"></p>
   </section>
 
+  <section class="card" id="sector-card" hidden style="margin-bottom:16px">
+    <h2>Sectors</h2>
+    <p class="live-sub" id="sector-sub"></p>
+    <div class="scroll"><table id="sector-table"></table></div>
+    <p class="note" id="sector-note"></p>
+  </section>
+
   <div class="charts">
     <section class="card">
       <h2>Lap times</h2>
@@ -103,11 +110,11 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
 
-let standings, live, laps, schedule, entries;
+let standings, live, laps, schedule, entries, sectorData;
 
 async function load() {
-  [standings, live, laps, schedule, entries] = await Promise.all(
-    ["standings", "live", "laps", "schedule", "entries"].map(n => getJSON(`data/${n}.json`)));
+  [standings, live, laps, schedule, entries, sectorData] = await Promise.all(
+    ["standings", "live", "laps", "schedule", "entries", "sectors"].map(n => getJSON(`data/${n}.json`)));
   render();
 }
 addEventListener("hashchange", render);
@@ -151,6 +158,7 @@ function render() {
   document.title = `Race Strategy · #${sel.car}`;
   $("sub").textContent = `Race strategy · #${sel.car} ${entries?.cars?.[sel.car]?.team || ""} · ${clsName}`;
 
+  renderSectors(sel, clsName);
   const lc = live?.classes?.[sel.class];
   const age = live ? (Date.now() - new Date(live.updated)) / 60e3 : Infinity;
   const running = lc && age < 30;
@@ -554,6 +562,50 @@ function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
   $("pace-note").textContent = `Clean laps exclude the first lap, in- and out-laps and anything over 105% of the car's best; then the slowest 10% are dropped. `
     + `"Stint lap" is laps since the last stop, a stand-in for tyre age (teams sometimes double-stint tyres), and the trend includes fuel burning off. `
     + `"vs #${sel.car}": how much slower (+) or quicker (−) each car should be than #${sel.car} on its current stint lap; green is good for #${sel.car}.`;
+}
+
+// --- sectors (from Al Kamel's time cards: after each session, about hourly in the race) ---
+function renderSectors(sel, clsName) {
+  const sc = sectorData?.classes?.[sel.class];
+  $("sector-card").hidden = !sc;
+  if (!sc) return;
+  const cars = Object.entries(sc.cars).sort((a, b) => a[1].ideal - b[1].ideal);
+  const me = sc.cars[sel.car];
+  const corvettes = standings.cars.filter(c => c.class === sel.class).map(c => c.car);
+  const sec = t => t == null ? "–" : t >= 60 ? lapTime(t) : t.toFixed(3);
+  const rank = (i, key) => 1 + cars.filter(([, c]) => key === "best" ? c.best[i] < me.best[i] : c.typical && me.typical && c.typical[i] < me.typical[i]).length;
+  const cell = (v, fastest, mine) => {
+    if (v == null) return `<td>–</td>`;
+    const fast = Math.abs(v - fastest) < 0.0005;
+    const d = mine != null && Math.abs(v - mine) >= 0.0005 ? ` title="${signed(v - mine, 3)} vs #${esc(sel.car)}"` : "";
+    return `<td class="${fast ? "fast" : ""}"${d}>${fast ? "★ " : ""}${sec(v)}</td>`;
+  };
+  // Headline: where the selected car ranks in each sector, and against the pace comparison car.
+  let sub = `From IMSA's timing report for <b>${esc(sectorData.session)}</b> at ${esc(sectorData.event)} (updated after each session and about hourly in the race). `;
+  if (me) {
+    sub += `#${esc(sel.car)} is ${[0, 1, 2].map(i => `<b>P${rank(i, "best")}</b> in S${i + 1}`).join(", ")} on best times`
+      + (me.typical ? ` and ${[0, 1, 2].map(i => `P${rank(i, "typical")}`).join(" / ")} on typical laps` : "") + ".";
+    const other = cmpChoice && sc.cars[cmpChoice] ? cmpChoice : null;
+    const them = other && sc.cars[other];
+    if (them?.typical && me.typical) {
+      const d = [0, 1, 2].map(i => me.typical[i] - them.typical[i]);
+      sub += ` Typical laps vs #${esc(other)}: ` + d.map((x, i) => `S${i + 1} ${x <= 0 ? "gains" : "loses"} <b>${Math.abs(x).toFixed(3)}</b>`).join(", ") + ".";
+    }
+  } else {
+    sub += `#${esc(sel.car)} has no timed laps in this report.`;
+  }
+  $("sector-sub").innerHTML = sub;
+  $("sector-table").innerHTML = `<thead><tr><th>#</th><th>Car</th><th title="Best time in each sector">Best S1</th><th>Best S2</th><th>Best S3</th><th title="Sum of the car's best sectors">Ideal lap</th><th title="Car's actual best lap">Best lap</th><th title="Median of clean laps">Typical S1</th><th>Typical S2</th><th>Typical S3</th><th>Clean laps</th></tr></thead><tbody>`
+    + cars.map(([car, c], i) => `<tr class="${corvettes.includes(car) ? "tracked" : ""}" style="--c:${car === sel.car ? C.me : corvettes.includes(car) ? "var(--series-2)" : C.ctx}">
+        <td>${i + 1}</td><td>#${esc(car)}</td>
+        ${[0, 1, 2].map(k => cell(c.best[k], sc.fastest[k], me?.best[k])).join("")}
+        <td class="total">${lapTime(c.ideal)}</td><td class="dim">${lapTime(c.best_lap)}</td>
+        ${[0, 1, 2].map(k => cell(c.typical?.[k], sc.fastest_typical[k], me?.typical?.[k])).join("")}
+        <td class="dim">${c.clean_laps}</td></tr>`).join("")
+    + `</tbody>`;
+  $("sector-note").textContent = `★ = fastest in ${clsName} for that sector. Sectors are IMSA's three timing sectors (S1 is the short run from the start/finish line). `
+    + `"Typical" is the median of clean laps (no first lap, pit laps, invalidated laps or laps over 105% of the car's best), so one lucky lap doesn't decide it. `
+    + `Hover a time for the gap to #${sel.car}. IMSA's live feed doesn't carry sectors, so this updates when each timing report is published.`;
 }
 
 let width = innerWidth;

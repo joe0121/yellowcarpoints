@@ -105,3 +105,12 @@ It is a separate Caddy site on `127.0.0.1:8089` (not in the tunnel's ingress, so
 scraper writes `status.json` every 15 s to the `status` volume (`app/status.py`); traffic comes from
 Caddy's metrics and tunnel connections from cloudflared's metrics (`--metrics`, Docker network only).
 Read-only by design: restarts and logs stay in lazydocker.
+
+## Sectors
+
+IMSA's live feed carries no sector times, so `app/sectors.py` reads Al Kamel's time card for the latest
+WeatherTech session at the current event (published at the end of each session and as hourly snapshots
+during endurance races), checked every 5 minutes during session windows and every 30 minutes otherwise,
+and re-downloaded only when the file changes. Per car: best time in each of IMSA's three sectors, the
+ideal lap, and a typical time per sector (median of clean laps). Shown as the Sectors table on the
+Strategy page.

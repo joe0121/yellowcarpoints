@@ -24,6 +24,7 @@ import pdfplumber
 
 import history
 import live
+import sectors
 import status
 from common import CAR_CLASS, CARS, CLASSES, DATA_DIR, http, now_iso, read, write
 
@@ -239,6 +240,17 @@ def refresh_entries(season, event):
                            "session": results["session"].get("session_name"), "cars": cars})
 
 
+_event = []   # [season, event] of the latest event, set by refresh_history()
+SECTORS_LIVE, SECTORS_IDLE = 300, 1800
+
+
+def refresh_sectors():
+    if _event and sectors.refresh(BASE, _page, _event[0], _event[1], SERIES):
+        status.mark("sectors", session=(read("sectors.json") or {}).get("session"))
+    elif _event:
+        status.mark("sectors_check")
+
+
 def refresh_history():
     """Season race-by-race summaries for the tracked cars, and the pit-window baseline."""
     races = history.update(http, BASE, _page, _options, DATA_DIR, SERIES, CAR_CLASS, CLASSES)
@@ -253,6 +265,8 @@ def refresh_history():
     # Baseline for the latest event (the one in progress or next): last season's race at the same track.
     events, _ = _options(_page(current), "evvent")
     track = events[-1].split("_", 1)[1] if events else None
+    if events:
+        _event[:] = [current, events[-1]]
     if events:
         try:
             refresh_entries(current, events[-1])
@@ -312,7 +326,7 @@ def main():
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     logging.getLogger().addHandler(fh)
     status.start()
-    last, next_pdf, failures = None, 0.0, 0
+    last, next_pdf, failures, next_sectors = None, 0.0, 0, 0.0
     while True:
         if time.monotonic() >= next_pdf:
             next_pdf = time.monotonic() + INTERVAL
@@ -326,6 +340,12 @@ def main():
                 status.mark("history")
             except Exception:
                 log.exception("history failed")
+        if time.monotonic() >= next_sectors:
+            next_sectors = time.monotonic() + (SECTORS_LIVE if live.in_window() else SECTORS_IDLE)
+            try:
+                refresh_sectors()
+            except Exception:
+                log.exception("sectors failed")
         try:
             wait = live.step()
             failures = 0
@@ -335,7 +355,8 @@ def main():
             wait = min(live.RACE_POLL * 2 ** failures, MAX_BACKOFF)
             log.exception("live timing failed (%d in a row), retrying in %ds", failures, wait)
             status.live(last_step=time.time(), wait_until=time.time() + wait, failures=failures)
-        time.sleep(wait)
+        # Cap the sleep so the points, history and sector checks keep running between sessions.
+        time.sleep(min(wait, 1800))
 
 
 if __name__ == "__main__":

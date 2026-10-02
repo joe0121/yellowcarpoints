@@ -114,6 +114,11 @@ def session_window(now_dt):
     return active, upcoming
 
 
+def in_window():
+    """True while a scheduled WeatherTech session (plus lead/tail) is on."""
+    return bool(_s["schedule"]) and session_window(datetime.now(timezone.utc))[0] is not None
+
+
 # --- per-car tracking --------------------------------------------------------------
 
 def secs(t):
