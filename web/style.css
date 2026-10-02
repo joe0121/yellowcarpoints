@@ -210,3 +210,5 @@ ul.vs li { margin: 2px 0; }
 .kpirow .who .chip.x { padding: 0 7px; margin-left: 2px; }
 .kpirow:not(.mine) .kpi .v { font-size: 21px; }
 .kpirow.mine .kpi { border-color: var(--text-3); }
+.watch { margin: 8px 0 2px; padding: 8px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.watch b { color: var(--text); }

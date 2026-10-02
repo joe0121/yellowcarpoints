@@ -142,7 +142,7 @@ function render(d) {
       } else {
         [status, color] = ["Leading", "var(--accent-ink)"];
         verdict = `Leads by <strong>${fmt(lead)}</strong> with ${fmt(left)} still available. `
-          + (behind ? `#${esc(behind.car)} ${esc(behind.team)} is the closest threat.` : "");
+          + (behind ? `#${esc(behind.car)} ${esc(behind.team)} is the closest title rival.` : "");
       }
     } else if (t.alive) {
       [status, color] = ["In contention", "var(--accent-ink)"];

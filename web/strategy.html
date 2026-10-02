@@ -28,9 +28,10 @@
 
   <section class="card" id="cars-card" style="margin-bottom:16px">
     <div class="pace-head">
-      <h2 id="title">Car status</h2>
+      <h2 id="title">Pit strategy</h2>
       <div class="cmp"><span class="chips"></span><select class="addcar" aria-label="Add a car to compare"></select></div>
     </div>
+    <div class="watch" id="watch" hidden></div>
     <div id="kpis"></div>
     <p class="note" id="kpi-note"></p>
   </section>
@@ -173,7 +174,8 @@ function render() {
 
   if (!lc) {
     $("head").innerHTML = `<span class="pulse" style="color:var(--text-3)">NO DATA</span>`;
-    $("title").textContent = "Car status";
+    $("title").textContent = "Pit strategy";
+    $("watch").hidden = true;
     $("kpis").innerHTML = `<p class="empty">No WeatherTech session recorded yet.</p>`;
     $("kpi-note").textContent = "Strategy data is collected during WeatherTech sessions. It will appear here once the next one starts.";
     ["laps", "gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
@@ -202,7 +204,8 @@ function render() {
 
   const cmpCars = comparisonCars(sel, rows, fc);
   renderAddCar(cmpCars, rows);
-  $("title").textContent = `Car status · ${clsName}`;
+  $("title").textContent = `Pit strategy · ${clsName}`;
+  renderWatch(sel, cmpCars, rows, live.is_race);
   if (!me) $("kpis").innerHTML = `<p class="empty">#${esc(sel.car)} isn't in this session.</p>`;
   renderKpis(cmpCars, rows, strat, lc, lapsCls);
 
@@ -444,7 +447,7 @@ function renderChampionship(lc, fc, sel, myLaps, lapsCls) {
     ? "Using the <b>net</b> order: cars that still owe a stop in this pit cycle are moved back by the pit loss. Raw order in brackets."
     : "Using the running order (the net order needs a pit-loss figure and green-flag running).";
   const ev = fc.events?.at(-1);
-  $("champ-event").innerHTML = ev && ev.to ? `<p class="event">Title ${ev.role === "champ_behind" ? "threat" : "target"} is now <b>#${esc(ev.to)}</b>${ev.from ? ` (was #${esc(ev.from)})` : ""}, since lap ${ev.lap}.</p>` : "";
+  $("champ-event").innerHTML = ev && ev.to ? `<p class="event">Closest title rival ${ev.role === "champ_behind" ? "behind" : "ahead"} is now <b>#${esc(ev.to)}</b>${ev.from ? ` (was #${esc(ev.from)})` : ""}, since lap ${ev.lap}.</p>` : "";
   const k = (a, b, c) => `<div class="kpi"><div class="k">${a}</div><div class="v">${b}</div><div class="s">${c}</div></div>`;
   const tiles = [k("Title position", `P${fc.champ_pos}`, `${net ? "net" : "raw"} projection`)];
   if (fc.champ_behind) tiles.push(k(`Ahead of #${esc(fc.champ_behind)}`, `${mg(net ? fc.net_margin_behind : fc.margin_behind)}<small>pts</small>`,
@@ -474,8 +477,8 @@ function renderChampionship(lc, fc, sel, myLaps, lapsCls) {
   };
   const tb = add(1, 2, 5, C.threat, "behind"), ta = add(3, 4, 6, C.target, "ahead");
   lineChart("ch-margin", { series, zeroLine: true, robust: true, yFmt: v => (v > 0 ? "+" : "") + v.toFixed(0), empty: "Builds up lap by lap during the race." });
-  $("lg-margin").innerHTML = (tb ? `<span style="--c:${C.threat}">points ahead of #${esc(tb)} (title threat)</span>` : "")
-    + (ta ? `<span style="--c:${C.target}">points behind #${esc(ta)} (title target)</span>` : "")
+  $("lg-margin").innerHTML = (tb ? `<span style="--c:${C.threat}">points ahead of #${esc(tb)} (title rival behind)</span>` : "")
+    + (ta ? `<span style="--c:${C.target}">points behind #${esc(ta)} (title rival ahead)</span>` : "")
     + `<span style="--c:var(--text-3)">solid: net order · dotted: raw running order · above zero = ahead</span>`;
 }
 
@@ -508,12 +511,12 @@ function paceModel(d) {
   return { pace, best, n: kept.length, dropped: drop, fit, kept, stintLap: lastLap - (stops.filter(s => s <= lastLap).at(-1) || 0), lastLap };
 }
 
-// Comparison cars on the pace charts: race threat + championship threat by default, plus any
+// Cars to watch on the pit strategy rows and pace charts: race car + title rival by default, plus any
 // cars the viewer adds. Each car gets a fixed colour + dash + marker so lines stay distinguishable.
 const PACE_STYLES = [
   { color: "var(--s1)", dash: "", marker: "circle", width: 2.5 },          // selected car
-  { color: "var(--s3)", dash: "7 4", marker: "square", width: 2 },         // race threat
-  { color: "var(--s4)", dash: "9 4 2 4", marker: "diamond", width: 2 },    // championship threat
+  { color: "var(--s3)", dash: "7 4", marker: "square", width: 2 },         // race leader / car behind
+  { color: "var(--s4)", dash: "9 4 2 4", marker: "diamond", width: 2 },    // closest title rival
   { color: "var(--s2)", dash: "2 4", marker: "triangle", width: 2 },       // added cars…
   { color: "var(--text-3)", dash: "4 3", marker: "circle", width: 1.75 },
   { color: "var(--s2)", dash: "10 3", marker: "square", width: 1.75 },
@@ -528,10 +531,11 @@ function shape(kind, cx, cy, color, r = 3.2) {
 const swatchOf = st => `<svg width="30" height="12" aria-hidden="true" style="vertical-align:middle;margin-right:4px;overflow:visible"><line x1="1" x2="29" y1="6" y2="6" stroke="${st.color}" stroke-width="${st.width}" stroke-dasharray="${st.dash}"/>${shape(st.marker, 15, 6, st.color, 3)}</svg>`;
 const trendText = b => b == null ? "–" : Math.abs(b) < 0.005 ? "steady" : b < 0 ? `▲ ${Math.abs(b).toFixed(3)} s/lap quicker` : `▼ ${b.toFixed(3)} s/lap slower`;
 
-let paceExtra = [];          // cars the viewer added (shared by Car status and Pace)
+let paceExtra = [];          // cars the viewer added (shared by Pit strategy and Pace)
 let paceCompare = null;      // main comparison car (used by the sectors line too)
 
-// Selected car, race threat (leader, or car behind when leading), title threat, then added cars.
+// Selected car, then cars to watch: in the race the leader (or the car behind when leading), then the
+// closest title rival, then any added cars.
 function comparisonCars(sel, rows, fc) {
   const rowOf = c => rows.find(r => r.car === c);
   const raceThreat = fc.ref || (rows[0]?.car !== sel.car ? rows[0]?.car : rows[1]?.car);
@@ -540,7 +544,7 @@ function comparisonCars(sel, rows, fc) {
   const cars = [{ car: sel.car, role: "selected" }];
   const add = (car, role) => { if (car && rowOf(car) && !cars.some(p => p.car === car)) cars.push({ car, role }); };
   add(raceThreat, raceThreat === rows[0]?.car ? "race leader" : "car behind on track");
-  add(titleThreat, fc.champ_behind ? "title threat" : "title target");
+  add(titleThreat, fc.champ_behind ? "title rival (behind)" : "title rival (ahead)");
   paceExtra.forEach(c => add(c, "added"));
   let k = 0;
   cars.forEach(c => {
@@ -549,6 +553,25 @@ function comparisonCars(sel, rows, fc) {
   });
   paceCompare = cars.find(c => c.role.startsWith("title"))?.car || cars[1]?.car || null;
   return cars;
+}
+
+// Banner explaining which cars are being watched and why.
+function renderWatch(sel, cars, rows, isRace) {
+  const why = {
+    "race leader": `the class leader`,
+    "car behind on track": `the car right behind #${esc(sel.car)} on track`,
+    "title rival (behind)": `#${esc(sel.car)}'s closest title rival, just behind in the live championship projection`,
+    "title rival (ahead)": `the title rival just ahead of #${esc(sel.car)} in the live championship projection`,
+    "added": "added by you",
+  };
+  const picks = cars.slice(1);
+  if (!picks.length) { $("watch").hidden = true; return; }
+  $("watch").innerHTML = `<b>Cars to watch</b> · `
+    + picks.map(c => `<span class="sw">${swatchOf(c.style)}<b>#${esc(c.car)}</b> ${why[c.role] || esc(c.role)}</span>`).join(" · ")
+    + `<br><span class="dim">Picked automatically and updated as the session changes: the class leader (or the car behind when #${esc(sel.car)} leads)`
+    + (isRace ? ` and the car closest to #${esc(sel.car)} in the championship` : `; the title rival joins in the race`)
+    + `. Use "Add a car" to watch others.</span>`;
+  $("watch").hidden = false;
 }
 
 function renderAddCar(cars, rows) {
