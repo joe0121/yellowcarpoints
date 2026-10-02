@@ -80,7 +80,7 @@
     el.innerHTML = groups.map(section).join("")
       + `<div class="pick-sec pick-any${mine ? " active" : ""}"><span class="pick-title">This is my car</span>`
       + `<select aria-label="Pick any car as my car"><option value="">Any car…</option>${opts}</select>`
-      + (rival ? `<p class="allow">Not a Corvette, but we'll allow it.</p>` : "")
+      + `<p class="allow pick-hint">${rival ? "Not a Corvette, but we'll allow it. " : ""}Following a different car? Pick any car in the field from this list and every tab follows it.</p>`
       + `</div>${look}`;
     el.querySelector("select").onchange = e => {
       const c = e.target.value;
