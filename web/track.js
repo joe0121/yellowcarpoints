@@ -17,10 +17,15 @@
   document.addEventListener("DOMContentLoaded", async () => {
     const t = await current();
     if (!t) return;
+    // Small outline tiles, staggered like wallpaper. The tile is used as a mask over the livery
+    // colour, so it follows the selected car without redrawing.
+    const pad = 120, vb = `${-pad} ${-pad} ${t.w + 2 * pad} ${t.h + 2 * pad}`;
+    const tile = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}"><path d="${t.path}" fill="none" stroke="#000" stroke-width="22" stroke-linejoin="round"/></svg>`;
+    const url = `url("data:image/svg+xml,${encodeURIComponent(tile)}")`;
     const bg = document.createElement("div");
     bg.className = "track-bg";
     bg.setAttribute("aria-hidden", "true");
-    bg.innerHTML = `<svg viewBox="-40 -40 ${t.w + 80} ${t.h + 80}" preserveAspectRatio="xMidYMid meet"><path d="${t.path}"/></svg>`;
+    for (const k of ["maskImage", "webkitMaskImage"]) bg.style[k] = `${url}, ${url}`;
     document.body.prepend(bg);
     const credit = document.querySelector(".footlinks");
     if (credit) credit.insertAdjacentHTML("beforeend", `<span class="osm">${t.name} outline © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</span>`);
