@@ -205,7 +205,7 @@ function render() {
   $("to-race").href = "strategy.html#" + home;
   const groups = {};
   [...standings.cars, ...raceCars()].forEach(c => (groups[c.class] ||= []).push(c.car));
-  $("picker").innerHTML = `<span class="pick-title">Pratt Miller Motorsports cars</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
+  $("picker").innerHTML = `<span class="pick-title">Cars we follow</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
     + cars.map(c => { const r = liveRow(c);   // live running position (and PIT) on each car's button
         return `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}${r ? `<small class="ppos">P${r.class_pos}</small>${r.in_pit ? `<span class="pit">PIT</span>` : ""}` : ""}</a>`; }).join("") + `</div>`).join("");
   $("to-standings").href = "./#" + home;

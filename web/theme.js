@@ -25,8 +25,11 @@
     prattmiller73: { name: "Pratt Miller LMP2 black and orange", band: ["#111111", "#f26b1d", "#111111"],
       light: { accent: "#f26b1d", ink: "#b4470a", on: "#111", hl: "#fdeadf", s: ["#eb6834", "#2a78d6", "#1baf7a", "#eda100"], other: "#2a78d6" },
       dark:  { accent: "#f27a33", ink: "#ff9a5c", on: "#111", hl: "#2b1d14", s: ["#d95926", "#3987e5", "#199e70", "#c98500"], other: "#3987e5" } },
+    aoracing: { name: "AO Racing \"Spike\" purple dragon", band: ["#5b2a91", "#f08a24", "#5b2a91"],
+      light: { accent: "#7a3fc0", ink: "#5f2d9e", on: "#fff", hl: "#f1eafa", s: ["#8a4fd0", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
+      dark:  { accent: "#9d6be0", ink: "#c3a2f2", on: "#111", hl: "#241a33", s: ["#9d6be0", "#c98500", "#199e70", "#d95926"], other: "#c98500" } },
   };
-  const CAR_LIVERY = { 3: "corvette", 4: "corvette", 13: "awa", 36: "dxdt", 74: "dragonspeed", 81: "dragonspeed", 73: "prattmiller73" };
+  const CAR_LIVERY = { 3: "corvette", 4: "corvette", 13: "awa", 36: "dxdt", 74: "dragonspeed", 81: "dragonspeed", 73: "prattmiller73", 99: "aoracing" };
   const dark = () => root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   let livery = (() => { try { return localStorage.getItem("livery"); } catch (e) { return null; } })() || "corvette";
   const paint = () => {

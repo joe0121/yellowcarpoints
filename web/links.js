@@ -12,10 +12,13 @@
     dragonspeed: { name: "DragonSpeed", links: [["IMSA team page", "https://www.imsa.com/racing-teams/dragonspeed-no-81/"], ["X", "https://x.com/DragonSpeedLLC"],
       ["Instagram", "https://www.instagram.com/dragonspeed_official/"], ["LinkedIn", "https://www.linkedin.com/company/dragonspeed-llc"]] },
     autosport13: { name: "13 Autosport", links: [["IMSA team page", "https://www.imsa.com/racing-teams/awa-no-13/"]] },
+    aoracing: { name: "AO Racing", links: [["Website", "https://aoracing.com/"], ["X", "https://x.com/AORacingUSA"],
+      ["Instagram", "https://www.instagram.com/aoracingusa/"], ["Facebook", "https://www.facebook.com/AORacingUSA"], ["YouTube", "https://www.youtube.com/@aoracingusa"],
+      ["TikTok", "https://www.tiktok.com/@aoracingusa"], ["Reddit", "https://www.reddit.com/user/AORacingUSA"]] },
     awa: { name: "AWA (runs the car)", links: [["Website", "https://awa.team/"], ["Instagram", "https://www.instagram.com/awaracingteam/"]] },
   };
   const CAR_TEAMS = { 3: ["corvette", "prattmiller"], 4: ["corvette", "prattmiller"], 73: ["prattmiller"],
-    74: ["dragonspeed"], 81: ["dragonspeed"], 13: ["autosport13", "awa"], 36: ["dxdt"] };
+    74: ["dragonspeed"], 81: ["dragonspeed"], 13: ["autosport13", "awa"], 36: ["dxdt"], 99: ["aoracing"] };
   // Simple monochrome platform icons (drawn here, nothing loaded from elsewhere); they take the text colour.
   const svg = body => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${body}</svg>`;
   const ICONS = {
@@ -25,6 +28,8 @@
     Instagram: svg(`<rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.4" cy="6.6" r="1.3" fill="currentColor"/>`),
     Facebook: svg(`<circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M13.4 21.9v-7.4h2.4l.4-2.9h-2.8V9.8c0-.8.3-1.4 1.4-1.4h1.5V5.8c-.3 0-1.2-.1-2.2-.1-2.2 0-3.6 1.3-3.6 3.7v2.2H8.1v2.9h2.4v7.3" fill="var(--surface)"/>`),
     YouTube: svg(`<rect x="2" y="5" width="20" height="14" rx="4.5" fill="currentColor"/><path d="M10 9v6l5.2-3z" fill="var(--surface)"/>`),
+    TikTok: svg(`<path d="M13.5 3h3c.3 2 1.6 3.4 3.5 3.6v3.1c-1.3 0-2.5-.4-3.5-1v6.1a5.6 5.6 0 1 1-5.6-5.6c.3 0 .6 0 .9.1v3.2a2.5 2.5 0 1 0 1.7 2.3z" fill="currentColor"/>`),
+    Reddit: svg(`<circle cx="12" cy="13.5" r="7.5" fill="currentColor"/><circle cx="18.5" cy="5" r="1.6" fill="currentColor"/><path d="M12 6l1.5-3.2 5 2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="9.3" cy="13" r="1.3" fill="var(--surface)"/><circle cx="14.7" cy="13" r="1.3" fill="var(--surface)"/><path d="M9 16.3c1.7 1.2 4.3 1.2 6 0" fill="none" stroke="var(--surface)" stroke-width="1.3" stroke-linecap="round"/>`),
     LinkedIn: svg(`<rect x="3" y="3" width="18" height="18" rx="3" fill="currentColor"/><path d="M7 10v7M7 7.2v.1M11 17v-7M11 13.2c0-2 1.2-3.2 2.8-3.2s2.4 1 2.4 3V17" fill="none" stroke="var(--surface)" stroke-width="2" stroke-linecap="round"/>`),
   };
   const text = ([label, url]) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>`;

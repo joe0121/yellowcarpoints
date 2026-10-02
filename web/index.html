@@ -121,7 +121,7 @@ function renderAll() {
   // championship maths, so they link to their Race view.
   const groups = {}, raceOnly = new Set((config?.race_cars || []).map(c => c.car));
   [...standings.cars, ...(config?.race_cars || [])].forEach(c => (groups[c.class] ||= []).push(c.car));
-  $("picker").innerHTML = `<span class="pick-title">Pratt Miller Motorsports cars</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
+  $("picker").innerHTML = `<span class="pick-title">Cars we follow</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
     + cars.map(c => raceOnly.has(c) ? `<a href="strategy.html#${esc(c)}" title="Race only: no championship data">#${esc(c)}</a>`
       : `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}</a>`).join("") + `</div>`).join("");
   $("to-strategy").href = "strategy.html#" + sel.car;
