@@ -41,21 +41,33 @@
 (() => {
   const groups = () => [...document.querySelectorAll("[data-layout]")];
   if (!groups().length) return;
-  const page = groups()[0].dataset.layout, KEY = "layout-" + page;
+  // A page can have modes (the Race tab: Fan / Strategy), each with its own default and saved layout.
+  const page = groups()[0].dataset.layout;
+  let KEY = "layout-" + page, name = page;
   const cardsIn = c => [...c.children].filter(el => el.matches(".card[id]"));
   const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } };
   const current = () => Object.fromEntries(groups().map(g => [g.dataset.slot, cardsIn(g).map(c => c.id)]));
-  const defaults = current();
+  let defaults = current();
   // One running order across the slots, for single-column (phone) layouts.
   const setOrder = () => { let i = 0; groups().forEach(g => cardsIn(g).forEach(c => { c.style.order = String(++i); })); };
   function apply(layout) {
     if (!layout) return;
     const all = new Map(groups().flatMap(g => cardsIn(g)).map(c => [c.id, c]));
-    for (const g of groups()) for (const id of layout[g.dataset.slot] || []) if (all.has(id)) g.appendChild(all.get(id));
+    const placed = new Set();
+    for (const g of groups()) for (const id of layout[g.dataset.slot] || []) if (all.has(id)) { g.appendChild(all.get(id)); placed.add(id); }
+    // Cards the layout doesn't mention (another mode's cards, or new ones) go to the end of their column.
+    for (const g of groups()) for (const c of cardsIn(g)) if (!placed.has(c.id)) g.appendChild(c);
     setOrder();
   }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(current())); } catch (e) {} setOrder(); window.dispatchEvent(new CustomEvent("cardtoggle")); };
   apply(read());
+  window.setLayoutMode = (mode, def, legacy) => {
+    KEY = "layout-" + page + (mode ? "-" + mode : ""); name = page + (mode ? "-" + mode : "");
+    if (def) defaults = def;
+    let saved = read();
+    if (!saved && legacy) { try { saved = JSON.parse(localStorage.getItem(legacy) || "null"); } catch (e) {} }
+    apply(saved || defaults);
+  };
 
   let bar = null, dragging = null;
   const move = (card, dir) => {
@@ -92,7 +104,7 @@
       const a = e.target.dataset.a;
       if (a === "done") stop();
       if (a === "reset") { try { localStorage.removeItem(KEY); } catch (err) {} apply(defaults); save(); try { localStorage.removeItem(KEY); } catch (err) {} }
-      if (a === "copy") { const code = `${page}:${JSON.stringify(current())}`; navigator.clipboard?.writeText(code); bar.querySelector(".copied").textContent = "Copied: paste it to Claude"; }
+      if (a === "copy") { const code = `${name}:${JSON.stringify(current())}`; navigator.clipboard?.writeText(code); bar.querySelector(".copied").textContent = "Copied: paste it to Claude"; }
     };
     document.body.appendChild(bar);
   }

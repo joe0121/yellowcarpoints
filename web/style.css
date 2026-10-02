@@ -585,3 +585,8 @@ table.cauheat tr.often td { height: 18px; }
 .dbar.risk-plan i { background: var(--flag-yellow); }
 .dbar.risk-urgent i, .dbar.risk-impossible i { background: var(--critical); }
 .dlist .d6 { flex-basis: 100%; font-size: 11px; }
+
+/* Race tab views: Fan / Strategy */
+.modebar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 13px; }
+.race-grid section.card.mode-off { display: none !important; }
+body.mode-fan #pw { display: none !important; }

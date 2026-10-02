@@ -1,7 +1,7 @@
 // Anonymous profile: save this browser's display settings and bring them to another device with a
 // sync code or a passkey. No name, email or password. Adds a "Save settings" button to the tab row.
 (() => {
-  const SYNC_KEYS = ["car", "theme", "livery", "charts", "collapsed", "watch", "fullTiming", "deep", "layout-race", "layout-champ", "layout-analysis", "paCars"];
+  const SYNC_KEYS = ["car", "theme", "livery", "charts", "collapsed", "watch", "fullTiming", "deep", "layout-race", "layout-champ", "layout-analysis", "layout-race-fan", "layout-race-strategy", "raceMode", "paCars"];
   const ls = {
     get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} },

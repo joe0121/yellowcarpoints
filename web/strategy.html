@@ -27,6 +27,7 @@
   <nav class="picker" id="picker" aria-label="Choose a car"></nav>
   <nav class="links" id="links" aria-label="IMSA and team links"></nav>
 
+  <div class="modebar"><span class="bseg" id="mode-seg" role="group" aria-label="Race view"></span><span class="dim" id="mode-note"></span></div>
   <section class="sessionbar live" id="status-card">
     <div class="live-head" id="head"></div>
     <div class="titleline" id="titleline"></div>
@@ -212,6 +213,35 @@ function selected() {
   return standings ? window.pickCar({ standings, entries, live }, store) : null;
 }
 
+// Two views of the Race tab. Fan: the video and the track map first, then the story of the race.
+// Strategy: the pit wall, stops, fuel to the flag, weather and pace against the rivals that matter.
+// Each has its own default layout (Arrange saves each separately); cards a view doesn't use are hidden.
+const MODES = {
+  fan: { label: "Fan", note: "Video, track map and the story of the race",
+         a: ["watch-card", "ours-card", "feed-card", "rc-card", "drivers-card"], b: ["map-card", "timing-card", "wx-card"] },
+  strategy: { label: "Strategy", note: "Pit wall, stops, fuel, weather and pace against our rivals",
+              a: ["ours-card", "pn-card", "cars-card", "fin-card", "drivers-card", "feed-card"],
+              b: ["wx-card", "pa-card", "timing-card", "builder-card", "rc-card", "sector-card"] },
+};
+// ?view=fan or ?view=strategy picks the view from a link; otherwise the viewer's last choice (Fan to start).
+const viewParam = new URLSearchParams(location.search).get("view");
+let raceMode = MODES[viewParam] ? viewParam : MODES[store.get("raceMode")] ? store.get("raceMode") : "fan";
+function setMode(mode, first) {
+  raceMode = mode;
+  store.set("raceMode", mode);
+  const m = MODES[mode], on = new Set([...m.a, ...m.b]);
+  document.body.classList.toggle("mode-fan", mode === "fan");
+  document.body.classList.toggle("mode-strategy", mode === "strategy");
+  document.querySelectorAll(".race-grid section.card[id]").forEach(c => c.classList.toggle("mode-off", !on.has(c.id)));
+  window.setLayoutMode?.(mode, { a: m.a, b: m.b }, mode === "strategy" ? "layout-race" : null);
+  $("mode-seg").innerHTML = Object.entries(MODES).map(([k, v]) => `<button type="button" data-m="${k}" aria-pressed="${k === mode}">${v.label}</button>`).join("");
+  $("mode-seg").querySelectorAll("button").forEach(b => b.onclick = () => setMode(b.dataset.m));
+  $("mode-note").textContent = m.note;
+  if (!first && standings) render();
+}
+const modeOff = id => $(id).classList.contains("mode-off");
+setMode(raceMode, true);
+
 // Least-squares line through the last n points: slope per x unit.
 function fit(pts, n = 10) {
   const p = pts.slice(-n);
@@ -312,7 +342,7 @@ function render() {
   renderRaceControl(sel, cmpCars);
   renderTrackMap(sel, rows, cmpCars, clsName);
   renderWeather(sel, rows, lc, lapsCls, cmpCars);
-  if (!$("pa-card").classList.contains("collapsed")) renderPaceAnalysis(sel, rows, lapsCls, cmpCars, clsName);
+  if (!$("pa-card").classList.contains("collapsed") && !modeOff("pa-card")) renderPaceAnalysis(sel, rows, lapsCls, cmpCars, clsName);
   renderDrivers(sel, cmpCars, rows);
   renderPitWall(sel, lc, lapsCls);
   renderPitNow(sel, lc, lapsCls, clsName);
@@ -331,7 +361,7 @@ function render() {
   renderTiming(lc, sel, rows, strat, lapsCls, cmpCars, clsName);
   $("builder-card").hidden = false;
   // Don't redraw the builder under someone's fingers (an open dropdown would close).
-  if (!$("builder").contains(document.activeElement)) renderBuilder(sel, rows, lapsCls, cmpCars, clsName);
+  if (!modeOff("builder-card") && !$("builder").contains(document.activeElement)) renderBuilder(sel, rows, lapsCls, cmpCars, clsName);
   renderBoard(rows, strat, sel, lapsCls, clsName, fc);
 
   $("foot").innerHTML = `Timing from IMSA live scoring; energy, refuels and pit lane from IMSA telemetry (unofficial, about 1 Hz). `
@@ -594,18 +624,23 @@ let paceCompare = null;      // main comparison car (used by the sectors line to
 // closest title rival, then any added cars.
 function comparisonCars(sel, rows, fc) {
   const rowOf = c => rows.find(r => r.car === c);
+  // Race: the class leader, or the car behind when we lead. Then the car right ahead on track.
+  // Title: the car in the championship spot we can gain (just ahead in the live projection), or the
+  // car behind when we lead the championship.
   const raceThreat = fc.ref || (rows[0]?.car !== sel.car ? rows[0]?.car : rows[1]?.car);
-  const titleThreat = fc.champ_behind || fc.champ_ahead;
+  const i = rows.findIndex(r => r.car === sel.car), ahead = fc.ahead || (i > 1 ? rows[i - 1]?.car : null);
+  const titleThreat = fc.champ_ahead || fc.champ_behind;
   paceExtra = paceExtra.filter(c => c !== sel.car && rowOf(c));
   const cars = [{ car: sel.car, role: "selected" }];
   const add = (car, role) => { if (car && rowOf(car) && !cars.some(p => p.car === car)) cars.push({ car, role }); };
   add(raceThreat, raceThreat === rows[0]?.car ? "race leader" : "car behind on track");
-  add(titleThreat, fc.champ_behind ? "title rival (behind)" : "title rival (ahead)");
+  add(ahead, "car ahead");
+  add(titleThreat, fc.champ_ahead ? "title rival (ahead)" : "title rival (behind)");
   paceExtra.forEach(c => add(c, "added"));
   let k = 0;
   cars.forEach(c => {
     c.style = c.role === "selected" ? PACE_STYLES[0] : c.role === "race leader" || c.role === "car behind on track" ? PACE_STYLES[1]
-      : c.role.startsWith("title") ? PACE_STYLES[2] : PACE_STYLES[Math.min(3 + k++, PACE_STYLES.length - 1)];
+      : c.role.startsWith("title") ? PACE_STYLES[2] : c.role === "car ahead" ? PACE_STYLES[3] : PACE_STYLES[Math.min(4 + k++, PACE_STYLES.length - 1)];
   });
   paceCompare = cars.find(c => c.role.startsWith("title"))?.car || cars[1]?.car || null;
   return cars;
@@ -617,15 +652,16 @@ function renderWatch(sel, cars, rows, isRace, hasTitle = true) {
     "race leader": `the class leader`,
     "car behind on track": `the car right behind #${esc(sel.car)} on track`,
     "title rival (behind)": `#${esc(sel.car)}'s closest title rival, just behind in the live championship projection`,
-    "title rival (ahead)": `the title rival just ahead of #${esc(sel.car)} in the live championship projection`,
+    "title rival (ahead)": `the car in the championship spot #${esc(sel.car)} can gain, just ahead in the live projection`,
+    "car ahead": `the car right ahead of #${esc(sel.car)} on track`,
     "added": "added by you",
   };
   const picks = cars.slice(1);
   if (!picks.length) { $("watch").hidden = true; return; }
   $("watch").innerHTML = `<b>Cars to watch</b> · `
     + picks.map(c => `<span class="sw">${swatchOf(c.style)}<b>#${esc(c.car)}</b> ${why[c.role] || esc(c.role)}${c.car === enemyCar ? " " + window.enemyTag : ""}</span>`).join(" · ")
-    + `<br><span class="dim">Picked automatically and updated as the session changes: the class leader (or the car behind when #${esc(sel.car)} leads)`
-    + (!hasTitle ? "" : isRace ? ` and the car closest to #${esc(sel.car)} in the championship` : `; the title rival joins in the race`)
+    + `<br><span class="dim">Picked automatically and updated as the session changes: the class leader (or the car behind when #${esc(sel.car)} leads), the car right ahead on track`
+    + (!hasTitle ? "" : isRace ? `, and the car in the championship spot #${esc(sel.car)} can gain (or the one behind when it leads)` : `; the title rival joins in the race`)
     + `. Use "Add a car" to watch others.</span>`;
   $("watch").hidden = false;
 }
@@ -865,7 +901,7 @@ function renderDrivers(sel, cars, rows) {
 const sessionKind = t => /qualif/i.test(t) ? "qualifying" : /practice/i.test(t) ? "practice" : /warm/i.test(t) ? "warm-up" : "race";
 function renderWatchCard(sel) {
   // A folded card counts as off too, so a hidden video never streams in the background.
-  const off = store.get("watch") === "off" || $("watch-card").classList.contains("collapsed"), w = watchData;
+  const off = store.get("watch") === "off" || $("watch-card").classList.contains("collapsed") || modeOff("watch-card"), w = watchData;
   const running = live && !live.finished && Date.now() - new Date(live.updated) < 30 * 60e3;
   const kind = live ? sessionKind(live.session || "") : null;
   // IMSA creates session streams days ahead, so match on the session (qualifying, race...), newest first.
@@ -954,6 +990,7 @@ function mapFraction(m) {
 }
 function renderTrackMap(sel, rows, cars, clsName) {
   const card = $("map-card");
+  if (modeOff("map-card")) { clearInterval(mapTimer); mapTimer = null; return; }
   const running = live && !live.finished && Date.now() - new Date(live.updated) < 5 * 60e3;
   if (!mapTrack) { card.hidden = true; return; }
   card.hidden = false;
@@ -1168,11 +1205,18 @@ function driverByLap(d, now) {
 }
 
 // --- Pace analysis card: stint overlay, pace by driver, class pace map -----------------------------
+const paOff = new Set();   // Strategy view: rivals switched off in Pace analysis this visit
 let paCars = (() => { try { return JSON.parse(localStorage.getItem("paCars") || "null"); } catch (e) { return null; } })();
 function renderPaceAnalysis(sel, rows, lapsCls, cars, clsName) {
   const card = $("pa-card"), inClass = new Set(rows.map(r => r.car));
   // Which cars: remembered per device; defaults to the selected car. Only cars in this class count.
   let chosen = (paCars || []).filter(c => inClass.has(c));
+  if (raceMode === "strategy") {
+    // Strategy view: always my car and its rivals (race, car ahead, title), plus cars you add; a rival you
+    // switch off stays off for this visit.
+    const auto = cars.filter(c => c.role !== "added").map(c => c.car).filter(c => !paOff.has(c));
+    chosen = [...new Set([...auto, ...chosen.filter(c => !cars.some(x => x.car === c && x.role !== "added"))])];
+  }
   if (!chosen.length) chosen = [sel.car];
   const savePa = () => { paCars = chosen; try { localStorage.setItem("paCars", JSON.stringify(chosen)); } catch (e) {} renderPaceAnalysis(sel, rows, lapsCls, cars, clsName); };
   const watched = new Map(cars.map(c => [c.car, c]));
@@ -1183,6 +1227,8 @@ function renderPaceAnalysis(sel, rows, lapsCls, cars, clsName) {
   $("pa-chips").innerHTML = chipCars.map(c => `<button type="button" data-car="${esc(c)}" aria-pressed="${chosen.includes(c)}">#${esc(c)}</button>`).join("");
   $("pa-chips").querySelectorAll("button").forEach(b => b.onclick = () => {
     const c = b.dataset.car;
+    const autoCar = raceMode === "strategy" && cars.some(x => x.car === c && x.role !== "added");
+    if (autoCar) { chosen.includes(c) ? paOff.add(c) : paOff.delete(c); }
     chosen = chosen.includes(c) ? chosen.filter(x => x !== c) : [...chosen, c];
     if (!chosen.length) chosen = [sel.car];
     savePa();
