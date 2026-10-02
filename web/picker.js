@@ -46,62 +46,6 @@
   // Snarky notes for rival pit stops (picked per car and stop, so they don't change on refresh).
   const SNARK = ["take your time", "no rush", "lovely day for it", "enjoying the view?", "scenic route", "might as well grab lunch", "bold strategy", "we'll wait"];
   window.snark = key => SNARK[[...String(key)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % SNARK.length];
-  // A stadium crowd booing, made with the browser's audio (no sound file): ~18 voices at different
-  // pitches, each starting a moment apart with its own wobble, shaped into an "oo" vowel (formants
-  // near 300 and 870 Hz), over a bed of crowd noise. Only on a deliberate pick; mutable.
-  const muted = () => { try { return localStorage.getItem("booOff") === "1"; } catch (e) { return false; } };
-  // The real thing: a sports crowd booing ("JM_AMB_INT_Crowd Sport 01 - Booing" by Julien_Matthey on
-  // Freesound, CC0), trimmed to 4.5 s. The synthesised crowd below is the fallback if it can't play.
-  let booClip = null;
-  window.boo = () => {
-    if (muted()) return;
-    try {
-      booClip = booClip || new Audio("boo.mp3");
-      booClip.currentTime = 0; booClip.volume = 0.8;
-      booClip.play().catch(() => synthBoo());
-    } catch (e) { synthBoo(); }
-  };
-  const synthBoo = () => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)(), t = ctx.currentTime, end = t + 2.6;
-      const master = ctx.createGain();
-      master.gain.setValueAtTime(0.0001, t);
-      master.gain.exponentialRampToValueAtTime(0.35, t + 0.45);     // the crowd joins in
-      master.gain.setValueAtTime(0.35, t + 1.5);
-      master.gain.exponentialRampToValueAtTime(0.0001, end);       // and trails off
-      master.connect(ctx.destination);
-      // "oo" vowel: two formant band-passes mixed, then a gentle low-pass.
-      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1300; lp.connect(master);
-      const vowel = ctx.createGain();
-      for (const [f, q, g] of [[300, 4, 1], [870, 6, 0.45]]) {
-        const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = f; bp.Q.value = q;
-        const bg = ctx.createGain(); bg.gain.value = g; vowel.connect(bp); bp.connect(bg); bg.connect(lp);
-      }
-      const rnd = (a, b) => a + Math.random() * (b - a);
-      for (let i = 0; i < 18; i++) {
-        const start = t + rnd(0, 0.35), stop = end - rnd(0, 0.5);
-        const base = i % 3 === 2 ? rnd(200, 290) : rnd(95, 170);     // mostly low voices, some higher
-        const o = ctx.createOscillator(); o.type = "sawtooth";
-        o.frequency.setValueAtTime(base * 1.04, start);
-        o.frequency.linearRampToValueAtTime(base * 0.86, stop);      // the slide down of a boo
-        const vib = ctx.createOscillator(), vg = ctx.createGain();
-        vib.frequency.value = rnd(4, 6.5); vg.gain.value = base * rnd(0.01, 0.03); vib.connect(vg); vg.connect(o.frequency);
-        const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, start);
-        g.gain.exponentialRampToValueAtTime(rnd(0.03, 0.06), start + rnd(0.15, 0.4));
-        g.gain.setValueAtTime(g.gain.value || 0.04, stop - 0.4); g.gain.exponentialRampToValueAtTime(0.0001, stop);
-        o.connect(g); g.connect(vowel);
-        o.start(start); vib.start(start); o.stop(stop + 0.05); vib.stop(stop + 0.05);
-      }
-      // Crowd murmur: filtered noise under the voices.
-      const n = ctx.createBuffer(1, ctx.sampleRate * 2.7, ctx.sampleRate), d = n.getChannelData(0);
-      for (let i = 0, last = 0; i < d.length; i++) { last = 0.97 * last + 0.03 * (Math.random() * 2 - 1); d[i] = last * 6; }
-      const ns = ctx.createBufferSource(); ns.buffer = n;
-      const nf = ctx.createBiquadFilter(); nf.type = "bandpass"; nf.frequency.value = 450; nf.Q.value = 0.8;
-      const ng = ctx.createGain(); ng.gain.value = 0.25; ns.connect(nf); nf.connect(ng); ng.connect(lp); ns.start(t);
-      setTimeout(() => ctx.close(), 3200);
-    } catch (e) {}
-  };
-
   // badge(car) -> extra HTML on a button (the Race tab shows live position / PIT).
   window.buildPicker = (el, sel, data, badge = () => "") => {
     const followed = new Map((data.standings?.cars || []).map(c => [c.car, c.class]));
@@ -133,17 +77,12 @@
     el.innerHTML = groups.map(section).join("")
       + `<div class="pick-sec pick-any${mine ? " active" : ""}"><span class="pick-title">This is my car</span>`
       + `<select aria-label="Pick any car as my car"><option value="">Any car…</option>${opts}</select>`
-      + (rival ? `<p class="allow">Not a Corvette, but we'll allow it. <button type="button" class="linkbtn" data-boo>${muted() ? "Unmute boos" : "Mute boos"}</button></p>` : "")
+      + (rival ? `<p class="allow">Not a Corvette, but we'll allow it.</p>` : "")
       + `</div>${look}`;
     el.querySelector("select").onchange = e => {
       const c = e.target.value;
       if (!c) return;
-      if (!window.isFriend(c, data)) window.boo();
       location.hash = c;
     };
-    el.querySelector("[data-boo]")?.addEventListener("click", e => {
-      try { localStorage.setItem("booOff", muted() ? "" : "1"); } catch (err) {}
-      e.target.textContent = muted() ? "Unmute boos" : "Mute boos";
-    });
   };
 })();
