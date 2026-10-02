@@ -468,3 +468,4 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .picker .pick-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; }
 .picker .pick-any select { font: 600 13px Inter, sans-serif; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; max-width: min(360px, 90vw); }
 .picker .pick-any.active select { border-color: var(--accent); background: var(--row-hl); }
+.tagline { margin: 2px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); }

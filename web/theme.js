@@ -37,12 +37,19 @@
     wtr40: { name: "Cadillac Wayne Taylor Racing black and white", band: ["#111111", "#ffffff", "#111111"],
       light: { accent: "#333a45", ink: "#333a45", on: "#fff", hl: "#eef0f3", s: ["#4f6fb3", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
       dark:  { accent: "#c9ced8", ink: "#e3e6ec", on: "#111", hl: "#23262c", s: ["#6d8ad0", "#c98500", "#199e70", "#d95926"], other: "#c98500" } },
+    // #77 alternates "Rexy" (green) and "Roxy" (pink-purple); Petit Le Mans 2026: white/black skeleton T-rex.
+    skeleton77: { name: "AO Racing skeleton T-rex, white and black", band: ["#ffffff", "#111111", "#ffffff"],
+      light: { accent: "#333a45", ink: "#333a45", on: "#fff", hl: "#eef0f3", s: ["#4f6fb3", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
+      dark:  { accent: "#e6e8ec", ink: "#f2f3f5", on: "#111", hl: "#24272c", s: ["#6d8ad0", "#c98500", "#199e70", "#d95926"], other: "#c98500" } },
+    roxy77: { name: "AO Racing \"Roxy\" pink-purple", band: ["#c03b9a", "#111111", "#c03b9a"],
+      light: { accent: "#b8358f", ink: "#962a74", on: "#fff", hl: "#f9e9f4", s: ["#8a4fd0", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
+      dark:  { accent: "#d45bb0", ink: "#e891cd", on: "#111", hl: "#2c1726", s: ["#9d6be0", "#c98500", "#199e70", "#d95926"], other: "#c98500" } },
     rexy77: { name: "AO Racing \"Rexy\" green", band: ["#2f9e44", "#111111", "#2f9e44"],
       light: { accent: "#2f9e44", ink: "#23772f", on: "#fff", hl: "#e8f5ea", s: ["#2f9e44", "#2a78d6", "#eda100", "#8a4fd0"], other: "#2a78d6" },
       dark:  { accent: "#3fb355", ink: "#6fd17f", on: "#111", hl: "#17281a", s: ["#2e9a43", "#3987e5", "#c98500", "#9d6be0"], other: "#3987e5" } },
   };
   const CAR_LIVERY = { 3: "corvette", 4: "corvette", 13: "awa", 36: "dxdt", 74: "dragonspeed", 81: "dragonspeed", 73: "prattmiller73", 99: "aoracing",
-    31: "cadillac31", 10: "wtr10", 40: "wtr40", 77: "rexy77" };
+    31: "cadillac31", 10: "wtr10", 40: "wtr40", 77: "skeleton77" };   // 77: rexy77 / roxy77 other weekends
   const dark = () => root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   let livery = (() => { try { return localStorage.getItem("livery"); } catch (e) { return null; } })() || "corvette";
   const paint = () => {

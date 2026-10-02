@@ -9,8 +9,13 @@ import requests
 
 # Tracked cars as CLASS:NUMBER (class as printed in the points PDF: GTP, LMP2, GTDPRO, GTD).
 # Followed cars ("ours"): Pratt Miller Motorsports first, then the other cars we follow.
-DEFAULT_CARS = "GTDPRO:4,GTDPRO:3,LMP2:73,GTP:31,GTP:40,GTP:10,LMP2:99,GTDPRO:77,GTDPRO:74,GTD:13,GTD:36,GTD:81"
-PMM_CARS = [c.strip() for c in os.environ.get("PMM_CARS", "4,3,73").split(",") if c.strip()]
+# The site is a Corvette fan site: the Pratt Miller-built cars come first, then the Cadillacs, then AO Racing.
+DEFAULT_CARS = "GTDPRO:4,GTDPRO:3,GTDPRO:74,GTD:13,GTD:36,LMP2:73,GTP:31,GTP:40,GTP:10,LMP2:99,GTDPRO:77"
+GROUPS = [("Pratt Miller Motorsports", os.environ.get("PMM_CARS", "4,3,74,13,36,73")),
+          ("Cadillac", os.environ.get("CADILLAC_CARS", "31,40,10")),
+          ("AO Racing", os.environ.get("AO_CARS", "99,77"))]
+GROUPS = [(name, [c.strip() for c in cars.split(",") if c.strip()]) for name, cars in GROUPS]
+PMM_CARS = GROUPS[0][1]
 CAR_CLASS = {c.split(":")[-1].strip(): (c.split(":")[0].strip() if ":" in c else os.environ.get("CLASS", "GTDPRO"))
              for c in (os.environ.get("CARS") or DEFAULT_CARS).split(",") if c.strip()}
 CARS = list(CAR_CLASS)
