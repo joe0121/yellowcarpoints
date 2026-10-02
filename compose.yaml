@@ -14,6 +14,19 @@ services:
       # Session recordings and the scraper log, readable on the host for debugging/replay.
       - ./archive:/data/archive
 
+  # Analysis tab: race prediction (after qualifying, then every race hour) and caution history.
+  # Same image as the scraper, its own process, so heavy maths never delays live timing.
+  analyst:
+    image: ghcr.io/joe0121/yellowcarpoints-scraper:latest
+    restart: unless-stopped
+    command: ["python", "analyst.py"]
+    environment:
+      ANALYSIS_MINUTES: ${ANALYSIS_MINUTES:-60}
+      CACHE_DIR: /cache
+    volumes:
+      - data:/data
+      - analysis-cache:/cache
+
   # Anonymous profiles (sync code / passkey), saved settings and the guest book. SQLite in the api-db volume.
   api:
     image: ghcr.io/joe0121/yellowcarpoints-api:latest
@@ -57,3 +70,4 @@ volumes:
   data:
   status:
   api-db:
+  analysis-cache:

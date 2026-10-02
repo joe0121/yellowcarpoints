@@ -20,7 +20,7 @@
       <h1>Yellow Car <span>Points</span></h1>
       <p class="tagline">An unofficial Corvette fan site</p>
       <p class="sub" id="sub">Race strategy</p>
-      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Championship</a><a id="to-race" href="strategy.html" aria-current="page">Race</a><a href="about.html">About</a><a href="guestbook.html">Guest book</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Championship</a><a id="to-race" href="strategy.html" aria-current="page">Race</a><a id="to-analysis" href="analysis.html">Analysis</a><a href="about.html">About</a><a href="guestbook.html">Guest book</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -48,14 +48,6 @@
     </div>
     <div class="scroll"><table id="ours" class="ours"></table></div>
     <div class="watch" id="watch" hidden></div>
-  </section>
-  <section class="card" id="pred-card" hidden style="margin-bottom:16px">
-    <h2 id="pred-title">Race prediction</h2>
-    <p class="live-sub" id="pred-lead"></p>
-    <div class="scroll"><table class="predtab" id="pred-table"></table></div>
-    <h3 class="wxh3" id="pred-title-odds-h" hidden>Championship odds after the race</h3>
-    <div id="pred-odds"></div>
-    <details class="more"><summary>How the prediction works</summary><div id="pred-how"></div></details>
   </section>
   <section class="card" id="feed-card" style="margin-bottom:16px">
     <h2>What just happened</h2>
@@ -100,15 +92,6 @@
     <ul class="wxfits" id="wx-fits"></ul>
     <div class="chart" id="wx-pace" hidden><div class="tip"></div></div>
     <p class="note" id="wx-note"></p>
-  </section>
-  <section class="card" id="cau-card" hidden style="margin-bottom:16px">
-    <h2 id="cau-title">Cautions in past races</h2>
-    <div class="facts" id="cau-facts" style="margin-top:0;padding-top:0;border-top:0"></div>
-    <h3 class="wxh3">Chance of a caution, hour by hour</h3>
-    <div class="cauhours" id="cau-hours"></div>
-    <h3 class="wxh3">Laps run under caution, year by year</h3>
-    <div class="scroll" id="cau-heat"></div>
-    <p class="note" id="cau-note"></p>
   </section>
   <section class="card" id="timing-card" style="margin-bottom:16px">
     <h2 id="timing-title">Timing</h2>
@@ -191,20 +174,20 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
 
-let standings, live, laps, schedule, entries, sectorData, config, watchData, rcData, predData, cauData;
+let standings, live, laps, schedule, entries, sectorData, config, watchData, rcData;
 
 // Live timing every 10 s, lap history every 30 s, everything else every 5 minutes; the page
 // only redraws when something changed (unchanged files come back as cheap 304s).
 const loadedAt = { laps: 0, slow: 0 };
 async function load() {
   const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
-  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config", "predict", "insights"] : [])];
+  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
   if (got.live?.updated !== live?.updated) liveFetchedAt = Date.now();
   live = got.live;
   if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; loadedAt.laps = now; }
-  if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config, predict: predData, insights: cauData } = got); loadedAt.slow = now; }
+  if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config } = got); loadedAt.slow = now; }
   if (changed) render();
 }
 addEventListener("hashchange", render);
@@ -317,8 +300,6 @@ function render() {
   renderRaceControl(sel, cmpCars);
   renderTrackMap(sel, rows, cmpCars, clsName);
   renderWeather(sel, rows, lc, lapsCls, cmpCars);
-  renderPrediction(sel, rows, cmpCars, clsName);
-  renderCautions(rows);
   if (!$("pa-card").classList.contains("collapsed")) renderPaceAnalysis(sel, rows, lapsCls, cmpCars, clsName);
   renderDrivers(sel, cmpCars, rows);
   $("title").textContent = `Pit strategy · ${clsName}`;
@@ -1065,68 +1046,6 @@ function weatherBands(rows, lc) {
   return out;
 }
 const wxIcon = h => /thunder/i.test(h.sky || "") ? "⛈" : h.rain >= 50 || /rain|shower/i.test(h.sky || "") && h.rain >= 30 ? "🌧" : !h.day ? "🌙" : /cloud|overcast/i.test(h.sky || "") ? (/partly|mostly sunny/i.test(h.sky) ? "⛅" : "☁️") : "☀️";
-// --- Race prediction: odds from a model fitted to past races (data/predict.json, made offline) ------
-const pct = (p, d = 0) => p >= 0.995 ? ">99%" : p > 0 && p < 0.005 ? "<1%" : `${(p * 100).toFixed(d)}%`;
-function renderPrediction(sel, rows, cars, clsName) {
-  const card = $("pred-card"), P = predData?.classes?.[sel.class];
-  card.hidden = !P || predData.event !== live?.event;
-  if (card.hidden) return;
-  const mine = new Set(cars.map(c => c.car)), me = P.cars.find(c => c.car === sel.car);
-  $("pred-title").textContent = `Race prediction · ${clsName}`;
-  const fav = P.cars[0];
-  $("pred-lead").innerHTML = me
-    ? `<b>#${esc(me.car)}</b>: <b>${pct(me.win)}</b> to win, <b>${pct(me.podium)}</b> to finish on the podium, average finish around <b>P${Math.round(me.expected)}</b>.`
-      + (fav.car !== me.car ? ` Favourite: #${esc(fav.car)} at ${pct(fav.win)}.` : " It's the favourite.")
-    : `Favourite: #${esc(fav.car)} at ${pct(fav.win)} to win.`;
-  // Table: everyone with a real chance, plus our cars; the strip is the chance of each finishing position.
-  const show = P.cars.filter((c, i) => i < 8 || mine.has(c.car));
-  const n = P.cars.length, peak = Math.max(...P.cars.flatMap(c => c.dist));
-  $("pred-table").innerHTML = `<thead><tr><th>Car</th><th class="l">Team</th><th>Win</th><th>Podium</th><th class="l">Chance of each finish, P1 → P${n}</th></tr></thead><tbody>`
-    + show.map(c => `<tr class="${c.car === sel.car ? "me" : mine.has(c.car) ? "tracked" : ""}"><td>#${esc(c.car)}</td><td class="l dim">${esc(c.team)}</td><td>${pct(c.win)}</td><td>${pct(c.podium)}</td>`
-      + `<td class="l"><span class="pstrip" title="Grid P${c.why.grid}, ${c.why.practice_gap.toFixed(2)}% off the best practice lap">${c.dist.map((p, i) => `<i style="opacity:${(0.08 + 0.92 * p / peak).toFixed(2)}" title="P${i + 1}: ${pct(p, 1)}"></i>`).join("")}</span></td></tr>`).join("")
-    + `</tbody>`;
-  // Title odds: the same simulated finishes, added to the points (qualifying included).
-  const odds = (P.title || []).filter(t => t.odds >= 0.001);
-  $("pred-title-odds-h").hidden = !odds.length;
-  $("pred-odds").innerHTML = odds.length ? `<ul class="oddsbars">${odds.map(t => `<li class="${t.car === sel.car ? "me" : ""}"><b>#${esc(t.car)}</b><span class="bar"><i style="width:${Math.max(1, t.odds * 100)}%"></i></span><span>${pct(t.odds)}</span></li>`).join("")}</ul>` : "";
-  const b = predData.backtest, w = predData.weights;
-  $("pred-how").innerHTML = `<p class="note">A statistical model (Plackett–Luce, the standard way to rank race finishes), fitted to ${predData.races_used} WeatherTech races from 2024 to 2026. Ahead of the race it weighs, in order of influence:
-    recent form (finishing positions this season and, at half weight, last season), starting position, best practice lap, how many Bronze-rated drivers share the car, and how often the car has retired.
-    It then simulates the race ${(40000).toLocaleString()} times to turn those into chances, and adds each simulated result to the championship points for the title odds.</p>
-    <p class="note"><b>How good is it?</b> Tested on ${b.class_races} class results from 2025 and 2026, each predicted only from earlier races: the favourite won ${b.favourite_won} (${pct(b.favourite_won / b.class_races)}), against ${b.pole_won} (${pct(b.pole_won / b.class_races)}) for the polesitter, and finished on the podium ${pct(b.favourite_podium / b.class_races)} of the time.
-    Endurance racing is chaotic: the favourite's chance is rarely above 30%, and that's an honest number, not a hedge. Not betting advice. Ties, penalties and weather aren't modelled.</p>`;
-}
-
-// --- Caution history at this track (data/insights.json, from IMSA's lap-by-lap flags) ----------------
-function renderCautions(rows) {
-  const card = $("cau-card"), D = cauData;
-  card.hidden = !D || D.track !== live?.event;
-  if (card.hidden) return;
-  const S = D.summary, ys = D.years, leadLap = live?.is_race ? Math.max(0, ...rows.map(r => +r.laps || 0)) : null;
-  const el = live?.is_race ? hmsSecs(live.elapsed) : null, hourNow = el != null ? Math.min(9, Math.floor(el / 3600)) : null;
-  $("cau-title").textContent = `Cautions at ${D.event}, ${ys[0].year}–${ys.at(-1).year}`;
-  const hm2 = m => `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, "0")} min`;
-  $("cau-facts").innerHTML = `<div>Cautions per race<b>${S.avg_cautions}</b>${S.min_cautions}–${S.max_cautions}</div>`
-    + `<div>Time under caution<b>${hm2(S.avg_caution_mins)}</b>${S.pct_under_caution}% of the race, ~${S.avg_caution_laps} laps</div>`
-    + `<div>Typical caution<b>${Math.round(S.avg_length_mins)} min</b>first one ${S.median_first_caution_mins} min in (median)</div>`;
-  $("cau-hours").innerHTML = S.any_in_hour.map((p, h) => `<div class="${h === hourNow ? "now" : ""}" title="Hour ${h + 1}: a caution in ${Math.round(p * ys.length)} of ${ys.length} races (${S.per_hour[h]} per race on average)">`
-    + `<span class="v">${Math.round(p * 100)}%</span><span class="bar"><i style="height:${Math.max(4, p * 100)}%"></i></span><span class="h">H${h + 1}</span></div>`).join("");
-  // Heat map: 10-lap blocks of the leader's laps; the shade is how much of the block ran under caution.
-  const B = 10, maxLap = Math.max(...ys.map(y => y.laps)), nb = Math.ceil(maxLap / B);
-  const cover = y => { const c = new Array(nb).fill(0); for (const k of y.cautions) for (let l = k.lap; l < k.end_lap; l++) if (l < nb * B) c[Math.floor(l / B)] += 1 / B; return c; };
-  const grid = ys.map(cover), often = [...Array(nb).keys()].map(i => grid.filter(c => c[i] > 0).length / ys.length);
-  const nowB = leadLap != null ? Math.floor(leadLap / B) : null;
-  const cell = (v, i, t) => `<td class="${i === nowB ? "now" : ""}" style="background:${v > 0 ? `color-mix(in srgb, var(--flag-yellow) ${Math.round(25 + 75 * Math.min(1, v))}%, var(--surface))` : "var(--grid)"}" title="${t}"></td>`;
-  $("cau-heat").innerHTML = `<table class="cauheat"><thead><tr><th></th>${[...Array(nb).keys()].map(i => `<th>${i % 5 === 0 ? `<span>${i * B}</span>` : ""}</th>`).join("")}</tr></thead><tbody>`
-    + ys.slice().reverse().map(y => { const c = grid[ys.indexOf(y)];
-      return `<tr><th title="${y.cautions.length} cautions, ${y.laps} laps (${y.source === "flags" ? "IMSA flags" : "estimated from lap times"})">${y.year}${y.source === "flags" ? "" : "*"}</th>${c.map((v, i) => i * B < y.laps ? cell(v, i, `${y.year}, laps ${i * B}–${i * B + B - 1}: ${Math.round(v * 100)}% under caution`) : `<td class="off"></td>`).join("")}</tr>`; }).join("")
-    + `<tr class="often"><th>How often</th>${often.map((p, i) => `<td class="${i === nowB ? "now" : ""}" style="background:color-mix(in srgb, var(--flag-yellow) ${Math.round(p * 100)}%, var(--grid))" title="Laps ${i * B}–${i * B + B - 1}: caution in ${Math.round(p * ys.length)} of ${ys.length} races"></td>`).join("")}</tr></tbody></table>`;
-  const busiest = often.map((p, i) => [p, i]).sort((a, b) => b[0] - a[0]).slice(0, 3).map(([p, i]) => `laps ${i * B}–${i * B + B - 1} (${Math.round(p * ys.length)} of ${ys.length})`);
-  $("cau-note").innerHTML = `Busiest stretches: ${busiest.join(", ")}. A caution came in the first hour in ${S.first_hour_pct}% of races and in the last hour in ${S.last_hour_pct}%. `
-    + (leadLap ? `The outlined column is where the leader is now (lap ${leadLap}). ` : "")
-    + `Laps are the overall leader's. From IMSA's lap-by-lap flags (Al Kamel time cards); * = years without a flag column, estimated from lap times (that method found 40 of the 43 cautions in the years we could check: back-to-back cautions merge).`;
-}
-
 function renderWeather(sel, rows, lc, lapsCls, cars) {
   const card = $("wx-card"), w = wxData;
   if (!w?.nws?.length && !w?.obs) { card.hidden = true; return; }

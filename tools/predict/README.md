@@ -1,6 +1,9 @@
-# Race prediction and caution history (offline)
+# Race prediction and caution history: research scripts
 
-Run by hand once qualifying is done; the outputs go into the site's data volume.
+The site runs this automatically now: the `analyst` service (app/analyst.py, app/predict.py,
+app/inrace.py, app/cautions.py) redoes the pre-race prediction after qualifying and the in-race one
+every race hour. These scripts are the offline versions used to build and backtest the model
+(feature choices, calibration); run them by hand to experiment.
 
 ```sh
 cd tools/predict

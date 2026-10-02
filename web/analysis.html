@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Race Analysis</title>
+<meta name="description" content="Race predictions, championship odds and caution history for the IMSA WeatherTech race weekend.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23eda100'/><text x='16' y='23' font-size='18' font-family='Arial' font-weight='700' text-anchor='middle' fill='%23111'>4</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+<script src="account.js"></script>
+<script src="track.js"></script>
+</head>
+<body class="race">
+<main>
+  <header>
+    <div>
+      <h1>Yellow Car <span>Points</span></h1>
+      <p class="tagline">An unofficial Corvette fan site</p>
+      <p class="sub" id="sub">Race analysis</p>
+      <div class="navrow"><nav class="tabs"><a href="./">Championship</a><a id="to-race" href="strategy.html">Race</a><a href="analysis.html" aria-current="page">Analysis</a><a href="about.html">About</a><a href="guestbook.html">Guest book</a></nav><span class="countdown" id="countdown" hidden></span></div>
+    </div>
+    <div class="meta" id="meta"></div>
+  </header>
+  <nav class="picker" id="picker" aria-label="Choose a car"></nav>
+  <nav class="links" id="links" aria-label="IMSA and team links"></nav>
+
+  <section class="sessionbar" id="an-status"><div class="live-head" id="an-head"></div></section>
+
+  <div class="race-grid">
+    <div class="col col-a" data-layout="analysis" data-slot="a">
+  <section class="card" id="pred-card" style="margin-bottom:16px">
+    <h2 id="pred-title">Race prediction</h2>
+    <p class="live-sub" id="pred-lead"></p>
+    <div class="scroll"><table class="predtab" id="pred-table"></table></div>
+    <details class="more"><summary>How the prediction works</summary><div id="pred-how"></div></details>
+  </section>
+  <section class="card" id="odds-card" style="margin-bottom:16px">
+    <h2 id="odds-title">Championship odds</h2>
+    <p class="live-sub" id="odds-sub"></p>
+    <div id="pred-odds"></div>
+  </section>
+    </div>
+    <div class="col col-b" data-layout="analysis" data-slot="b">
+  <section class="card" id="wp-card" style="margin-bottom:16px">
+    <h2 id="wp-title">Win chances through the race</h2>
+    <div class="legend" id="wp-legend"></div>
+    <div class="chart" id="wp-chart"></div>
+    <p class="note" id="wp-note"></p>
+  </section>
+  <section class="card" id="cau-card" style="margin-bottom:16px">
+    <h2 id="cau-title">Cautions in past races</h2>
+    <div class="facts" id="cau-facts" style="margin-top:0;padding-top:0;border-top:0"></div>
+    <h3 class="wxh3">Chance of a caution, hour by hour</h3>
+    <div class="cauhours" id="cau-hours"></div>
+    <h3 class="wxh3">Laps run under caution, year by year</h3>
+    <div class="scroll" id="cau-heat"></div>
+    <p class="note" id="cau-note"></p>
+  </section>
+    </div>
+  </div>
+  <footer id="foot">Predictions and caution history are worked out on this site's own server from IMSA's published results (Al Kamel). For fun, not betting advice.</footer>
+  <nav class="footlinks" aria-label="About this site">
+    <a href="https://github.com/joe0121/yellowcarpoints" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1 1.6 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .6 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>Source on GitHub</a>
+    <a href="https://www.instagram.com/c6zoooh6/" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.4" cy="6.6" r="1.3" fill="currentColor"/></svg>@C6ZOOOH6</a>
+    <a href="contact.html">Contact</a>
+  </nav>
+</main>
+<script src="cards.js"></script>
+<script src="links.js"></script>
+<script src="picker.js"></script>
+<script>
+const CLASS_NAMES = { GTDPRO: "GTD PRO", GTD: "GTD", GTP: "GTP", LMP2: "LMP2" };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+const hmsSecs = t => { const p = String(t || "").split(":").map(Number); return p.length === 3 && p.every(x => !isNaN(x)) ? p[0] * 3600 + p[1] * 60 + p[2] : null; };
+const pct = (p, d = 0) => p >= 0.995 ? ">99%" : p > 0 && p < 0.005 ? "<1%" : `${(p * 100).toFixed(d)}%`;
+async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
+
+let standings, live, entries, config, predData, cauData;
+const loadedAt = { slow: 0 };
+// Live timing every 30 s (for the "now" markers), the analysis files every 2 minutes.
+async function load() {
+  const now = Date.now(), wantSlow = now - loadedAt.slow >= 120e3;
+  const names = ["live", ...(wantSlow ? ["standings", "entries", "config", "predict", "insights"] : [])];
+  const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
+  live = got.live;
+  if (wantSlow) { ({ standings, entries, config, predict: predData, insights: cauData } = got); loadedAt.slow = now; }
+  render();
+}
+addEventListener("hashchange", render);
+addEventListener("cardtoggle", () => standings && render());
+setInterval(load, 30e3);
+load();
+
+// Our cars in the selected class: the followed groups (config) plus whatever the viewer picked.
+const followed = () => new Set((config?.groups || []).flatMap(g => g[1] || g.cars || []));
+
+function render() {
+  if (!standings?.cars) return;
+  const sel = window.pickCar({ standings, entries, live }, store);
+  store.set("car", sel.car);
+  window.setLivery?.(sel.car);
+  window.renderLinks?.(sel.car);
+  window.buildPicker($("picker"), sel, { standings, entries, live, config });
+  $("to-race").href = "strategy.html#" + sel.car;
+  const cls = CLASS_NAMES[sel.class] || sel.class;
+  document.title = `Analysis · #${sel.car}`;
+  $("sub").textContent = `Race analysis · #${sel.car} ${entries?.cars?.[sel.car]?.team || ""} · ${cls}`;
+  const P = predData, mode = P?.mode;
+  const el = live?.is_race ? hmsSecs(live.elapsed) : null;
+  $("an-head").innerHTML = !P ? `<span class="pulse" style="color:var(--text-3)">WAITING</span> The prediction appears once qualifying is done.`
+    : `<span class="pulse"${mode === "in-race" ? "" : ' style="color:var(--text-3)"'}>${mode === "in-race" ? "IN RACE" : "PRE-RACE"}</span><b>${esc(P.event)}</b> · `
+      + (mode === "in-race" ? `prediction as of <b>${esc(P.as_of.label)}</b> (${esc((P.as_of.remaining || "").replace(/^00:/, ""))} to go), redone every race hour` : "from qualifying, practice and the season so far; redone every race hour once the race starts")
+      + (P.updated ? ` · updated ${new Date(P.updated).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "");
+  renderPrediction(sel, cls);
+  renderOdds(sel, cls);
+  renderWinChart(sel, cls);
+  renderCautions(el);
+}
+
+function renderPrediction(sel, clsName) {
+  const P = predData?.classes?.[sel.class], inRace = predData?.mode === "in-race";
+  $("pred-title").textContent = `${inRace ? "Predicted finish" : "Race prediction"} · ${clsName}`;
+  if (!P) { $("pred-lead").textContent = "No prediction for this class yet."; $("pred-table").innerHTML = ""; $("pred-how").innerHTML = ""; return; }
+  const mine = followed(), me = P.cars.find(c => c.car === sel.car), fav = P.cars[0];
+  $("pred-lead").innerHTML = me
+    ? `<b>#${esc(me.car)}</b>${inRace && me.now ? ` (running P${me.now})` : ""}: <b>${pct(me.win)}</b> to win, <b>${pct(me.podium)}</b> to finish on the podium, average finish around <b>P${Math.round(me.expected)}</b>.`
+      + (fav.car !== me.car ? ` Favourite: #${esc(fav.car)} at ${pct(fav.win)}.` : " It's the favourite.")
+    : `Favourite: #${esc(fav.car)} at ${pct(fav.win)} to win.`;
+  const show = P.cars.filter((c, i) => i < 10 || mine.has(c.car) || c.car === sel.car);
+  const n = P.cars.length, peak = Math.max(...P.cars.flatMap(c => c.dist));
+  $("pred-table").innerHTML = `<thead><tr><th>Car</th><th class="l">Team</th>${inRace ? "<th>Now</th>" : "<th>Grid</th>"}<th>Win</th><th>Podium</th><th class="l">Chance of each finish, P1 → P${n}</th></tr></thead><tbody>`
+    + show.map(c => `<tr class="${c.car === sel.car ? "me" : mine.has(c.car) ? "tracked" : ""}"><td>#${esc(c.car)}</td><td class="l dim">${esc(c.team)}</td><td>${inRace ? (c.now ? "P" + c.now : "–") : c.why ? "P" + c.why.grid : "–"}</td><td>${pct(c.win)}</td><td>${pct(c.podium)}</td>`
+      + `<td class="l"><span class="pstrip">${c.dist.map((p, i) => `<i style="opacity:${(0.08 + 0.92 * p / peak).toFixed(2)}" title="P${i + 1}: ${pct(p, 1)}"></i>`).join("")}</span></td></tr>`).join("")
+    + `</tbody>`;
+  const b = predData.backtest || {}, cr = b.class_races || 1;
+  $("pred-how").innerHTML = `<p class="note"><b>Before the race:</b> a statistical model (Plackett–Luce, the standard way to rank race finishes) fitted to ${predData.races_used} WeatherTech races since 2024. It weighs recent form (this season, last season at half weight), starting position, best practice lap, Bronze-rated drivers and how often the car has retired, then simulates the race tens of thousands of times.</p>`
+    + `<p class="note"><b>During the race</b>, every race hour: each car's gap to the class leader, plus the pit stops it still owes against the others, projected over the time left with its median clean lap so far (at half weight, and only fully trusted after about 100 clean laps). How much gaps still move per hour left, and how often cars retire, come from Petit Le Mans 2021–2025. The pre-race view fades out by half distance.</p>`
+    + `<p class="note"><b>How good is it?</b> Tested on ${b.class_races} class results from ${esc(b.seasons)}, each predicted only from earlier races: the favourite won ${b.favourite_won} (${pct(b.favourite_won / cr)}), against ${b.pole_won} (${pct(b.pole_won / cr)}) for the polesitter. Endurance racing is chaotic, so a 20–30% favourite is normal. Not betting advice; penalties, weather and full-course yellows aren't modelled individually.</p>`;
+}
+
+function renderOdds(sel, clsName) {
+  const P = predData?.classes?.[sel.class], odds = (P?.title || []).filter(t => t.odds >= 0.001);
+  $("odds-card").hidden = !odds.length;
+  if (!odds.length) return;
+  $("odds-title").textContent = `Championship odds · ${clsName}`;
+  $("odds-sub").textContent = `Each simulated finish added to the points (this weekend's qualifying points included). ${predData.mode === "in-race" ? `As of ${predData.as_of.label}.` : "Before the race."}`;
+  $("pred-odds").innerHTML = `<ul class="oddsbars">${odds.map(t => `<li class="${t.car === sel.car ? "me" : ""}"><b>#${esc(t.car)}</b><span class="bar"><i style="width:${Math.max(1, t.odds * 100)}%"></i></span><span>${pct(t.odds)}</span></li>`).join("")}</ul>`;
+}
+
+// Win chance at the start and after every race hour: the favourites, our cars and the selected car.
+function renderWinChart(sel, clsName) {
+  const H = (predData?.history || []).filter(h => h.win?.[sel.class]);
+  const el = $("wp-chart");
+  $("wp-title").textContent = `Win chances through the race · ${clsName}`;
+  if (H.length < 2) {
+    el.innerHTML = `<p class="empty">Starts at the green flag: the win chances are recalculated every race hour and drawn here.</p>`;
+    $("wp-legend").innerHTML = ""; $("wp-note").textContent = "";
+    return;
+  }
+  const last = H.at(-1).win[sel.class], mine = followed();
+  const cars = [...new Set([sel.car, ...Object.entries(last).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c]) => c), ...[...mine].filter(c => c in last)])].slice(0, 6);
+  const PAL = ["var(--s2)", "var(--s3)", "var(--s4)", "var(--series-2)"];
+  let k = 0;
+  const color = c => c === sel.car ? "var(--s1)" : k < PAL.length ? PAL[k++] : "var(--context)";
+  const cols = Object.fromEntries(cars.map(c => [c, color(c)]));
+  const W = Math.max(320, el.clientWidth || 600), Hh = 220, m = { l: 40, r: 52, t: 10, b: 24 };
+  const xMax = Math.max(H.at(-1).elapsed, (predData.hours || 10) * 3600), yMax = Math.min(1, Math.max(0.2, ...H.flatMap(h => cars.map(c => h.win[sel.class][c] || 0))) * 1.1);
+  const x = v => m.l + v / xMax * (W - m.l - m.r), y = v => Hh - m.b - v / yMax * (Hh - m.t - m.b);
+  let g = "";
+  for (let v = 0; v <= yMax + 1e-9; v += yMax > 0.5 ? 0.25 : 0.1) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${Math.round(v * 100)}%</text>`;
+  for (let h = 0; h * 3600 <= xMax; h += 1) g += `<text x="${x(h * 3600)}" y="${Hh - 6}" text-anchor="middle">${h ? h + "h" : "Start"}</text>`;
+  for (const c of cars) {
+    const pts = H.map(h => [x(h.elapsed), y(h.win[sel.class][c] || 0)]);
+    g += `<path d="M${pts.map(p => p.join(" ")).join("L")}" fill="none" stroke="${cols[c]}" stroke-width="${c === sel.car ? 2.5 : 2}"/>`
+      + pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="${cols[c]}" stroke="var(--surface)" stroke-width="1.5"/>`).join("")
+      + `<text class="lbl" x="${pts.at(-1)[0] + 6}" y="${pts.at(-1)[1] + 4}">#${esc(c)}</text>`;
+  }
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Win chance by race hour">${g}</svg>`;
+  $("wp-legend").innerHTML = cars.map(c => `<span style="--c:${cols[c]}">#${esc(c)} ${pct(last[c] || 0)}</span>`).join("");
+  $("wp-note").textContent = `Each point is one recalculation (start, then every race hour). Shown: #${sel.car}, the favourites and our cars in ${clsName}.`;
+}
+// --- Caution history at this track (data/insights.json, from IMSA's lap-by-lap flags) ----------------
+function renderCautions(el) {
+  const card = $("cau-card"), D = cauData;
+  card.hidden = !D || (live?.event && D.track !== live.event);
+  if (card.hidden) return;
+  const S = D.summary, ys = D.years, nh = S.any_in_hour.length;
+  const leadLap = live?.is_race ? Math.max(0, ...Object.values(live.classes || {}).flatMap(c => c.cars.map(r => +r.laps || 0))) : null;
+  const hourNow = el != null ? Math.min(nh - 1, Math.floor(el / 3600)) : null;
+  $("cau-hours").style.gridTemplateColumns = `repeat(${nh}, 1fr)`;
+  $("cau-title").textContent = `Cautions at ${D.event}, ${ys[0].year}–${ys.at(-1).year}`;
+  const hm2 = m => `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, "0")} min`;
+  $("cau-facts").innerHTML = `<div>Cautions per race<b>${S.avg_cautions}</b>${S.min_cautions}–${S.max_cautions}</div>`
+    + `<div>Time under caution<b>${hm2(S.avg_caution_mins)}</b>${S.pct_under_caution}% of the race, ~${S.avg_caution_laps} laps</div>`
+    + `<div>Typical caution<b>${Math.round(S.avg_length_mins)} min</b>first one ${S.median_first_caution_mins} min in (median)</div>`;
+  $("cau-hours").innerHTML = S.any_in_hour.map((p, h) => `<div class="${h === hourNow ? "now" : ""}" title="Hour ${h + 1}: a caution in ${Math.round(p * ys.length)} of ${ys.length} races (${S.per_hour[h]} per race on average)">`
+    + `<span class="v">${Math.round(p * 100)}%</span><span class="bar"><i style="height:${Math.max(4, p * 100)}%"></i></span><span class="h">H${h + 1}</span></div>`).join("");
+  // Heat map: 10-lap blocks of the leader's laps; the shade is how much of the block ran under caution.
+  const B = 10, maxLap = Math.max(...ys.map(y => y.laps)), nb = Math.ceil(maxLap / B);
+  const cover = y => { const c = new Array(nb).fill(0); for (const k of y.cautions) for (let l = k.lap; l < k.end_lap; l++) if (l < nb * B) c[Math.floor(l / B)] += 1 / B; return c; };
+  const grid = ys.map(cover), often = [...Array(nb).keys()].map(i => grid.filter(c => c[i] > 0).length / ys.length);
+  const nowB = leadLap != null ? Math.floor(leadLap / B) : null;
+  const cell = (v, i, t) => `<td class="${i === nowB ? "now" : ""}" style="background:${v > 0 ? `color-mix(in srgb, var(--flag-yellow) ${Math.round(25 + 75 * Math.min(1, v))}%, var(--surface))` : "var(--grid)"}" title="${t}"></td>`;
+  $("cau-heat").innerHTML = `<table class="cauheat"><thead><tr><th></th>${[...Array(nb).keys()].map(i => `<th>${i % 5 === 0 ? `<span>${i * B}</span>` : ""}</th>`).join("")}</tr></thead><tbody>`
+    + ys.slice().reverse().map(y => { const c = grid[ys.indexOf(y)];
+      return `<tr><th title="${y.cautions.length} cautions, ${y.laps} laps (${y.source === "flags" ? "IMSA flags" : "estimated from lap times"})">${y.year}${y.source === "flags" ? "" : "*"}</th>${c.map((v, i) => i * B < y.laps ? cell(v, i, `${y.year}, laps ${i * B}–${i * B + B - 1}: ${Math.round(v * 100)}% under caution`) : `<td class="off"></td>`).join("")}</tr>`; }).join("")
+    + `<tr class="often"><th>How often</th>${often.map((p, i) => `<td class="${i === nowB ? "now" : ""}" style="background:color-mix(in srgb, var(--flag-yellow) ${Math.round(p * 100)}%, var(--grid))" title="Laps ${i * B}–${i * B + B - 1}: caution in ${Math.round(p * ys.length)} of ${ys.length} races"></td>`).join("")}</tr></tbody></table>`;
+  const busiest = often.map((p, i) => [p, i]).sort((a, b) => b[0] - a[0]).slice(0, 3).map(([p, i]) => `laps ${i * B}–${i * B + B - 1} (${Math.round(p * ys.length)} of ${ys.length})`);
+  $("cau-note").innerHTML = `Busiest stretches: ${busiest.join(", ")}. A caution came in the first hour in ${S.first_hour_pct}% of races and in the last hour in ${S.last_hour_pct}%. `
+    + (leadLap ? `The outlined column is where the leader is now (lap ${leadLap}). ` : "")
+    + `Laps are the overall leader's. From IMSA's lap-by-lap flags (Al Kamel time cards); * = years without a flag column, estimated from lap times (that method found 40 of the 43 cautions in the years we could check: back-to-back cautions merge).`;
+}
+
+</script>
+<script src="countdown.js" defer></script>
+</body>
+</html>
