@@ -542,7 +542,7 @@ ul.oddsbars li.me b { color: var(--accent-ink); }
 
 /* Caution history */
 .cauhours { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; align-items: end; }
-.cauhours div { display: grid; grid-template-rows: auto 56px auto; text-align: center; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.cauhours div { display: grid; grid-template-rows: auto 56px auto; row-gap: 2px; text-align: center; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .cauhours .bar { height: 56px; display: flex; align-items: flex-end; background: var(--grid); border-radius: 4px; overflow: hidden; }
 .cauhours .bar i { display: block; width: 100%; background: var(--flag-yellow); border-radius: 4px 4px 0 0; }
 .cauhours .now { color: var(--text); font-weight: 600; }
@@ -556,3 +556,5 @@ table.cauheat td.off { background: none; }
 table.cauheat td.now { outline: 2px solid var(--text); outline-offset: -1px; }
 table.cauheat tr.often th { color: var(--text); }
 table.cauheat tr.often td { height: 18px; }
+.cauhours div > span { display: block; }
+.cauhours .h { margin-top: 3px; }
