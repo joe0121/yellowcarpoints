@@ -520,3 +520,38 @@ table.pacemap td.pm-empty { background: var(--grid); opacity: .4; }
 .pm-key.q { background: color-mix(in srgb, var(--s2) 70%, var(--grid)); }
 .pm-key.s { background: color-mix(in srgb, var(--s4) 70%, var(--grid)); }
 @media (max-width: 640px) { #ours th:nth-child(9), #ours td:nth-child(9) { display: none; } }
+
+/* Race prediction */
+table.predtab { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.predtab th { font-size: 11px; color: var(--text-3); font-weight: 600; padding: 4px 6px; text-align: right; white-space: nowrap; }
+table.predtab td { padding: 5px 6px; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
+table.predtab .l { text-align: left; }
+table.predtab td:first-child { font-weight: 600; text-align: left; }
+table.predtab td.dim { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+table.predtab tr.me td { background: var(--row-hl); }
+table.predtab tr.me td:first-child, table.predtab tr.tracked td:first-child { color: var(--accent-ink); }
+.pstrip { display: inline-flex; gap: 1px; vertical-align: middle; }
+.pstrip i { display: block; width: 9px; height: 14px; border-radius: 2px; background: var(--accent); }
+ul.oddsbars { list-style: none; padding: 0; margin: 4px 0 8px; display: grid; gap: 6px; }
+ul.oddsbars li { display: grid; grid-template-columns: 48px 1fr 52px; gap: 8px; align-items: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+ul.oddsbars li span:last-child { text-align: right; }
+ul.oddsbars .bar { height: 10px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+ul.oddsbars .bar i { display: block; height: 100%; background: var(--text-3); border-radius: 4px; }
+ul.oddsbars li.me .bar i { background: var(--accent); }
+ul.oddsbars li.me b { color: var(--accent-ink); }
+
+/* Caution history */
+.cauhours { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; align-items: end; }
+.cauhours div { display: grid; grid-template-rows: auto 56px auto; text-align: center; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.cauhours .bar { display: flex; align-items: flex-end; background: var(--grid); border-radius: 4px; overflow: hidden; }
+.cauhours .bar i { display: block; width: 100%; background: var(--flag-yellow); border-radius: 4px 4px 0 0; }
+.cauhours .now { color: var(--text); font-weight: 600; }
+.cauhours .now .bar { outline: 2px solid var(--text); outline-offset: 1px; }
+table.cauheat { border-collapse: separate; border-spacing: 1px; font-size: 10px; }
+table.cauheat th { color: var(--text-3); font-weight: 600; padding: 0 4px; text-align: right; white-space: nowrap; }
+table.cauheat thead th { text-align: left; padding: 0; height: 14px; }
+table.cauheat td { width: 9px; min-width: 9px; height: 14px; border-radius: 2px; padding: 0; }
+table.cauheat td.off { background: none; }
+table.cauheat td.now { outline: 2px solid var(--text); outline-offset: -1px; }
+table.cauheat tr.often th { color: var(--text); }
+table.cauheat tr.often td { height: 18px; }

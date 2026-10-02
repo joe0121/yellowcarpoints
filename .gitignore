@@ -3,3 +3,6 @@
 data/
 __pycache__/
 archive/
+tools/predict/cache/
+tools/predict/plm/
+tools/predict/*.json
