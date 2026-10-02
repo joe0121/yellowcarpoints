@@ -45,7 +45,6 @@
     const key = CAR_LIVERY[car] || "corvette";
     if (key !== livery) { livery = key; try { localStorage.setItem("livery", key); } catch (e) {} }
     paint();
-    window.setTrackCar?.(car);
   };
   paint();
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", paint);

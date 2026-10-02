@@ -14,24 +14,19 @@
     const next = Object.values(st?.classes || {}).flatMap(c => c.events || []).find(e => e.state === "upcoming");
     return pick(next?.name);
   }
-  // One checkerboard tile, so nothing overlaps: the outline with the track's name under it, and the
-  // selected car's number, swapping sides each row. Used as a mask over the livery colour.
+  // One tile per outline with the track's name under it, spaced so nothing overlaps. Used as a mask
+  // over the livery colour, so it follows the selected car.
   const FONT = `font-family="Oswald, Impact, 'Arial Narrow', sans-serif" font-weight="700" text-anchor="middle"`;
-  const CW = 720, CH = 1460;   // one cell
-  let bg = null, track = null, car = null;
+  const CW = 720, CH = 1460;
+  let bg = null, track = null;
   function paint() {
     if (!bg || !track) return;
     const k = Math.min(520 / track.w, 960 / track.h);
-    const outline = (cx, cy) => `<g transform="translate(${cx + CW / 2 - track.w * k / 2} ${cy + 130}) scale(${k})"><path d="${track.path}" fill="none" stroke="#000" stroke-width="${22 / k}" stroke-linejoin="round"/></g>`
-      + `<text x="${cx + CW / 2}" y="${cy + 1270}" ${FONT} font-size="86" letter-spacing="4">${track.label}</text>`;
-    const number = (cx, cy) => car ? `<text x="${cx + CW / 2}" y="${cy + 860}" ${FONT} font-size="360">#${car}</text>` : "";
-    const body = outline(0, 0) + number(CW, 0) + number(0, CH) + outline(CW, CH);
-    const url = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${2 * CW} ${2 * CH}">${body}</svg>`)}")`;
+    const body = `<g transform="translate(${CW / 2 - track.w * k / 2} 130) scale(${k})"><path d="${track.path}" fill="none" stroke="#000" stroke-width="${22 / k}" stroke-linejoin="round"/></g>`
+      + `<text x="${CW / 2}" y="1270" ${FONT} font-size="86" letter-spacing="4">${track.label}</text>`;
+    const url = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CW} ${CH}">${body}</svg>`)}")`;
     for (const p of ["maskImage", "webkitMaskImage"]) bg.style[p] = url;
   }
-  // Called by theme.js whenever the selected car changes.
-  window.setTrackCar = c => { if (c && c !== car) { car = c; paint(); } };
-  try { car = localStorage.getItem("car"); } catch (e) {}
   document.addEventListener("DOMContentLoaded", async () => {
     track = await current();
     if (!track) return;

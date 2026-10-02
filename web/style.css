@@ -444,7 +444,7 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 @media (max-width: 640px) { .rclist li { grid-template-columns: 54px 1fr; } .rclist .rctag { grid-column: 2; } .rclist .rctext { grid-column: 1 / -1; } }
 /* current track outline behind everything: small staggered tiles in the livery colour */
 .track-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--accent); opacity: .07;
-  -webkit-mask-size: 300px 608px; mask-size: 300px 608px;
+  -webkit-mask-size: 150px 304px; mask-size: 150px 304px; -webkit-mask-position: 0 0; mask-position: 0 0;
   -webkit-mask-repeat: repeat; mask-repeat: repeat; }
 .footlinks .osm { color: var(--text-3); font-size: 12px; }
 .footlinks .osm a { color: var(--text-3); }
