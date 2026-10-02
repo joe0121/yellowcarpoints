@@ -163,10 +163,10 @@ table.timing td.team div { white-space: nowrap; }
 .tabs a[aria-current] { color: var(--text); border-color: var(--text-3); background: var(--surface); }
 
 /* strategy page */
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 14px 0 4px; }
-.kpi { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--bg); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 12px; margin: 14px 0 4px; }
+.kpi { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); min-width: 0; }
 .kpi .k { font-size: 12px; color: var(--text-3); }
-.kpi .v { font-family: Oswald, Impact, sans-serif; font-weight: 600; font-size: 30px; line-height: 1.15; }
+.kpi .v { font-family: Oswald, Impact, sans-serif; font-weight: 600; font-size: 26px; line-height: 1.15; white-space: nowrap; }
 .kpi .v small { font: 500 13px Inter, sans-serif; color: var(--text-3); margin-left: 4px; }
 .kpi .s { font-size: 12px; color: var(--text-2); margin-top: 2px; }
 .ebar { height: 8px; border-radius: 4px; background: var(--grid); margin-top: 6px; overflow: hidden; }
