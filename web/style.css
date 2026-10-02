@@ -418,3 +418,6 @@ dialog.acct .chip.danger { border-color: var(--critical); color: var(--critical)
 dialog.acct .acct-msg { min-height: 1.2em; color: var(--text); }
 dialog.acct .acct-msg.bad { color: var(--critical); }
 dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
+/* live position on the picker buttons (Race tab) */
+.picker a .ppos { font: 500 12px Inter, sans-serif; margin-left: 5px; opacity: .8; }
+.picker a .pit { margin-left: 5px; font: 700 10px Inter, sans-serif; letter-spacing: .02em; padding: 1px 5px; line-height: 1.4; vertical-align: 2px; color: #111; }

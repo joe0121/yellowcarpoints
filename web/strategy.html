@@ -28,7 +28,6 @@
   <section class="sessionbar live" id="status-card">
     <div class="live-head" id="head"></div>
     <div class="titleline" id="titleline"></div>
-    <nav class="vettes" id="vettes" hidden aria-label="Corvettes in this session"></nav>
   </section>
 
 
@@ -192,7 +191,8 @@ function render() {
   const groups = {};
   [...standings.cars, ...raceCars()].forEach(c => (groups[c.class] ||= []).push(c.car));
   $("picker").innerHTML = `<span class="pick-title">Pratt Miller Motorsports cars</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
-    + cars.map(c => `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}</a>`).join("") + `</div>`).join("");
+    + cars.map(c => { const r = liveRow(c);   // live running position (and PIT) on each car's button
+        return `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}${r ? `<small class="ppos">P${r.class_pos}</small>${r.in_pit ? `<span class="pit">PIT</span>` : ""}` : ""}</a>`; }).join("") + `</div>`).join("");
   $("to-standings").href = "./#" + home;
   const clsName = CLASS_NAMES[sel.class] || sel.class;
   document.title = `Race · #${sel.car}`;
@@ -214,7 +214,7 @@ function render() {
     $("kpi-note").textContent = "Strategy data is collected during WeatherTech sessions. It will appear here once the next one starts.";
     ["gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
     ["ours-card", "feed-card", "timing-card", "drivers-card", "builder-card"].forEach(id => $(id).hidden = true);
-    $("titleline").innerHTML = ""; $("vettes").hidden = true;
+    $("titleline").innerHTML = "";
     $("board").innerHTML = "";
     $("timing").innerHTML = ""; $("lg-laps2").innerHTML = ""; $("ch-laps2").querySelector("svg")?.remove();
     return;
@@ -243,7 +243,6 @@ function render() {
   renderAddCar(cmpCars, rows);
   ["ours-card", "feed-card", "timing-card"].forEach(id => $(id).hidden = false);
   renderTitleLine(sel, lc, fc);
-  renderVettes(sel);
   $("ours-title").textContent = `Our cars · ${clsName}`;
   renderOurs(cmpCars, rows, strat);
   renderFeed(sel, cmpCars, rows, lapsCls, fc);
@@ -674,15 +673,11 @@ function renderTitleLine(sel, lc, fc) {
   $("titleline").innerHTML = text ? `#${esc(sel.car)} · ${text}.${link}` : "";
 }
 
-// Every Corvette in the session, by class, one click to switch to it.
-function renderVettes(sel) {
-  const parts = Object.entries(live?.classes || {}).map(([cls, c]) => {
-    const vs = c.cars.filter(r => /corvette/i.test(r.vehicle || ""));
-    return vs.length ? `<span class="vcls">${esc(CLASS_NAMES[cls] || cls)}</span>` + vs.map(r =>
-      `<a href="#${esc(r.car)}"${r.car === sel.car ? ' aria-current="true"' : ""}>#${esc(r.car)} <b>P${r.class_pos}</b>${r.in_pit ? ` <span class="pit">PIT</span>` : ""}</a>`).join("") : "";
-  }).filter(Boolean);
-  $("vettes").innerHTML = parts.length ? `<span class="dim">Corvettes</span> ` + parts.join("") : "";
-  $("vettes").hidden = !parts.length;
+// A car's row in the current session's live timing (any tracked class), if it's running.
+function liveRow(car) {
+  if (!live || Date.now() - new Date(live.updated) > 6 * 3600e3) return null;
+  for (const c of Object.values(live.classes || {})) { const r = c.cars.find(x => x.car === car); if (r) return r; }
+  return null;
 }
 
 // Our cars: one row each for the selected car and the cars to watch.
