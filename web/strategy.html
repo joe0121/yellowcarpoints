@@ -52,7 +52,7 @@
     <ul class="feed" id="feed"></ul>
   </section>
   <section class="card" id="rc-card" hidden style="margin-bottom:16px">
-    <div class="pace-head"><h2 id="rc-title">Race control</h2><span class="bseg" id="rc-filter" role="group" aria-label="Which messages"></span></div>
+    <div class="pace-head"><h2 id="rc-title">Race control</h2><a class="golink rc-live" href="https://livetiming.alkamelsystems.com/IMSA" target="_blank" rel="noopener" title="Al Kamel's official live timing, RC tab">Live on Al Kamel ↗</a><span class="bseg" id="rc-filter" role="group" aria-label="Which messages"></span></div>
     <p class="live-sub" id="rc-note" hidden></p>
     <ul class="rclist" id="rc-list"></ul>
     <button class="linkbtn" id="rc-more" type="button" hidden></button>
@@ -867,7 +867,7 @@ function renderRaceControl(sel, cars) {
   $("rc-more").textContent = all ? "Show the latest 25" : `Show all ${msgs.length}`;
   $("rc-more").onclick = () => { store.set("rcAll", all ? "" : "1"); renderRaceControl(sel, cars); };
   $("rc-foot").textContent = `Official race control log (IMSA via Al Kamel), ${rcForSession() ? "this session" : `from ${rcData.session || "the last session"}`}`
-    + `. It's published after each session and about hourly during long races, so it trails live timing. Times are from the session start.`;
+    + `. It's published after each session and about hourly during long races, so it trails live timing; for live messages, use "Live on Al Kamel" (the RC tab on their timing page). Times are from the session start.`;
 }
 
 // --- Track map: where each car is on the outline. Cars with IMSA telemetry (GTD PRO / GTD) are placed

@@ -460,3 +460,4 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .trackmap .sflbl { font: 700 34px Inter, sans-serif; fill: var(--text-3); }
 .trackmap .mapdot { fill: var(--text-3); opacity: .75; }
 .trackmap .maplbl { font: 700 38px Inter, sans-serif; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 8px; }
+.rc-live { font-size: 12px; margin-left: auto; }
