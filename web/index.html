@@ -340,6 +340,7 @@ function renderTitle(d) {
   let head, sub = "", lines = [], more = "";
   const second = st.find(s => s.car !== car);
   const others = st.filter(s => s.car !== car);
+  const enemy = window.publicEnemy?.({ car, class: d.class }, { standings, entries, config });
   // Every starter scores, so the worst case for a car is last place in the class, not zero.
   const fieldN = (lc ? lc.cars.length : Object.values(entries?.cars || {}).filter(e => e.class === d.class).length) || st.length;
   const lastPts = racePts(fieldN);
@@ -417,7 +418,7 @@ function renderTitle(d) {
       let safe = null, winVs = null;
       for (let rf = 1; rf <= maxFinish; rf++) { const n = need(r, rf); if (n != null && n >= maxFinish) { safe = rf; break; } }
       for (let rf = 2; rf <= maxFinish; rf++) if (ok(myTot(1) - rTot(r, rf))) { winVs = rf; break; }
-      const who = `<b>#${esc(r.car)}</b> <span class="dim">${fmt(r.points)} pts${running[r.car] ? `, running P${running[r.car].class_pos}` : ""}</span>: `;
+      const who = `<b>#${esc(r.car)}</b>${r.car === enemy ? " " + window.enemyTag : ""} <span class="dim">${fmt(r.points)} pts${running[r.car] ? `, running P${running[r.car].class_pos}` : ""}</span>: `;
       let text;
       if (safe === 1) text = mode === "survive" ? `can't knock #${esc(car)} out` : `#${esc(car)} stays ahead whatever happens`;
       else {

@@ -469,3 +469,9 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .picker .pick-any select { font: 600 13px Inter, sans-serif; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; max-width: min(360px, 90vw); }
 .picker .pick-any.active select { border-color: var(--accent); background: var(--row-hl); }
 .tagline { margin: 2px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); }
+/* friendly rivalry */
+.enemy { font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--critical); white-space: nowrap; }
+.snark { color: var(--text-3); }
+.lookaway { margin: 2px 0 0; font-size: 13px; color: var(--text-2); }
+.picker .allow { margin: 4px 0 0; font-size: 12px; color: var(--text-3); }
+.picker .allow .linkbtn { margin: 0 0 0 6px; padding: 0; font-size: 12px; }

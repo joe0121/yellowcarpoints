@@ -254,6 +254,7 @@ function render() {
     <span class="flag" style="--f:${flagColor}">${esc(live.flag)}</span>
     <span class="ttg">${running && !live.finished ? esc((live.remaining || "").replace(/^00:/, "")) + " to go · " : ""}telemetry ${tel.connected ? "connected" : "offline"}</span>`;
 
+  enemyCar = window.publicEnemy?.(sel, { standings, entries, config }) || null;
   const cmpCars = comparisonCars(sel, rows, fc);
   renderAddCar(cmpCars, rows);
   ["ours-card", "feed-card", "timing-card"].forEach(id => $(id).hidden = false);
@@ -569,7 +570,7 @@ function renderWatch(sel, cars, rows, isRace, hasTitle = true) {
   const picks = cars.slice(1);
   if (!picks.length) { $("watch").hidden = true; return; }
   $("watch").innerHTML = `<b>Cars to watch</b> · `
-    + picks.map(c => `<span class="sw">${swatchOf(c.style)}<b>#${esc(c.car)}</b> ${why[c.role] || esc(c.role)}</span>`).join(" · ")
+    + picks.map(c => `<span class="sw">${swatchOf(c.style)}<b>#${esc(c.car)}</b> ${why[c.role] || esc(c.role)}${c.car === enemyCar ? " " + window.enemyTag : ""}</span>`).join(" · ")
     + `<br><span class="dim">Picked automatically and updated as the session changes: the class leader (or the car behind when #${esc(sel.car)} leads)`
     + (!hasTitle ? "" : isRace ? ` and the car closest to #${esc(sel.car)} in the championship` : `; the title rival joins in the race`)
     + `. Use "Add a car" to watch others.</span>`;
@@ -719,7 +720,7 @@ function renderOurs(cars, rows, strat) {
       const now = [r.in_pit ? `<span class="pit">PIT</span>` : "", r.owes_stop ? `<span class="owes" title="Still owes a stop in this pit cycle">OWES STOP</span>` : "",
         race && r.net_pos && r.net_pos !== r.class_pos ? `<span class="dim">P${r.net_pos} after stops</span>` : "", `<span class="dn">${esc(r.driver)}</span>`].filter(Boolean).join(" ");
       return `<tr class="${c.role === "selected" ? "tracked" : ""}" style="--c:${c.style.color}">
-        <td class="l who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> <small class="dim role">${esc(c.role)}</small>${r.in_pit ? ` <span class="pit m-only">PIT</span>` : ""}</td>
+        <td class="l who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> <small class="dim role">${esc(c.role)}</small>${c.car === enemyCar ? " " + window.enemyTag : ""}${r.in_pit ? ` <span class="pit m-only">PIT</span>` : ""}</td>
         <td class="total">P${r.class_pos}</td>
         <td>${up ? `${diff(r, up) === "–" ? "–" : diff(r, up).replace(/^-/, "")} <span class="dim">#${esc(up.car)}</span>` : "—"}</td>
         <td>${down ? `${diff(down, r) === "–" ? "–" : diff(down, r).replace(/^-/, "")} <span class="dim">#${esc(down.car)}</span>` : "—"}</td>
@@ -745,7 +746,7 @@ function renderFeed(sel, cars, rows, lapsCls, fc) {
     ev.forEach((e, i) => {
       if (e[1] === "s") {
         const t = tel.find(s => Math.abs(s.lap - e[0]) <= 1), dc = drv.get(e[0]) || drv.get(e[0] + 1);
-        items.push({ lap: e[0], i, text: `${tag(c.car)} pitted <span class="dim">(stop ${e[2]})</span>`
+        items.push({ lap: e[0], i, text: `${tag(c.car)} pitted <span class="dim">(stop ${e[2]})</span>${friend(c.car) ? "" : ` <i class="snark">${window.snark(c.car + "/" + e[2])}</i>`}`
           + (t ? ` · ${Math.round(t.lane)}s in the lane · ${[t.fuel ? `${Math.round(t.fuel)}s fuel` : "no fuel", t.tyres ? "tyres" : null].filter(Boolean).join(" · ")}` : "")
           + (dc ? ` · <b>${last(dc[2])} → ${last(dc[3])}</b>` : "") });
       } else if (e[1] === "d" && !ev.some(s => s[1] === "s" && (s[0] === e[0] || s[0] === e[0] - 1))) {
@@ -1027,7 +1028,8 @@ function renderBuilder(sel, rows, lapsCls, watch, clsName) {
   $("builder-title").textContent = `Build a chart · ${clsName}`;
 }
 
-let fullTiming = !!store.get("fullTiming"), bandsNow = [];
+let fullTiming = !!store.get("fullTiming"), bandsNow = [], enemyCar = null;
+const friend = car => window.isFriend?.(car, { config, entries }) ?? true;
 // The detail section remembers whether it was open, and redraws its charts at full width when opened.
 $("deep").open = store.get("deep") === "1";
 $("deep").addEventListener("toggle", () => { store.set("deep", $("deep").open ? "1" : ""); if ($("deep").open) render(); });

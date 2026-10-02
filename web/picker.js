@@ -22,6 +22,48 @@
     const followed = data.standings?.cars || [];
     return followed.find(c => c.car === want) || all.get(want) || followed[0];
   };
+  // --- friendly rivalry -------------------------------------------------------------------------
+  // Friends: the cars we follow (Pratt Miller, Cadillac, AO Racing) and any other Corvette or Cadillac.
+  window.isFriend = (car, data) => {
+    if ((data.config?.groups || []).some(g => g.cars.includes(car))) return true;
+    return /corvette|cadillac/i.test(data.entries?.cars?.[car]?.vehicle || "");
+  };
+  // "Porsche", "BMW", "Aston Martin"... (LMP2 cars are all ORECAs, so the team name there).
+  window.makeOf = (car, data) => {
+    const e = data.entries?.cars?.[car], v = e?.vehicle || "";
+    if (!v || /^oreca/i.test(v)) return e?.team || `#${car}`;
+    return /^aston/i.test(v) ? "Aston Martin" : v.split(" ")[0];
+  };
+  // Public enemy #1: the rival (not a friend) closest to our car in the championship.
+  window.publicEnemy = (sel, data) => {
+    const st = data.standings?.classes?.[sel.class]?.standings || [], me = st.find(s => s.car === sel.car);
+    if (!me) return null;
+    const rivals = st.filter(s => s.car !== sel.car && !window.isFriend(s.car, data));
+    rivals.sort((a, b) => Math.abs(a.points - me.points) - Math.abs(b.points - me.points));
+    return rivals[0]?.car || null;
+  };
+  window.enemyTag = '<span class="enemy" title="Public enemy #1: the closest rival that isn\'t one of ours">🦹 Public enemy #1</span>';
+  // Snarky notes for rival pit stops (picked per car and stop, so they don't change on refresh).
+  const SNARK = ["take your time", "no rush", "lovely day for it", "enjoying the view?", "scenic route", "might as well grab lunch", "bold strategy", "we'll wait"];
+  window.snark = key => SNARK[[...String(key)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % SNARK.length];
+  // A short "booo" made with the browser's audio (no sound file). Only on a deliberate pick; mutable.
+  const muted = () => { try { return localStorage.getItem("booOff") === "1"; } catch (e) { return false; } };
+  window.boo = () => {
+    if (muted()) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)(), t = ctx.currentTime;
+      const out = ctx.createGain(); out.gain.setValueAtTime(0.0001, t); out.gain.exponentialRampToValueAtTime(0.18, t + 0.12);
+      out.gain.setValueAtTime(0.18, t + 0.9); out.gain.exponentialRampToValueAtTime(0.0001, t + 1.4); out.connect(ctx.destination);
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900; lp.connect(out);
+      for (const [f, d] of [[180, 0], [184, 7], [176, -7]]) {   // a small crowd of voices
+        const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 0.72, t + 1.35);
+        o.detune.value = d; const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.value = 5.5; vg.gain.value = 4;
+        vib.connect(vg); vg.connect(o.frequency); o.connect(lp); o.start(t); vib.start(t); o.stop(t + 1.45); vib.stop(t + 1.45);
+      }
+      setTimeout(() => ctx.close(), 1800);
+    } catch (e) {}
+  };
+
   // badge(car) -> extra HTML on a button (the Race tab shows live position / PIT).
   window.buildPicker = (el, sel, data, badge = () => "") => {
     const followed = new Map((data.standings?.cars || []).map(c => [c.car, c.class]));
@@ -36,15 +78,34 @@
       return cls.length ? `<div class="pick-sec"><span class="pick-title">${esc(g.name)}</span><div class="pick-row">`
         + cls.map(k => `<div><span>${NAMES[k]}</span>${byClass[k].map(button).join("")}</div>`).join("") + `</div></div>` : "";
     };
-    // Every car, grouped by class, in championship order.
+    // Every car: ours first, then everyone else by class, in championship order.
     const all = [...window.allCars(data).values()];
-    const opts = CLASS_ORDER.filter(k => all.some(c => c.class === k)).map(k => `<optgroup label="${NAMES[k]}">`
-      + all.filter(c => c.class === k).sort((a, b) => (a.pos ?? 99) - (b.pos ?? 99) || a.car.localeCompare(b.car, undefined, { numeric: true }))
-        .map(c => `<option value="${esc(c.car)}"${c.car === sel.car ? " selected" : ""}>#${esc(c.car)} ${esc(c.team || "")}${c.pos ? ` · P${c.pos}` : ""}</option>`).join("") + `</optgroup>`).join("");
-    const mine = !followed.has(sel.car);
+    const order = (a, b) => (a.pos ?? 99) - (b.pos ?? 99) || a.car.localeCompare(b.car, undefined, { numeric: true });
+    const opt = c => `<option value="${esc(c.car)}"${c.car === sel.car ? " selected" : ""}>#${esc(c.car)} ${esc(c.team || "")}${c.pos ? ` · P${c.pos}` : ""}</option>`;
+    const friends = all.filter(c => window.isFriend(c.car, data));
+    const opts = `<optgroup label="Ours">${CLASS_ORDER.flatMap(k => friends.filter(c => c.class === k).sort(order)).map(opt).join("")}</optgroup>`
+      + CLASS_ORDER.filter(k => all.some(c => c.class === k && !window.isFriend(c.car, data))).map(k =>
+        `<optgroup label="${NAMES[k]}: everyone else (if you must)">${all.filter(c => c.class === k && !window.isFriend(c.car, data)).sort(order).map(opt).join("")}</optgroup>`).join("");
+    const mine = !followed.has(sel.car), rival = !window.isFriend(sel.car, data);
+    // Look-away banner: a rival leading our car's class (live during a session, else the championship).
+    const lc = data.live?.classes?.[sel.class], fresh = data.live && !data.live.finished && Date.now() - new Date(data.live.updated) < 30 * 60e3;
+    const leader = fresh && lc?.cars?.[0] ? lc.cars[0].car : data.standings?.classes?.[sel.class]?.standings?.[0]?.car;
+    const look = leader && !window.isFriend(leader, data)
+      ? `<p class="lookaway">🙈 ${fresh && lc ? `A ${esc(window.makeOf(leader, data))} is leading ${NAMES[sel.class]}` : `A ${esc(window.makeOf(leader, data))} leads the ${NAMES[sel.class]} championship`}. We're choosing to look away.</p>` : "";
     el.innerHTML = groups.map(section).join("")
       + `<div class="pick-sec pick-any${mine ? " active" : ""}"><span class="pick-title">This is my car</span>`
-      + `<select aria-label="Pick any car as my car"><option value="">Any car…</option>${opts}</select></div>`;
-    el.querySelector("select").onchange = e => { if (e.target.value) location.hash = e.target.value; };
+      + `<select aria-label="Pick any car as my car"><option value="">Any car…</option>${opts}</select>`
+      + (rival ? `<p class="allow">Not a Corvette, but we'll allow it. <button type="button" class="linkbtn" data-boo>${muted() ? "Unmute boos" : "Mute boos"}</button></p>` : "")
+      + `</div>${look}`;
+    el.querySelector("select").onchange = e => {
+      const c = e.target.value;
+      if (!c) return;
+      if (!window.isFriend(c, data)) window.boo();
+      location.hash = c;
+    };
+    el.querySelector("[data-boo]")?.addEventListener("click", e => {
+      try { localStorage.setItem("booOff", muted() ? "" : "1"); } catch (err) {}
+      e.target.textContent = muted() ? "Unmute boos" : "Mute boos";
+    });
   };
 })();
