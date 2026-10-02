@@ -34,6 +34,18 @@
     <div class="qnote" id="qnote" hidden></div>
   </section>
   <section class="pitwall" id="pw" hidden aria-label="Pit wall: the selected car at a glance" aria-live="polite"></section>
+  <div class="sv-wide">
+  <section class="card" id="board-card" style="margin-bottom:16px">
+    <h2 id="board-title">Class strategy board</h2>
+    <div class="scroll"><table id="board"></table></div>
+  </section>
+  <section class="card" id="sg-card" hidden style="margin-bottom:16px">
+    <h2 id="sg-title">Race strategy graph</h2>
+    <div class="legend" id="sg-legend"></div>
+    <div class="chart" id="sg-chart"></div>
+    <p class="note" id="sg-note"></p>
+  </section>
+  </div>
 
 
 
@@ -158,10 +170,6 @@
         <div class="chart" id="ch-lead"><div class="tip"></div></div>
       </section>
     </div>
-    <section class="card" style="margin-top:16px">
-      <h2 id="board-title">Class strategy board</h2>
-      <div class="scroll"><table id="board"></table></div>
-    </section>
   </details>
   <footer id="foot"></footer>
   <nav class="footlinks" aria-label="About this site">
@@ -187,20 +195,20 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
 
-let standings, live, laps, schedule, entries, sectorData, config, watchData, rcData;
+let standings, live, laps, schedule, entries, sectorData, config, watchData, rcData, cauData;
 
 // Live timing every 10 s, lap history every 30 s, everything else every 5 minutes; the page
 // only redraws when something changed (unchanged files come back as cheap 304s).
 const loadedAt = { laps: 0, slow: 0 };
 async function load() {
   const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
-  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
+  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config", "insights"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
   if (got.live?.updated !== live?.updated) liveFetchedAt = Date.now();
   live = got.live;
   if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; loadedAt.laps = now; }
-  if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config } = got); loadedAt.slow = now; }
+  if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config, insights: cauData } = got); loadedAt.slow = now; }
   if (changed) render();
 }
 addEventListener("hashchange", render);
@@ -294,7 +302,7 @@ function render() {
     $("kpis").innerHTML = `<p class="empty">No WeatherTech session recorded yet.</p>`;
     $("kpi-note").textContent = "Strategy data is collected during WeatherTech sessions. It will appear here once the next one starts.";
     ["gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
-    ["ours-card", "feed-card", "timing-card", "drivers-card", "builder-card", "pn-card", "fin-card", "pw"].forEach(id => $(id).hidden = true);
+    ["ours-card", "feed-card", "timing-card", "drivers-card", "builder-card", "pn-card", "fin-card", "pw", "sg-card"].forEach(id => $(id).hidden = true);
     $("titleline").innerHTML = "";
     $("board").innerHTML = "";
     $("timing").innerHTML = ""; $("lg-laps2").innerHTML = ""; $("ch-laps2").querySelector("svg")?.remove();
@@ -347,6 +355,7 @@ function render() {
   renderPitWall(sel, lc, lapsCls);
   renderPitNow(sel, lc, lapsCls, clsName);
   renderFinish(sel, lc, lapsCls, cmpCars, clsName);
+  if (raceMode === "strategy" && !$("sg-card").classList.contains("collapsed")) renderStratGraph(sel, lc, lapsCls, cmpCars, clsName);
   $("title").textContent = `Pit strategy · ${clsName}`;
   renderWatch(sel, cmpCars, rows, live.is_race, !raceOnly);
   if (!me) $("kpis").innerHTML = `<p class="empty">#${esc(sel.car)} isn't in this session.</p>`;

@@ -307,3 +307,127 @@ function renderFinish(sel, lc, lapsCls, cars, clsName) {
   $("fin-note").innerHTML = `${(remaining / 3600).toFixed(1)} h to go. Laps to go at each car's recent pace; tank from IMSA telemetry energy use (measured) or, without telemetry, typical stint lengths (<span class="tag est">est.</span>). `
     + `A yellow stretches a tank (slower laps use less energy), so windows open later than this. The window for a single last stop: stop before it and the last tank can't reach the flag; after it, this tank runs dry.`;
 }
+
+// --- Strategy graph: lap time through the whole race, with what's coming ----------------------------
+// Laps the class winner completed at Petit Le Mans 2018-2025 (Al Kamel time cards; LMP2 leaves out
+// 2019's 201-lap result). The x-axis ends here until the race has run 20 minutes, then at the live
+// projection (leader's laps + time left at the class pace).
+const RACE_LAPS = { "Road Atlanta": { source: "Petit Le Mans 2018–25 average", GTP: 433, LMP2: 430, GTDPRO: 406, GTD: 399 } };
+const WX_SHORT = { rain: "Rain", sun: "Sunset", night: "Dark", cool: "Cooling" };
+
+function rollingTrend(clean, k = 9) {
+  return clean.map((p, i) => [p[0], medianOf(clean.slice(Math.max(0, i - k + 1), i + 1).map(q => q[1]))]).slice(Math.min(3, clean.length));
+}
+
+function renderStratGraph(sel, lc, lapsCls, cars, clsName) {
+  const card = $("sg-card"), el = $("sg-chart");
+  card.hidden = !(live?.is_race && lc);
+  if (card.hidden) return;
+  $("sg-title").textContent = `Race strategy graph · ${clsName}`;
+  const rows = lc.cars, leaderLap = Math.max(0, ...rows.map(r => +r.laps || 0));
+  const pace = pwClassPace(lc, lapsCls), remaining = hmsSecs(live.remaining), elapsed = hmsSecs(live.elapsed);
+  const avg = RACE_LAPS[live.event]?.[sel.class];
+  const projEnd = pace && remaining != null ? leaderLap + remaining / pace : null;
+  const useLive = projEnd && (elapsed ?? 0) >= 1200 || !avg;
+  const xEnd = Math.ceil(useLive ? projEnd ?? leaderLap + 10 : avg);
+  const W = Math.max(320, el.clientWidth || 900), phone = W < 640, H = phone ? 260 : 320;
+  // Phone: from the current lap to two hours of racing ahead. Desktop: the whole race.
+  const x0 = phone ? Math.max(0, leaderLap - 2) : 0;
+  const x1 = phone ? Math.max(x0 + 20, Math.min(xEnd + 2, leaderLap + (pace ? 7200 / pace : 90))) : xEnd + 4;
+  const m = { l: 46, r: phone ? 34 : 70, t: 34, b: 30 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const x = n => m.l + (n - x0) / (x1 - x0) * iw;
+
+  // Per car: laps, clean laps, trend, current pace, projected stops and finish.
+  const series = cars.map(c => {
+    const d = lapsCls[c.car], r = rows.find(q => q.car === c.car);
+    if (!d || !r) return null;
+    const clean = pwClean(d), trend = rollingTrend(clean), now = trend.at(-1)?.[1] || pwPace(lc, lapsCls, c.car);
+    const lap = +r.laps || 0, finish = now && remaining != null ? lap + remaining / now : null;
+    const e = r.energy, stops = [];
+    let next = e?.next_stop_lap ?? (r.stint?.laps_to_typical != null ? lap + Math.max(0, r.stint.laps_to_typical) : null);
+    const every = e?.full_tank_laps ? Math.floor(e.full_tank_laps) : r.stint?.typical;
+    while (next && finish && next < finish - 1 && every && stops.length < 20) { stops.push(next); next += every; }
+    return { ...c, d, r, clean, trend, now, lap, finish, stops, estStops: !e?.full_tank_laps };
+  }).filter(Boolean);
+  const vis = series.flatMap(s => s.clean.filter(([n]) => n >= x0 && n <= x1).map(q => q[1]));
+  if (!vis.length) { el.innerHTML = `<p class="empty">The graph fills in after a few clean laps.</p>`; $("sg-legend").innerHTML = ""; return; }
+  const sorted = [...vis].sort((a, b) => a - b);
+  let lo = sorted[0] - 0.4, hi = sorted[Math.floor(0.95 * (sorted.length - 1))] + 0.8;
+  if (hi - lo < 3) { const mid = (hi + lo) / 2; lo = mid - 1.5; hi = mid + 1.5; }
+  const y = v => m.t + (1 - (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * ih;
+  let g = "";
+
+  // Background: past caution likelihood ahead of the leader, this race's yellows behind it.
+  const ins = cauData && cauData.track === live.event ? cauData : null;
+  if (ins && avg) {
+    const overall = medianOf(ins.years.map(yy => yy.laps)), scale = avg / overall, B = 10;
+    const nb = Math.ceil(overall / B);
+    for (let i = 0; i < nb; i++) {
+      const often = ins.years.filter(yy => yy.cautions.some(c => c.lap < (i + 1) * B && c.end_lap > i * B)).length / ins.years.length;
+      const a = Math.max(leaderLap, i * B * scale), b = Math.min(x1, (i + 1) * B * scale);
+      if (often > 0 && b > a && b > x0) g += `<rect x="${x(Math.max(a, x0))}" y="${m.t}" width="${x(b) - x(Math.max(a, x0))}" height="${ih}" fill="var(--flag-yellow)" opacity="${(0.03 + 0.2 * often).toFixed(2)}"><title>Laps ${Math.round(i * B * scale)}–${Math.round((i + 1) * B * scale)}: a caution in ${Math.round(often * ins.years.length)} of ${ins.years.length} past races</title></rect>`;
+    }
+  }
+  for (const [a, b, kind] of flagBands(sel.class)) {
+    if (b < x0 || a > x1) continue;
+    g += `<rect x="${x(Math.max(a, x0))}" y="${m.t}" width="${Math.max(2, x(Math.min(b, x1)) - x(Math.max(a, x0)))}" height="${ih}" fill="${kind === "red" ? "var(--critical)" : "var(--flag-yellow)"}" opacity=".45"><title>${kind === "red" ? "Red flag" : "Full-course yellow"}, laps ${a}–${b}</title></rect>`;
+  }
+  // Grid: every 10 laps (labels every 50 on desktop, every 10 on a phone); every second on the y-axis.
+  for (let n = Math.ceil(x0 / 10) * 10; n <= x1; n += 10) {
+    g += `<line x1="${x(n)}" x2="${x(n)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--grid)"${n % 50 ? ' stroke-dasharray="2 4"' : ""}/>`;
+    if (phone ? true : n % 50 === 0) g += `<text x="${x(n)}" y="${H - 10}" text-anchor="middle">${n}</text>`;
+  }
+  const step = hi - lo > 8 ? 2 : 1;
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) g += `<line x1="${m.l}" x2="${m.l + iw}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${lapTime(v)}</text>`;
+  // Weather events at their estimated laps.
+  const lapAt = lapEstimator(rows, lc);
+  if (lapAt) for (const ev of wxEvents()) {
+    const n = lapAt(ev.ts);
+    if (n == null || n < x0 || n > x1) continue;
+    g += `<line x1="${x(n)}" x2="${x(n)}" y1="${m.t - 4}" y2="${m.t + ih}" stroke="var(--text-3)" stroke-dasharray="1 3"/><text x="${x(n)}" y="${m.t - 8}" text-anchor="middle" class="sgwx"><title>${esc(ev.text)}${ev.sub ? " · " + esc(ev.sub) : ""}</title>${WX_SHORT[ev.kind] || esc(ev.text.split(" ")[0])}</text>`;
+  }
+  // Now, and the finish.
+  g += `<line x1="${x(leaderLap)}" x2="${x(leaderLap)}" y1="${m.t - 4}" y2="${m.t + ih}" stroke="var(--text)" stroke-width="1.5"/><text x="${x(leaderLap) + 4}" y="${m.t + 12}" class="lbl">Now L${leaderLap}</text>`;
+  if (xEnd >= x0 && xEnd <= x1) g += `<line x1="${x(xEnd)}" x2="${x(xEnd)}" y1="${m.t - 4}" y2="${m.t + ih}" stroke="var(--text)" stroke-width="2" stroke-dasharray="6 3"/><text x="${x(xEnd) - 4}" y="${m.t + 12}" text-anchor="end" class="lbl">🏁 ~L${xEnd}</text>`;
+  // My car's window for a single last stop.
+  const me = series.find(s => s.car === sel.car), fin = me && pwFinish(me.r, lc, lapsCls, remaining);
+  if (fin?.stops === 1 && fin.lastTo >= fin.lastFrom) g += `<rect x="${x(Math.max(x0, fin.lastFrom))}" y="${m.t + ih - 10}" width="${Math.max(3, x(Math.min(x1, fin.lastTo)) - x(Math.max(x0, fin.lastFrom)))}" height="10" fill="var(--accent)" opacity=".5"><title>#${esc(sel.car)}'s window for its last stop: L${fin.lastFrom}–L${fin.lastTo}</title></rect>`;
+  // Cars: lap dots, trend, projection at the current pace, stops (past filled, projected hollow), finish.
+  for (const s of series) {
+    const col = s.style.color, mine = s.car === sel.car;
+    const pastPit = new Set((s.d.stops || []).flatMap(q => [q + 1, q + 2]));
+    for (const [n, t] of s.d.laps) {
+      if (n < x0 || n > x1 || n < 2) continue;
+      if (t > hi) { if (!pastPit.has(n)) g += `<path d="M${x(n) - 3} ${m.t + 2}L${x(n) + 3} ${m.t + 2}L${x(n)} ${m.t + 7}Z" fill="${col}" opacity=".5"><title>#${esc(s.car)} L${n}: ${lapTime(t)} (off the scale)</title></path>`; continue; }
+      if (!pastPit.has(n)) g += `<circle cx="${x(n)}" cy="${y(t)}" r="${mine ? 2 : 1.6}" fill="${col}" opacity="${mine ? .55 : .35}"/>`;
+    }
+    const tr = s.trend.filter(([n]) => n >= x0 && n <= x1);
+    if (tr.length > 1) g += `<path d="M${tr.map(([n, t]) => `${x(n)} ${y(t)}`).join("L")}" fill="none" stroke="${col}" stroke-width="${mine ? 2.5 : 2}" stroke-dasharray="${s.style.dash}"/>`;
+    if (s.now && s.finish) {
+      const a = Math.max(s.lap, x0), b = Math.min(s.finish, x1);
+      if (b > a) g += `<line x1="${x(a)}" x2="${x(b)}" y1="${y(s.now)}" y2="${y(s.now)}" stroke="${col}" stroke-width="${mine ? 2 : 1.5}" stroke-dasharray="3 4" opacity=".8"/>`;
+      if (s.finish <= x1) g += `<rect x="${x(s.finish) - 3.5}" y="${y(s.now) - 3.5}" width="7" height="7" fill="${col}" stroke="var(--surface)" stroke-width="1.2"><title>#${esc(s.car)} finishes on about lap ${Math.floor(s.finish)} at ${lapTime(s.now)}</title></rect>`;
+    }
+    const lane = m.t + ih - 9;   // stops sit along the bottom edge
+    for (const q of s.d.stops || []) if (q >= x0 && q <= x1) g += `<path d="M${x(q)} ${lane}l4 7h-8z" fill="${col}"><title>#${esc(s.car)} stopped (L${q})</title></path>`;
+    for (const q of s.stops) if (q >= x0 && q <= x1) g += `<path d="M${x(q)} ${lane}l4 7h-8z" fill="var(--surface)" stroke="${col}" stroke-width="1.5"><title>#${esc(s.car)} projected stop ~L${q}${s.estStops ? " (estimated from stint lengths)" : ""}</title></path>`;
+  }
+  el.innerHTML = `<div class="tip"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Lap times through the race with projected stops and finish">${g}<rect class="sghit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`;
+  // Hover: every plotted car's lap time on that lap (or its projected pace ahead of now).
+  const svg = el.querySelector("svg"), tip = el.querySelector(".tip");
+  svg.querySelector(".sghit").onmousemove = ev => {
+    const box = svg.getBoundingClientRect(), px = (ev.clientX - box.left) * W / box.width, n = Math.round(x0 + (px - m.l) / iw * (x1 - x0));
+    const lines = series.map(s => { const t = new Map(s.d.laps).get(n);
+      return `<span style="color:${s.style.color}">■</span> #${esc(s.car)} ${t ? lapTime(t) : n > s.lap && s.now && (!s.finish || n <= s.finish) ? `~${lapTime(s.now)} <span class="dim">projected</span>` : "–"}${s.stops.includes(n) ? " · projected stop" : ""}`; });
+    tip.innerHTML = `<b>Lap ${n}</b><br>${lines.join("<br>")}`;
+    tip.style.display = "block";
+    tip.style.left = `${Math.min(ev.clientX - box.left + 12, box.width - 180)}px`;
+    tip.style.top = `${ev.clientY - box.top + 12}px`;
+  };
+  svg.querySelector(".sghit").onmouseleave = () => { tip.style.display = "none"; };
+  $("sg-legend").innerHTML = series.map(s => `<span>${swatchOf(s.style)}#${esc(s.car)} <span class="dim">${esc(s.role)}</span></span>`).join("")
+    + `<span class="dim">dots: laps · line: trend (median of the last 9 clean laps) · dashed ahead: current pace · ▲ stop, △ projected · ■ finish</span>`;
+  $("sg-note").innerHTML = `${phone ? "From now to two hours ahead. " : ""}Finish at ~L${xEnd}: ${useLive ? "the leader's laps plus the time left at the class pace" : esc(RACE_LAPS[live.event]?.source || "")}. `
+    + `Yellow bands behind "Now" are this race's yellows; ahead of it, the shading is how often past races here had a caution on those laps${ins ? ` (${ins.years[0].year}–${ins.years.at(-1).year})` : ""}. `
+    + `Projected stops from each car's energy use${series.some(s => s.estStops) ? " (or typical stint lengths where there's no telemetry)" : ""}; weather at its estimated lap. Laps off the top of the scale (pit, yellow) are marked along the top.`;
+}

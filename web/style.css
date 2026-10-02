@@ -590,3 +590,6 @@ table.cauheat tr.often td { height: 18px; }
 .modebar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 13px; }
 .race-grid section.card.mode-off { display: none !important; }
 body.mode-fan #pw { display: none !important; }
+body.mode-fan .sv-wide { display: none !important; }
+.sgwx { font-size: 10px; fill: var(--text-2); }
+#sg-chart .tip { min-width: 150px; }
