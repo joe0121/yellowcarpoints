@@ -19,7 +19,7 @@ import uuid
 import websocket
 
 from archive import RECORDER
-from common import CLASSES
+from common import CLASSES, read, write
 
 API = "wzidxebhlbgqpm7kt22wkx2pri"
 HOST = f"{API}.appsync-api.us-east-1.amazonaws.com"
@@ -27,6 +27,8 @@ URL = f"wss://{API}.appsync-realtime-api.us-east-1.amazonaws.com/event/realtime"
 KEY = "da2-zjztqnoq7zfsxjenuhapcprllu"  # public key embedded in imsa.com/telemetry
 CHANNELS = ("/telemetry/message", "/telemetry/session")
 STALE = 300  # reconnect if nothing arrives for this long
+STATE_FILE = "telemetry_state.json"
+STATE_MAX_AGE = 6 * 3600   # don't restore state older than this
 # is_jacked_up's scale isn't documented: count time above this as "on the jacks" (likely a tyre
 # change) and keep the per-stop maximum so the threshold can be checked against recordings.
 JACK_ON = 0.5
@@ -43,6 +45,29 @@ class Telemetry:
         self.thread = None
         self.ws = None
         self.last_data = 0.0
+        self._restore()
+
+    # --- persistence: survive scraper restarts mid-session ------------------------
+
+    def save(self):
+        """Write per-car state (energy by lap, refuels, stops) so a restart doesn't lose it."""
+        with self.lock:
+            if not self.cars:
+                return
+            doc = {"saved": time.time(), "session_key": list(self.session_key) if self.session_key else None,
+                   "session": self.session, "cars": self.cars}
+            text = json.dumps(doc)
+        write(STATE_FILE, json.loads(text))
+
+    def _restore(self):
+        doc = read(STATE_FILE)
+        if not doc or time.time() - doc.get("saved", 0) > STATE_MAX_AGE or not doc.get("session_key"):
+            return
+        # Kept only if the stream reports the same session again (see _handle); otherwise reset there.
+        self.session_key = tuple(doc["session_key"])
+        self.session = doc.get("session")
+        self.cars = doc.get("cars") or {}
+        log.info("telemetry state restored: %d cars, session %s", len(self.cars), self.session_key)
 
     # --- lifecycle -------------------------------------------------------------
 

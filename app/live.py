@@ -601,5 +601,6 @@ def step():
     write("laps.json", laps_out)
     RECORDER.output("laps.json", laps_out)
     write("race_state.json", state)
+    TELEMETRY.save()
     log.info("live: %s %s, %s, %d cars", info.get("E"), name, flag, len(feed))
     return RACE_POLL if is_race else SESSION_POLL
