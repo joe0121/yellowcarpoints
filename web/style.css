@@ -14,6 +14,9 @@
   --good: #0ca30c;
   --critical: #d03b3b;
   --row-hl: #fdf3dc;
+  --on-accent: #111;
+  --flag-yellow: #8a5d00;
+  --livery: linear-gradient(90deg, #eda100 0 33.3%, #111 33.3% 66.7%, #eda100 66.7%);
   /* strategy charts: validated categorical slots (selected car, car ahead, car behind) */
   --s1: #eda100; --s2: #2a78d6; --s3: #1baf7a;
   --s4: #eb6834;   /* championship threat (paired with --s2 for the target) */
@@ -33,6 +36,7 @@
     --series-2: #3987e5;
     --context: #46463f;
     --row-hl: #2a2414;
+    --flag-yellow: #f5c04a;
     --s1: #c98500; --s2: #3987e5; --s3: #199e70; --s4: #d95926;
   }
 }
@@ -41,7 +45,7 @@
   --bg: #111110; --surface: #1a1a19; --line: #2e2e2b; --grid: #262624;
   --text: #ffffff; --text-2: #c3c2b7; --text-3: #8f8e86;
   --accent: #eda100; --accent-ink: #f5c04a; --series-2: #3987e5;
-  --context: #46463f; --row-hl: #2a2414;
+  --context: #46463f; --row-hl: #2a2414; --flag-yellow: #f5c04a;
   --s1: #c98500; --s2: #3987e5; --s3: #199e70; --s4: #d95926;
 }
 * { box-sizing: border-box; }
@@ -128,7 +132,7 @@ footer a { color: inherit; }
 .runner-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .runner-top .num { font-size: 28px; line-height: 1; }
 .runner-top small { color: var(--text-3); font-size: 12px; }
-.pit { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 4px; background: var(--accent); color: #111; }
+.pit { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 4px; background: #eda100; color: #111; }
 .runner dl { display: grid; grid-template-columns: repeat(4, auto); gap: 2px 14px; margin: 8px 0 0; font-size: 12px; justify-content: start; }
 .runner dt { color: var(--text-3); }
 .runner dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 500; }
@@ -137,7 +141,7 @@ footer a { color: inherit; }
 .picker span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin-right: 2px; }
 .picker a { font: 600 15px Oswald, sans-serif; text-decoration: none; color: var(--text-2); border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 3px 12px; }
 .picker a:hover { border-color: var(--text-3); }
-.picker a[aria-current] { background: var(--accent); border-color: var(--accent); color: #111; }
+.picker a[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .stint { margin-top: 10px; font-size: 12px; color: var(--text-2); }
 .bar { position: relative; height: 8px; border-radius: 4px; background: var(--grid); margin: 6px 0 4px; overflow: hidden; }
 .bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--c); border-radius: 4px; }
@@ -251,3 +255,5 @@ details.deep[open] > .charts { margin-top: 16px; }
 .theme button { font: 600 12px Inter, system-ui, sans-serif; color: var(--text-2); background: none; border: 0; border-radius: 99px; padding: 3px 10px; cursor: pointer; }
 .theme button[aria-checked="true"] { background: var(--text); color: var(--bg); }
 .theme button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* livery stripe across the top, in the selected car's colours */
+.livery-band { height: 6px; background: var(--livery); box-shadow: inset 0 -1px 0 rgba(0,0,0,.12); }

@@ -174,6 +174,7 @@ function clean(car) {
 function render() {
   if (!standings?.cars) return;
   const sel = selected(), raceOnly = isRaceOnly(sel.car);
+  window.setLivery?.(sel.car);
   if (!raceOnly) store.set("car", sel.car);
   const home = raceOnly ? (store.get("car") || standings.cars[0].car) : sel.car;
   $("to-race").href = "strategy.html#" + home;
@@ -220,7 +221,7 @@ function render() {
   // --- status line
   const sess = live.session.replace(/^WeatherTech Championship( - )?/, "") || "Session";
   const flag = (live.flag || "").toLowerCase();
-  const flagColor = flag.includes("green") ? "var(--good)" : flag.includes("yellow") || flag.includes("fcy") ? "var(--accent-ink)" : flag.includes("red") ? "var(--critical)" : "var(--text-2)";
+  const flagColor = flag.includes("green") ? "var(--good)" : flag.includes("yellow") || flag.includes("fcy") ? "var(--flag-yellow)" : flag.includes("red") ? "var(--critical)" : "var(--text-2)";
   const tel = live.telemetry || {};
   $("status-card").classList.toggle("done", !running || live.finished);
   $("head").innerHTML = `<span class="pulse">${running && !live.finished ? "LIVE" : live.finished ? "FINISHED" : "LAST SESSION"}</span>

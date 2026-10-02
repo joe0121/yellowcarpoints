@@ -98,6 +98,7 @@ async function load() {
 function renderAll() {
   const sel = selected();
   store.set("car", sel.car);
+  window.setLivery?.(sel.car);
   const groups = {};
   standings.cars.forEach(c => (groups[c.class] ||= []).push(c.car));
   $("picker").innerHTML = Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
@@ -222,7 +223,7 @@ function renderHistory(sel, d) {
 const secsOf = t => { if (!t) return null; let s = 0; for (const p of String(t).split(":")) s = s * 60 + parseFloat(p); return s; };
 
 // --- championship maths (title fight, what the selected car needs, live projection) ---
-const FLAG_COLORS = { green: "var(--good)", yellow: "var(--accent-ink)", fcy: "var(--accent-ink)", red: "var(--critical)" };
+const FLAG_COLORS = { green: "var(--good)", yellow: "var(--flag-yellow)", fcy: "var(--flag-yellow)", red: "var(--critical)" };
 const RACE_POINTS = [350, 320, 300, 280, 260, 250, 240, 230, 220, 210, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
 const racePts = p => p >= 1 && p <= RACE_POINTS.length ? RACE_POINTS[p - 1] : 0;
 const qualiPts = p => Math.floor(racePts(p) / 10);
