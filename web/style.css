@@ -394,3 +394,8 @@ header .meta { text-align: center; }
 .links a:hover { color: var(--accent-ink); text-decoration: underline; }
 .links { column-gap: 26px; }
 @media (max-width: 640px) { .links .lgrp + .lgrp { border-left: 0; padding-left: 0; } .links { gap: 6px 12px; } }
+.links .socials { gap: 4px 16px; }
+.links .socials .lbl { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.links .team { display: inline-flex; align-items: center; gap: 6px; }
+.links a.ico { display: inline-flex; color: var(--text-2); padding: 2px; border-radius: 6px; }
+.links a.ico:hover { color: var(--accent-ink); background: var(--row-hl); text-decoration: none; }
