@@ -118,7 +118,8 @@ Strategy page.
 ## Balance of Performance (BoP)
 
 `app/bop.py` reads IMSA's newest event BoP technical bulletin (found on
-imsa.com/competitors/<year>-technical-bulletins/, checked at most every 3 hours) and parses the GTD /
+imsa.com/competitors/<year>-technical-bulletins/; only checked around a race weekend, from 4 days before
+the first scheduled session to the last session's end, at most every 12 hours) and parses the GTD /
 GTD PRO table: maximum stint energy (MJ) and energy replenishment rate (MJ/s) per make. GTD cars use a
 virtual energy tank refilled at that fixed rate, so a refill takes exactly (energy to add / rate);
 for 2026 that is 40 s for a full tank for every make. The strategy page uses it for the next fill time

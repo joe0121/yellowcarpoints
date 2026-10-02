@@ -5,14 +5,14 @@ refilled at a fixed rate (MJ/s) while the fuel probe is connected. Both are in t
 technical bulletin (a PDF on imsa.com), so a refill's duration is exact: energy to add / rate.
 For 2026 every make's rate works out to a 40 s full refill.
 
-We find the newest "TB-IWSC-<yy>-<n>-<Event>-Event-BoP" bulletin on IMSA's technical bulletins
+Checked only around a race weekend (see refresh()). We find the newest "TB-IWSC-<yy>-<n>-<Event>-Event-BoP" bulletin on IMSA's technical bulletins
 page, read the GTD table, and key each row by the car model so feed vehicle names can be matched.
 """
 
 import io
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pdfplumber
 
@@ -70,8 +70,17 @@ def parse(pdf_bytes):
 def refresh():
     """Update bop.json from the newest event BoP bulletin. Returns True when it changed."""
     old = read("bop.json") or {}
-    if old.get("checked") and datetime.now(timezone.utc).timestamp() - old["checked"] < 3 * 3600:
-        return False   # the bulletins page is checked at most every 3 hours
+    now = datetime.now(timezone.utc)
+    # BoP is set race by race and published ahead of the event: only look around a race weekend
+    # (from 4 days before the first scheduled session to the last session's end), at most every
+    # 12 hours there to catch a revised bulletin, plus once if we have none at all.
+    if old:
+        sessions = (read("schedule.json") or {}).get("sessions", [])
+        starts = [datetime.fromisoformat(x["start"]) for x in sessions]
+        ends = [datetime.fromisoformat(x["end"]) for x in sessions]
+        weekend = bool(starts) and min(starts) - timedelta(days=4) <= now <= max(ends)
+        if not weekend or now.timestamp() - old.get("checked", 0) < 12 * 3600:
+            return False
     year = datetime.now(timezone.utc).year
     html = http.get(BULLETINS.format(year=year), timeout=30).text
     found = sorted(BOP_PDF.findall(html), key=lambda m: (m[3][4:] + m[3][:4], int(m[1])))   # by date, then number
