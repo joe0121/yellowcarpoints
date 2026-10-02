@@ -92,6 +92,10 @@ log: penalties, reviews, decisions, pit lane, flags) for the newest WeatherTech 
 hourly snapshots in endurance races, in the same 5-minute check as the sector times (`racecontrol.json`).
 IMSA's live feeds don't carry race control messages.
 
+`web/track.js` draws the current event's track outline faintly behind the pages, in the selected car's
+livery colour (picked from live timing's event, else the next round). Outlines are generated from
+OpenStreetMap raceway data (credited in the footer, ODbL); only Road Atlanta is in the list so far.
+
 `app/watch.py` reads YouTube's public RSS feed for IMSA's channel (no API key) to find WeatherTech
 session streams for the Race page's Watch card (embedded with YouTube's player, nothing re-hosted), and
 notes which cars IMSA.tv lists with an in-car camera (linked, never embedded: IMSA.tv uses its own
