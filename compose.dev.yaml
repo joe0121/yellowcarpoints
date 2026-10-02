@@ -37,7 +37,7 @@ services:
     restart: unless-stopped
     environment:
       CARS: ${CARS:-}
-      RACE_CARS: ${RACE_CARS:-LMP2:73,LMP2:99}
+      RACE_CARS: ${RACE_CARS:-}
       LIVE_RACE_SECONDS: "30"
       LIVE_SESSION_SECONDS: "60"
     volumes:

@@ -100,7 +100,7 @@ OpenStreetMap raceway data (credited in the footer, ODbL); only Road Atlanta is 
 session streams for the Race page's Watch card (embedded with YouTube's player, nothing re-hosted), and
 notes which cars IMSA.tv lists with an in-car camera (linked, never embedded: IMSA.tv uses its own
 tokenised player). Checked every 3 minutes in a session window, hourly otherwise (`watch.json`).
-`RACE_CARS` (default `LMP2:73`, Pratt Miller's LMP2 ORECA) adds cars that are followed in live timing
+`RACE_CARS` (default empty; the LMP2 #73 and #99 are in `CARS` with the LMP2 championship) adds cars that are followed in live timing
 only: their class is tracked live and they get their own tab on the Race page, with no championship maths.
 The pages poll `live.json` every 10 s, `laps.json` every 30 s (Championship: 60 s) and the rest every 5 minutes.
 Leave it empty for the default Corvettes. The class is as printed in the PDF: `GTP`, `LMP2`, `GTDPRO`, `GTD`.

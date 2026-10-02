@@ -23,7 +23,7 @@
     </div>
     <div class="meta" id="meta"></div>
   </header>
-  <nav class="picker" id="picker" aria-label="Choose a Corvette"></nav>
+  <nav class="picker" id="picker" aria-label="Choose a car"></nav>
   <nav class="links" id="links" aria-label="IMSA and team links"></nav>
   <section class="cars" id="cars"></section>
   <section class="card live" id="proj-card" hidden aria-live="polite"></section>
@@ -199,7 +199,7 @@ function render(d) {
     drawChart(series, done, colorOf);
     const others = d.tracked.slice(1).filter(c => st.some(s => s.car === c));
     $("legend").innerHTML = `<span style="--c:${colorOf(car)}">#${esc(car)}</span>`
-      + (others.length ? `<span style="--c:${COLORS[1]}">Other Corvettes (${others.map(c => "#" + esc(c)).join(", ")})</span>` : "")
+      + (others.length ? `<span style="--c:${COLORS[1]}">Other cars we follow (${others.map(c => "#" + esc(c)).join(", ")})</span>` : "")
       + `<span style="--c:var(--context)">Rest of top 8</span>`;
   }
 
