@@ -46,21 +46,49 @@
   // Snarky notes for rival pit stops (picked per car and stop, so they don't change on refresh).
   const SNARK = ["take your time", "no rush", "lovely day for it", "enjoying the view?", "scenic route", "might as well grab lunch", "bold strategy", "we'll wait"];
   window.snark = key => SNARK[[...String(key)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % SNARK.length];
-  // A short "booo" made with the browser's audio (no sound file). Only on a deliberate pick; mutable.
+  // A stadium crowd booing, made with the browser's audio (no sound file): ~18 voices at different
+  // pitches, each starting a moment apart with its own wobble, shaped into an "oo" vowel (formants
+  // near 300 and 870 Hz), over a bed of crowd noise. Only on a deliberate pick; mutable.
   const muted = () => { try { return localStorage.getItem("booOff") === "1"; } catch (e) { return false; } };
   window.boo = () => {
     if (muted()) return;
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)(), t = ctx.currentTime;
-      const out = ctx.createGain(); out.gain.setValueAtTime(0.0001, t); out.gain.exponentialRampToValueAtTime(0.18, t + 0.12);
-      out.gain.setValueAtTime(0.18, t + 0.9); out.gain.exponentialRampToValueAtTime(0.0001, t + 1.4); out.connect(ctx.destination);
-      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900; lp.connect(out);
-      for (const [f, d] of [[180, 0], [184, 7], [176, -7]]) {   // a small crowd of voices
-        const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 0.72, t + 1.35);
-        o.detune.value = d; const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.value = 5.5; vg.gain.value = 4;
-        vib.connect(vg); vg.connect(o.frequency); o.connect(lp); o.start(t); vib.start(t); o.stop(t + 1.45); vib.stop(t + 1.45);
+      const ctx = new (window.AudioContext || window.webkitAudioContext)(), t = ctx.currentTime, end = t + 2.6;
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.0001, t);
+      master.gain.exponentialRampToValueAtTime(0.35, t + 0.45);     // the crowd joins in
+      master.gain.setValueAtTime(0.35, t + 1.5);
+      master.gain.exponentialRampToValueAtTime(0.0001, end);       // and trails off
+      master.connect(ctx.destination);
+      // "oo" vowel: two formant band-passes mixed, then a gentle low-pass.
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1300; lp.connect(master);
+      const vowel = ctx.createGain();
+      for (const [f, q, g] of [[300, 4, 1], [870, 6, 0.45]]) {
+        const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = f; bp.Q.value = q;
+        const bg = ctx.createGain(); bg.gain.value = g; vowel.connect(bp); bp.connect(bg); bg.connect(lp);
       }
-      setTimeout(() => ctx.close(), 1800);
+      const rnd = (a, b) => a + Math.random() * (b - a);
+      for (let i = 0; i < 18; i++) {
+        const start = t + rnd(0, 0.35), stop = end - rnd(0, 0.5);
+        const base = i % 3 === 2 ? rnd(200, 290) : rnd(95, 170);     // mostly low voices, some higher
+        const o = ctx.createOscillator(); o.type = "sawtooth";
+        o.frequency.setValueAtTime(base * 1.04, start);
+        o.frequency.linearRampToValueAtTime(base * 0.86, stop);      // the slide down of a boo
+        const vib = ctx.createOscillator(), vg = ctx.createGain();
+        vib.frequency.value = rnd(4, 6.5); vg.gain.value = base * rnd(0.01, 0.03); vib.connect(vg); vg.connect(o.frequency);
+        const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(rnd(0.03, 0.06), start + rnd(0.15, 0.4));
+        g.gain.setValueAtTime(g.gain.value || 0.04, stop - 0.4); g.gain.exponentialRampToValueAtTime(0.0001, stop);
+        o.connect(g); g.connect(vowel);
+        o.start(start); vib.start(start); o.stop(stop + 0.05); vib.stop(stop + 0.05);
+      }
+      // Crowd murmur: filtered noise under the voices.
+      const n = ctx.createBuffer(1, ctx.sampleRate * 2.7, ctx.sampleRate), d = n.getChannelData(0);
+      for (let i = 0, last = 0; i < d.length; i++) { last = 0.97 * last + 0.03 * (Math.random() * 2 - 1); d[i] = last * 6; }
+      const ns = ctx.createBufferSource(); ns.buffer = n;
+      const nf = ctx.createBiquadFilter(); nf.type = "bandpass"; nf.frequency.value = 450; nf.Q.value = 0.8;
+      const ng = ctx.createGain(); ng.gain.value = 0.25; ns.connect(nf); nf.connect(ng); ng.connect(lp); ns.start(t);
+      setTimeout(() => ctx.close(), 3200);
     } catch (e) {}
   };
 
