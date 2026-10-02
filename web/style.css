@@ -327,3 +327,6 @@ details.deep[open] > .charts { margin-top: 16px; }
   td.team { min-width: 90px; }
   #timing td.team { min-width: 0; }
 }
+.needs-mode { margin-top: 14px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.needs-mode:empty { display: none; }
+.needs-mode + #answer .answer { margin-top: 2px; }
