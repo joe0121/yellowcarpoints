@@ -33,7 +33,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub">About this site</p>
-      <div class="navrow"><nav class="tabs"><a href="./">Championship</a><a href="strategy.html">Race</a><a href="about.html" aria-current="page">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a href="./">Championship</a><a href="strategy.html">Race</a><a href="strategy.html#73" title="Pratt Miller Motorsports #73, LMP2: race only">#73</a><a href="about.html" aria-current="page">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
   </header>
 
@@ -68,13 +68,14 @@ dl.terms dd { margin: 0; color: var(--text-2); }
         <li><strong>What just happened:</strong> pit stops (time in the lane, fuel, tyres, driver change), position changes and title-rival changes for those cars, newest first. Position changes are the ones seen while the page is open.</li>
         <li><strong>Timing:</strong> lap-time chart for our cars, and the timing table for them and the cars around them (or the full class).</li>
         <li><strong>Pit strategy and pace:</strong> energy, laps left, next stop and fill time per car, and race pace through a stint with a projected matchup.</li>
+        <li><strong>#73 tab:</strong> Pratt Miller Motorsports also runs the #73 ORECA in LMP2. Its tab is the same Race page for that car (timing, our cars, pit stops, pace), without championship maths.</li>
         <li><strong>More detail</strong> (folded away): sectors, gap and energy charts, and the strategy board for the whole class.</li>
       </ul>
     </section>
 
     <section class="card" id="race">
       <h2>On race day</h2>
-      <p>During a WeatherTech session the Race tab fills in with our cars, timing, pit strategy and pace, and in the race the Championship tab switches its answer to "if it ended now". Both refresh every 30 seconds by themselves; no need to reload.</p>
+      <p>During a WeatherTech session the Race tab fills in with our cars, timing, pit strategy and pace, and in the race the Championship tab switches its answer to "if it ended now". Both refresh by themselves (live timing every 10 seconds); no need to reload.</p>
       <ul>
         <li>In the race, the headline tells you where the title stands if the race ended now, for example "#4 champion by 23 if it ends like this", and the lowest finish the car can afford.</li>
         <li>The site works out which rivals matter <em>right now</em>. If a different car becomes the closest title rival mid-race, a banner says so.</li>
@@ -101,7 +102,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
       <h2>Where the data comes from</h2>
       <ul>
         <li><strong>Championship points and race results:</strong> IMSA's official results published by Al Kamel Systems, IMSA's timing provider. Checked every 30 minutes.</li>
-        <li><strong>Live timing:</strong> the public feed behind IMSA's live scoring page, read every 30 seconds in the race and every minute in practice and qualifying.</li>
+        <li><strong>Live timing:</strong> the public feed behind IMSA's live scoring page, read every 10 seconds in the race and every 15 seconds in practice and qualifying.</li>
         <li><strong>Energy and refuelling:</strong> IMSA's public live telemetry, the same data as imsa.com's telemetry page.</li>
         <li><strong>Session times:</strong> IMSA's weekend schedule. The site only follows live timing during WeatherTech sessions.</li>
       </ul>
@@ -111,7 +112,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
       <h2>Limitations</h2>
       <ul>
         <li><strong>Live numbers are estimates.</strong> Projections assume everyone holds position and keeps their current pace and energy use. Full-course yellows, short fills, penalties and strategy calls change them. Ties aren't modelled.</li>
-        <li><strong>About 30 seconds behind,</strong> so a little behind TV and IMSA's own timing.</li>
+        <li><strong>About 10 to 20 seconds behind,</strong> so a little behind TV and IMSA's own timing.</li>
         <li><strong>Unofficial feeds.</strong> If IMSA changes them, parts of the live view can stop working until the site is updated.</li>
         <li><strong>Hosted on a home server,</strong> so the site can occasionally be unavailable.</li>
         <li><strong>IMSA's results are the final word.</strong> If anything here disagrees with them, IMSA is right.</li>

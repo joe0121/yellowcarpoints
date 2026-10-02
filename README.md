@@ -10,7 +10,7 @@ of the page, or link straight to one with `#13`).
   every 6 hours into `schedule.json`). It only polls the JSON behind imsa.com/scoring from 10 minutes
   before each WeatherTech session until 30 minutes after its scheduled end, and not at all otherwise
   (if the schedule can't be read, it checks every 30 minutes instead). While a session runs:
-  - every `LIVE_RACE_SECONDS` (30) in the race / `LIVE_SESSION_SECONDS` (60) otherwise: every car's
+  - every `LIVE_RACE_SECONDS` (10) in the race / `LIVE_SESSION_SECONDS` (15) otherwise: every car's
     lap times and pit stops in the tracked classes (`laps.json`, `race_state.json`), the class
     timing, and in the race the championship if it finished now (`live.json`). Qualifying class
     positions go to `quali.json` so their points are included;
@@ -76,6 +76,9 @@ No Zero Trust dashboard setup is needed for a locally managed tunnel.
 ## Track other cars
 
 Set `CARS` in `.env` as `CLASS:NUMBER` pairs, e.g. `CARS=GTDPRO:4,GTD:13`, then `docker compose up -d`.
+`RACE_CARS` (default `LMP2:73`, Pratt Miller's LMP2 ORECA) adds cars that are followed in live timing
+only: their class is tracked live and they get their own tab on the Race page, with no championship maths.
+The pages poll `live.json` every 10 s, `laps.json` every 30 s (Championship: 60 s) and the rest every 5 minutes.
 Leave it empty for the default Corvettes. The class is as printed in the PDF: `GTP`, `LMP2`, `GTDPRO`, `GTD`.
 
 ## Championship maths during the race

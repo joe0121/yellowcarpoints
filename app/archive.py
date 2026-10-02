@@ -17,7 +17,7 @@ import re
 import threading
 import time
 
-from common import CLASSES, DATA_DIR
+from common import LIVE_CLASSES as CLASSES, DATA_DIR
 
 ROOT = DATA_DIR / "archive"
 TELEMETRY_EVERY = 10

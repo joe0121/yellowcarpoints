@@ -14,7 +14,7 @@ import statistics
 from urllib.parse import quote, unquote
 
 import history
-from common import CLASSES, http, now_iso, read, write
+from common import LIVE_CLASSES as CLASSES, http, now_iso, read, write
 
 log = logging.getLogger("scraper.sectors")
 TIME_CARDS = re.compile(r"/23_Time Cards_[^/]*\.JSON$")

@@ -26,15 +26,15 @@ import history
 import telemetry
 import status
 from archive import RECORDER
-from common import CAR_CLASS, CLASSES, http, now_iso, read, write
+from common import CAR_CLASS, LIVE_CAR_CLASS, LIVE_CLASSES, RACE_CARS, http, now_iso, read, write
 
 FEED = "https://dcqsrdkhg933g.cloudfront.net/"
 SCHEDULE_URL = "https://www.imsa.com/weathertech/"
 SERIES = "WeatherTech Championship"
 ET = ZoneInfo("America/New_York")
 
-RACE_POLL = int(os.environ.get("LIVE_RACE_SECONDS", "30"))
-SESSION_POLL = int(os.environ.get("LIVE_SESSION_SECONDS", "60"))
+RACE_POLL = int(os.environ.get("LIVE_RACE_SECONDS", "10"))
+SESSION_POLL = int(os.environ.get("LIVE_SESSION_SECONDS", "15"))
 STRATEGY_EVERY = int(os.environ.get("STRATEGY_SECONDS", "300"))
 SCHEDULE_EVERY = 6 * 3600
 NO_SCHEDULE_POLL = 1800     # schedule unreadable: check the feed every 30 minutes instead
@@ -506,7 +506,7 @@ def step():
     results = jsonp("RaceResults")
     RECORDER.feed(info, results)
     status.mark("feed", session=name, cars=len(results.get("B", [])))
-    feed = [c for c in results.get("B", []) if c.get("C") in CLASSES and c.get("PIC")]
+    feed = [c for c in results.get("B", []) if c.get("C") in LIVE_CLASSES and c.get("PIC")]
     if not feed:
         return SESSION_POLL
 
@@ -568,7 +568,7 @@ def step():
                 "car": r["N"], "class_pos": r["PIC"], "laps": r.get("L"), "gap": r.get("DIC"),
                 "interval": r.get("GIC"), "last_lap": r.get("LL"), "best_lap": r.get("BL"),
                 "pit_stops": r.get("PS"), "in_pit": bool(r.get("P")), "driver": r.get("F"),
-                "vehicle": r.get("V"), "tracked": CAR_CLASS.get(r["N"]) == cls,
+                "vehicle": r.get("V"), "tracked": LIVE_CAR_CLASS.get(r["N"]) == cls,
                 "stint": stint_info(state["cars"][r["N"]], int(r.get("L") or 0), model) if is_race else None,
                 "energy": energies[r["N"]], "stops_remaining": stops[r["N"]],
                 "net_pos": net.index(r["N"]) + 1 if net else None, "owes_stop": owed.get(r["N"], 0),
@@ -579,7 +579,7 @@ def step():
         if standings and cls in standings["classes"]:
             proj = projection(cls, [r["N"] for r in rows], net, standings["classes"][cls], read("quali.json"), info)
             out.update({k: v for k, v in proj.items() if k != "_ctx"})
-        out["focus"] = {car: focus(car, rows, proj, state) for car, k in CAR_CLASS.items() if k == cls}
+        out["focus"] = {car: focus(car, rows, proj, state) for car, k in LIVE_CAR_CLASS.items() if k == cls}
         classes[cls] = out
     live_out = {
         "updated": now_iso(), "event": info.get("E"), "session": name, "is_race": is_race,
@@ -588,6 +588,7 @@ def step():
         "scheduled_end": active and active["end"],
         "telemetry": {"connected": tel["connected"], "age": round(now - tel["last_data"]) if tel["last_data"] else None},
         "base_event": standings and standings["event"], "classes": classes,
+        "race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()],
         "bop": bop_doc and {k: bop_doc.get(k) for k in ("bulletin", "event", "date", "url")},
     }
     write("live.json", live_out)
@@ -597,7 +598,7 @@ def step():
                   "energy": tel["cars"].get(n, {}).get("lap_energy", []),
                   "margins": state.get("margins", {}).get(n, [])}
               for n, st in state["cars"].items() if st["cls"] == cls}
-        for cls in CLASSES}}
+        for cls in LIVE_CLASSES}}
     write("laps.json", laps_out)
     RECORDER.output("laps.json", laps_out)
     write("race_state.json", state)

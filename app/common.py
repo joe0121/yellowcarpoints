@@ -13,6 +13,13 @@ CAR_CLASS = {c.split(":")[-1].strip(): (c.split(":")[0].strip() if ":" in c else
              for c in (os.environ.get("CARS") or DEFAULT_CARS).split(",") if c.strip()}
 CARS = list(CAR_CLASS)
 CLASSES = list(dict.fromkeys(CAR_CLASS.values()))
+# Race-only cars (CLASS:NUMBER): followed in live timing and on the Race page, no championship maths.
+# Default: Pratt Miller Motorsports' LMP2 ORECA.
+RACE_CARS = {c.split(":")[-1].strip(): c.split(":")[0].strip()
+             for c in os.environ.get("RACE_CARS", "LMP2:73").split(",") if ":" in c}
+RACE_CARS = {c: k for c, k in RACE_CARS.items() if c not in CAR_CLASS}
+LIVE_CAR_CLASS = {**CAR_CLASS, **RACE_CARS}
+LIVE_CLASSES = list(dict.fromkeys(LIVE_CAR_CLASS.values()))
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
 http = requests.Session()

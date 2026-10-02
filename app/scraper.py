@@ -27,7 +27,7 @@ import history
 import live
 import sectors
 import status
-from common import CAR_CLASS, CARS, CLASSES, DATA_DIR, http, now_iso, read, write
+from common import CAR_CLASS, CARS, CLASSES, DATA_DIR, LIVE_CLASSES, RACE_CARS, http, now_iso, read, write
 
 BASE = "https://imsa.results.alkamelcloud.com/"
 SERIES = "IMSA WeatherTech SportsCar Championship"
@@ -236,7 +236,7 @@ def refresh_entries(season, event):
     results = json.loads(http.get(BASE + quote(latest), timeout=60).content.decode("utf-8-sig"))
     cars = {r["number"]: {"class": r["class"], "team": r["team"], "vehicle": r["vehicle"],
                           "drivers": [f'{d["firstname"]} {d["surname"]}' for d in r.get("drivers", [])]}
-            for r in results["classification"] if r["class"] in CLASSES}
+            for r in results["classification"] if r["class"] in LIVE_CLASSES}
     write("entries.json", {"updated": now_iso(), "event": event.split("_", 1)[1],
                            "session": results["session"].get("session_name"), "cars": cars})
 
@@ -327,6 +327,8 @@ def main():
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     logging.getLogger().addHandler(fh)
     status.start()
+    # For the web pages: which cars are followed for the race only (their own tab).
+    write("config.json", {"race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()]})
     last, next_pdf, failures, next_sectors = None, 0.0, 0, 0.0
     while True:
         if time.monotonic() >= next_pdf:

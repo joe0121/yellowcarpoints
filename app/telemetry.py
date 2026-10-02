@@ -19,7 +19,7 @@ import uuid
 import websocket
 
 from archive import RECORDER
-from common import CLASSES, read, write
+from common import LIVE_CLASSES as CLASSES, read, write
 
 API = "wzidxebhlbgqpm7kt22wkx2pri"
 HOST = f"{API}.appsync-api.us-east-1.amazonaws.com"

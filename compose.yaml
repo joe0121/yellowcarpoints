@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     environment:
       CARS: ${CARS:-}
+      RACE_CARS: ${RACE_CARS:-LMP2:73}
       INTERVAL_MINUTES: ${INTERVAL_MINUTES:-30}
     volumes:
       - data:/data

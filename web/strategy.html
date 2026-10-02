@@ -16,7 +16,7 @@
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub" id="sub">Race strategy</p>
-      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Championship</a><a href="strategy.html" aria-current="page">Race</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Championship</a><a id="to-race" href="strategy.html" aria-current="page">Race</a><a class="racetab" data-car="73" href="strategy.html#73" title="Pratt Miller Motorsports #73, LMP2: race only">#73</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -124,20 +124,31 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
 
-let standings, live, laps, schedule, entries, sectorData;
+let standings, live, laps, schedule, entries, sectorData, config;
 
+// Live timing every 10 s, lap history every 30 s, everything else every 5 minutes; the page
+// only redraws when something changed (unchanged files come back as cheap 304s).
+const loadedAt = { laps: 0, slow: 0 };
 async function load() {
-  [standings, live, laps, schedule, entries, sectorData] = await Promise.all(
-    ["standings", "live", "laps", "schedule", "entries", "sectors"].map(n => getJSON(`data/${n}.json`)));
-  render();
+  const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
+  const names = ["live", ...(wantLaps ? ["laps"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
+  const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
+  const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
+  live = got.live;
+  if (wantLaps) { laps = got.laps; loadedAt.laps = now; }
+  if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config } = got); loadedAt.slow = now; }
+  if (changed) render();
 }
 addEventListener("hashchange", render);
-setInterval(load, 30e3);
+setInterval(load, 10e3);
 
+// Race-only cars (e.g. Pratt Miller's LMP2 #73) have their own tab and no championship maths.
+const raceCars = () => config?.race_cars || live?.race_cars || [];
+const isRaceOnly = car => raceCars().some(c => c.car === car);
 function selected() {
-  const cars = standings?.cars || [];
+  const cars = [...(standings?.cars || []), ...raceCars()];
   const want = location.hash.slice(1) || store.get("car");
-  return cars.find(c => c.car === want) || cars[0];
+  return cars.find(c => c.car === want) || standings?.cars?.[0];
 }
 
 // Least-squares line through the last n points: slope per x unit.
@@ -161,13 +172,17 @@ function clean(car) {
 
 function render() {
   if (!standings?.cars) return;
-  const sel = selected();
-  store.set("car", sel.car);
+  const sel = selected(), raceOnly = isRaceOnly(sel.car);
+  if (!raceOnly) store.set("car", sel.car);
+  const home = raceOnly ? (store.get("car") || standings.cars[0].car) : sel.car;
+  $("to-race").href = "strategy.html#" + home;
+  $("to-race").toggleAttribute("aria-current", !raceOnly);
+  document.querySelectorAll(".racetab").forEach(a => a.toggleAttribute("aria-current", a.dataset.car === sel.car));
   const groups = {};
-  standings.cars.forEach(c => (groups[c.class] ||= []).push(c.car));
+  (raceOnly ? raceCars() : standings.cars).forEach(c => (groups[c.class] ||= []).push(c.car));
   $("picker").innerHTML = Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
     + cars.map(c => `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}</a>`).join("") + `</div>`).join("");
-  $("to-standings").href = "./#" + sel.car;
+  $("to-standings").href = "./#" + home;
   const clsName = CLASS_NAMES[sel.class] || sel.class;
   document.title = `Race · #${sel.car}`;
   $("sub").textContent = `Current race · #${sel.car} ${entries?.cars?.[sel.car]?.team || ""} · ${clsName}`;
@@ -222,7 +237,7 @@ function render() {
   trackPositions();
   renderFeed(sel, cmpCars, rows, lapsCls, fc);
   $("title").textContent = `Pit strategy · ${clsName}`;
-  renderWatch(sel, cmpCars, rows, live.is_race);
+  renderWatch(sel, cmpCars, rows, live.is_race, !raceOnly);
   if (!me) $("kpis").innerHTML = `<p class="empty">#${esc(sel.car)} isn't in this session.</p>`;
   renderKpis(cmpCars, rows, strat, lc, lapsCls);
 
@@ -515,7 +530,7 @@ function comparisonCars(sel, rows, fc) {
 }
 
 // Banner explaining which cars are being watched and why.
-function renderWatch(sel, cars, rows, isRace) {
+function renderWatch(sel, cars, rows, isRace, hasTitle = true) {
   const why = {
     "race leader": `the class leader`,
     "car behind on track": `the car right behind #${esc(sel.car)} on track`,
@@ -528,7 +543,7 @@ function renderWatch(sel, cars, rows, isRace) {
   $("watch").innerHTML = `<b>Cars to watch</b> · `
     + picks.map(c => `<span class="sw">${swatchOf(c.style)}<b>#${esc(c.car)}</b> ${why[c.role] || esc(c.role)}</span>`).join(" · ")
     + `<br><span class="dim">Picked automatically and updated as the session changes: the class leader (or the car behind when #${esc(sel.car)} leads)`
-    + (isRace ? ` and the car closest to #${esc(sel.car)} in the championship` : `; the title rival joins in the race`)
+    + (!hasTitle ? "" : isRace ? ` and the car closest to #${esc(sel.car)} in the championship` : `; the title rival joins in the race`)
     + `. Use "Add a car" to watch others.</span>`;
   $("watch").hidden = false;
 }

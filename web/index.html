@@ -16,7 +16,7 @@
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub" id="sub">IMSA WeatherTech SportsCar Championship</p>
-      <div class="navrow"><nav class="tabs"><a href="./" aria-current="page">Championship</a><a id="to-strategy" href="strategy.html">Race</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a href="./" aria-current="page">Championship</a><a id="to-strategy" href="strategy.html">Race</a><a href="strategy.html#73" title="Pratt Miller Motorsports #73, LMP2: race only">#73</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -235,7 +235,15 @@ function raceLive(cls) {
   return live?.is_race && live.classes?.[cls]?.standings && live.base_event === standings.event
     && Date.now() - new Date(live.updated) < 48 * 3600e3 ? live.classes[cls] : null;
 }
-setInterval(async () => { if (!standings) return; await loadLive(); const d = view(selected()); renderTitle(d); renderProjection(d); }, 30e3);
+// Live timing every 10 s, the lap-by-lap margins and qualifying every minute; redraw only on change.
+let lapsAt = 0;
+setInterval(async () => {
+  if (!standings) return;
+  const now = Date.now(), slow = now - lapsAt >= 60e3, was = live?.updated;
+  if (slow) { await loadLive(); lapsAt = now; } else live = await getJSON("data/live.json");
+  if (!slow && live?.updated === was) return;
+  const d = view(selected()); renderTitle(d); renderProjection(d);
+}, 10e3);
 
 // Title fight: who can still win, where they are running, and what the selected car needs.
 function renderTitle(d) {
