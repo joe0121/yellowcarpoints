@@ -209,6 +209,14 @@ class Telemetry:
                 st["stops"] = st["stops"][-20:]
             st["visit"] = None
             st["pit_since"] = None
+        # Distance since the line (speed added up over time) for the Race page's track map. Each car's
+        # previous full lap distance is kept so the page can scale its own odometer to the track.
+        if lap and lap != st.get("map_lap"):
+            if st.get("map_lap") is not None and 1500 < st.get("dist", 0) < 9000:
+                st["lap_dist"] = round(st["dist"])
+            st["map_lap"], st["dist"] = lap, 0.0
+        elif st.get("seen") and f.get("speed") is not None and 0 < now - st["seen"] <= 12:
+            st["dist"] = st.get("dist", 0.0) + f["speed"] / 3.6 * (now - st["seen"])
         st.update(energy=energy, lap=lap, pit_lane=bool(f.get("pit_lane")), recharging=bool(f.get("is_recharging")),
                   speed=f.get("speed"), seen=now)
 

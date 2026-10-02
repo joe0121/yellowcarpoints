@@ -183,6 +183,7 @@ def track(state, feed, now, running=False):
                 st["pit_secs"].append(round(now - st["pit_in_at"]))
             st["pit_in_at"] = None
         if lap > st["last_lap"]:
+            st["cross_at"] = now          # when we saw the car complete a lap (for the track map fallback)
             t = secs(c.get("LL"))
             if t:
                 st["laps"].append([lap, round(t, 3)])
@@ -205,6 +206,23 @@ def clean_laps(st):
         return []
     best = min(t for n, t in laps)
     return [(n, t) for n, t in laps if t <= best * 1.05]
+
+
+def map_info(t):
+    """For the track map: metres since the line at telemetry time `at`, speed, and the car's last lap
+    distance (so the page can scale its odometer to the track)."""
+    if not t or t.get("dist") is None or not t.get("seen"):
+        return None
+    return {"d": round(t["dist"]), "len": t.get("lap_dist"), "at": t["seen"], "v": t.get("speed"), "pit": bool(t.get("pit_lane"))}
+
+
+def map_timing(st, r):
+    """Track map fallback for cars without telemetry (LMP2): when it last crossed the line, as seen by
+    this poll, and its last lap time; the page moves it at an even pace from there."""
+    lap = secs(r.get("LL"))
+    if not st.get("cross_at") or not lap:
+        return None
+    return {"t0": round(st["cross_at"], 1), "lap": lap, "pit": bool(r.get("P"))}
 
 
 def drivers_info(st, entry, now):
@@ -638,6 +656,7 @@ def step():
                 "energy": energies[r["N"]], "stops_remaining": stops[r["N"]],
                 "net_pos": net.index(r["N"]) + 1 if net else None, "owes_stop": owed.get(r["N"], 0),
                 "drivers": drivers_info(state["cars"][r["N"]], entry_cars.get(r["N"]), now),
+                "map": map_info(tel["cars"].get(r["N"])) or map_timing(state["cars"][r["N"]], r),
             } for r in rows],
             "fill_secs_per_pct": fill_per_pct, "pit_loss": pit_loss,
         }
@@ -648,7 +667,7 @@ def step():
         out["focus"] = {car: focus(car, rows, proj, state) for car, k in LIVE_CAR_CLASS.items() if k == cls}
         classes[cls] = out
     live_out = {
-        "updated": now_iso(), "event": info.get("E"), "session": name, "is_race": is_race,
+        "updated": now_iso(), "t": round(now, 1), "event": info.get("E"), "session": name, "is_race": is_race,
         "flag": flag, "elapsed": info.get("TT"), "remaining": info.get("TR"),
         "finished": bool(re.search(r"check|finish", flag, re.I)),
         "scheduled_end": active and active["end"],

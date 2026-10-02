@@ -444,7 +444,7 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 @media (max-width: 640px) { .rclist li { grid-template-columns: 54px 1fr; } .rclist .rctag { grid-column: 2; } .rclist .rctext { grid-column: 1 / -1; } }
 /* current track outline behind everything: small staggered tiles in the livery colour */
 .track-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--accent); opacity: .07;
-  -webkit-mask-size: 150px 304px; mask-size: 150px 304px; -webkit-mask-position: 0 0; mask-position: 0 0;
+  -webkit-mask-size: 160px 261px; mask-size: 160px 261px; -webkit-mask-position: 0 0; mask-position: 0 0;
   -webkit-mask-repeat: repeat; mask-repeat: repeat; }
 .footlinks .osm { color: var(--text-3); font-size: 12px; }
 .footlinks .osm a { color: var(--text-3); }
@@ -452,3 +452,11 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .card, .sessionbar { background: color-mix(in srgb, var(--surface) 88%, transparent); }
 :root[data-theme="dark"] .track-bg { opacity: .10; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .track-bg { opacity: .10; } }
+/* track map */
+#map-card { order: 2; }
+.trackmap { display: block; width: 100%; max-height: 520px; margin-top: 6px; }
+.trackmap .map-track { fill: none; stroke: var(--line); stroke-width: 26; stroke-linejoin: round; }
+.trackmap .sf { fill: var(--text-3); }
+.trackmap .sflbl { font: 700 34px Inter, sans-serif; fill: var(--text-3); }
+.trackmap .mapdot { fill: var(--text-3); opacity: .75; }
+.trackmap .maplbl { font: 700 38px Inter, sans-serif; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 8px; }

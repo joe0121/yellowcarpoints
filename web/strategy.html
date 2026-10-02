@@ -74,6 +74,12 @@
     <div class="pace-head"><h2 id="watch-title">Watch</h2><button type="button" class="chip" id="watch-toggle"></button></div>
     <div id="watch-body"></div>
   </section>
+  <section class="card" id="map-card" hidden style="margin-bottom:16px">
+    <h2 id="map-title">Track map</h2>
+    <svg id="map-svg" class="trackmap" role="img" aria-label="Estimated car positions on track"></svg>
+    <p class="live-sub" id="map-pit"></p>
+    <p class="note" id="map-note"></p>
+  </section>
   <section class="card" id="timing-card" style="margin-bottom:16px">
     <h2 id="timing-title">Timing</h2>
     <div class="legend" id="lg-laps2"></div>
@@ -152,6 +158,7 @@ async function load() {
   const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
+  if (got.live?.updated !== live?.updated) liveFetchedAt = Date.now();
   live = got.live;
   if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; loadedAt.laps = now; }
   if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config } = got); loadedAt.slow = now; }
@@ -255,6 +262,7 @@ function render() {
   renderOurs(cmpCars, rows, strat);
   renderFeed(sel, cmpCars, rows, lapsCls, fc);
   renderRaceControl(sel, cmpCars);
+  renderTrackMap(sel, rows, cmpCars, clsName);
   renderDrivers(sel, cmpCars, rows);
   $("title").textContent = `Pit strategy · ${clsName}`;
   renderWatch(sel, cmpCars, rows, live.is_race, !raceOnly);
@@ -860,6 +868,67 @@ function renderRaceControl(sel, cars) {
   $("rc-more").onclick = () => { store.set("rcAll", all ? "" : "1"); renderRaceControl(sel, cars); };
   $("rc-foot").textContent = `Official race control log (IMSA via Al Kamel), ${rcForSession() ? "this session" : `from ${rcData.session || "the last session"}`}`
     + `. It's published after each session and about hourly during long races, so it trails live timing. Times are from the session start.`;
+}
+
+// --- Track map: where each car is on the outline. Cars with IMSA telemetry (GTD PRO / GTD) are placed
+// by distance since the line (their speed added up by the scraper); others (LMP2) at an even pace from
+// when they last crossed the line. Dots keep moving between the 10-second updates.
+let mapTrack = null, mapTimer = null, liveFetchedAt = Date.now();
+window.trackReady?.then(t => { mapTrack = t; if (standings) render(); });
+function mapFraction(m) {
+  const serverNow = (live?.t || Date.now() / 1000) + (Date.now() - liveFetchedAt) / 1000;
+  if (m.d != null) {
+    const len = m.len >= 3700 && m.len <= 4500 ? m.len : mapTrack.len;
+    const d = m.d + (m.v || 0) / 3.6 * Math.min(Math.max(serverNow - m.at, 0), 15);
+    return Math.min(d / len, 0.995);
+  }
+  if (m.t0 && m.lap) {
+    const since = serverNow - m.t0;
+    return since > 1.5 * m.lap ? null : (since / m.lap) % 1;
+  }
+  return null;
+}
+function renderTrackMap(sel, rows, cars, clsName) {
+  const card = $("map-card");
+  const running = live && !live.finished && Date.now() - new Date(live.updated) < 5 * 60e3;
+  if (!mapTrack) { card.hidden = true; return; }
+  card.hidden = false;
+  $("map-title").textContent = `Track map · ${clsName}`;
+  const svg = $("map-svg");
+  if (!svg.dataset.ready) {
+    svg.setAttribute("viewBox", `-60 -60 ${mapTrack.w + 120} ${mapTrack.h + 120}`);
+    svg.innerHTML = `<path class="map-track" d="${mapTrack.path}"/><g class="map-sf"></g><g class="map-dots"></g>`;
+    const p = svg.querySelector(".map-track"), L = p.getTotalLength(), at = p.getPointAtLength(mapTrack.sf * L);
+    svg.querySelector(".map-sf").innerHTML = `<circle cx="${at.x}" cy="${at.y}" r="16" class="sf"/><text x="${at.x + 28}" y="${at.y + 10}" class="sflbl">S/F</text>`;
+    svg.dataset.ready = "1";
+  }
+  const watched = new Map(cars.map(c => [c.car, c]));
+  const draw = () => {
+    if ($("map-card").classList.contains("collapsed")) return;
+    const p = svg.querySelector(".map-track"), L = p.getTotalLength(), pit = [];
+    const dots = [];
+    for (const r of rows) {
+      const m = r.map;
+      if (!m || !running) continue;
+      if (m.pit || r.in_pit) { pit.push(r.car); continue; }
+      const f = mapFraction(m);
+      if (f == null) continue;
+      const pos = ((mapTrack.sf + mapTrack.dir * f) % 1 + 1) % 1, pt = p.getPointAtLength(pos * L), w = watched.get(r.car);
+      dots.push({ r, pt, w });
+    }
+    dots.sort((a, b) => (a.w ? 1 : 0) - (b.w ? 1 : 0) || (a.r.car === sel.car) - (b.r.car === sel.car));
+    svg.querySelector(".map-dots").innerHTML = dots.map(({ r, pt, w }) => w
+      ? `<g><circle cx="${pt.x}" cy="${pt.y}" r="${r.car === sel.car ? 30 : 24}" fill="${w.style.color}" stroke="var(--surface)" stroke-width="6"/>
+          <text x="${pt.x + 36}" y="${pt.y + 12}" class="maplbl">#${esc(r.car)} P${r.class_pos}</text></g>`
+      : `<circle cx="${pt.x}" cy="${pt.y}" r="15" class="mapdot"><title>#${esc(r.car)} P${r.class_pos}</title></circle>`).join("");
+    $("map-pit").innerHTML = pit.length ? `<b>In the pit lane:</b> ${pit.map(c => watched.has(c) ? `<b style="color:${watched.get(c).style.color}">#${esc(c)}</b>` : `#${esc(c)}`).join(" · ")}` : "";
+    $("map-note").textContent = running
+      ? `Positions are estimated: ${rows.some(r => r.map?.d != null) ? "from each car's speed since it crossed the line (IMSA telemetry)" : "from each car's last lap time since it crossed the line"}, refreshed every 10 seconds. The start/finish mark is approximate.`
+      : "Cars appear here while a session is running.";
+  };
+  clearInterval(mapTimer);
+  draw();
+  if (running) mapTimer = setInterval(draw, 500);
 }
 
 // Yellow / red flag periods for a class as [fromLap, toLap, kind], from the scraper's flag log.
