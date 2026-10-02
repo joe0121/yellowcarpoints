@@ -1,0 +1,14 @@
+# Dev site (http://localhost:8098): serves the working copy of web/ as-is, so edits show on reload.
+:80 {
+	root * /srv
+	header Cache-Control "no-store"
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# Local dev only: the guest book admin API is open here for testing.
+			header_up X-Admin {$ADMIN_TOKEN}
+		}
+	}
+	handle {
+		file_server
+	}
+}

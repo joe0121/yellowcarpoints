@@ -426,3 +426,4 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .sessionbar .live-head { justify-content: center; }
 .sessionbar .ttg { margin-left: 0; }
 .sessionbar .ttg::before { content: "· "; color: var(--text-3); }
+.dev-badge { position: fixed; top: 10px; left: 10px; z-index: 50; font: 700 12px Inter, sans-serif; letter-spacing: .08em; padding: 3px 10px; border-radius: 6px; background: #d03b3b; color: #fff; }

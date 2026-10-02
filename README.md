@@ -147,3 +147,24 @@ GTD PRO table: maximum stint energy (MJ) and energy replenishment rate (MJ/s) pe
 virtual energy tank refilled at that fixed rate, so a refill takes exactly (energy to add / rate);
 for 2026 that is 40 s for a full tank for every make. The Race page uses it for the next fill time
 and shows each car's energy use in MJ per lap. Feed vehicle names are matched to BoP rows by model.
+
+## Making changes during a race
+
+Production keeps its tracked data across restarts: the scraper saves the whole session state
+(`race_state.json`: laps, stops, driver changes, drive time, flags; `telemetry_state.json`) on
+every poll and restores it on start, so even a scraper update mid-race only loses the polls while
+it's down. Web-only deploys (`docker compose up -d --no-deps web`) never touch the scraper.
+
+To try changes first, use the dev site (`compose.dev.yaml`, separate from production):
+
+    ./dev.sh up              # http://localhost:8098 (red DEV badge): serves ./web straight from disk,
+                             # production's live data read-only, its own test API database
+    ./dev.sh replay [dir]    # run the scraper code in ./app over a recording (default: newest,
+                             # works mid-race) into dev data; no IMSA traffic
+    ./dev.sh scraper         # run the dev scraper live against IMSA (30 s polling) into dev data
+    ./dev.sh prod-data       # back to production's live data
+    ./dev.sh down
+
+When it looks right: commit and push (GitHub builds the images), then update production one service
+at a time, web first: `docker compose pull web && docker compose up -d --no-deps web`; the scraper
+only if it changed (`... scraper`), ideally under a yellow or between stints.

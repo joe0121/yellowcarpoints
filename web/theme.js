@@ -50,6 +50,13 @@
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", paint);
   const OPTIONS = [["auto", "Auto", "Match this device"], ["light", "Light", "Light mode"], ["dark", "Dark", "Dark mode"]];
   document.addEventListener("DOMContentLoaded", () => {
+    // Dev site (./dev.sh, port 8098): a badge so it's never mistaken for the live site.
+    if (location.port === "8098") {
+      const tag = document.createElement("div");
+      tag.className = "dev-badge"; tag.textContent = "DEV";
+      tag.title = "Dev site: your working copy of the site, not the live one";
+      document.body.append(tag);
+    }
     const band = document.createElement("div");
     band.className = "livery-band";
     band.setAttribute("aria-hidden", "true");

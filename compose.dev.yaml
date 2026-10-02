@@ -1,0 +1,55 @@
+# Dev site, separate from production. Start with ./dev.sh (see README "Making changes during a race").
+#   web  - http://localhost:8098, serves ./web straight from disk (edit, reload, done)
+#   api  - built from ./api, its own database (test profiles and guest book posts stay out of prod)
+#   data - production's live data, read-only by default; ./dev.sh replay|scraper switch it to dev data
+name: ycp-dev
+services:
+  web:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - ./web:/srv:ro
+      - livedata:/srv/data:ro
+    ports:
+      - "127.0.0.1:8098:80"
+
+  api:
+    build: ./api
+    image: ycp-api:dev
+    restart: unless-stopped
+    environment:
+      API_SECRET: ${API_SECRET:?set API_SECRET in .env}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      RP_ID: localhost
+      ORIGINS: http://localhost:8098
+    volumes:
+      - api-db-dev:/db
+
+  # Optional live dev scraper (./dev.sh scraper): your edited scraper code against IMSA's feed,
+  # polling more gently than production, writing to its own data volume.
+  scraper:
+    build: ./app
+    image: ycp-scraper:dev
+    profiles: ["scraper"]
+    restart: unless-stopped
+    environment:
+      CARS: ${CARS:-}
+      RACE_CARS: ${RACE_CARS:-LMP2:73}
+      LIVE_RACE_SECONDS: "30"
+      LIVE_SESSION_SECONDS: "60"
+    volumes:
+      - dev-data:/data
+      - dev-status:/status
+
+volumes:
+  # Production's data by default; ./dev.sh replay|scraper switch this to the dev data volume.
+  livedata:
+    external: true
+    name: ${DEV_DATA_VOLUME:-yellowcarpoints_data}
+  api-db-dev:
+  dev-data:
+    name: ycp-dev_dev-data
+  dev-status:
