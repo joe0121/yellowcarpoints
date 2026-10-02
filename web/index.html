@@ -51,7 +51,9 @@
   </details>
   <footer id="foot"></footer>
 </main>
+<script src="cards.js"></script>
 <script>
+addEventListener("cardtoggle", () => standings && renderAll());
 const CLASS_NAMES = { GTDPRO: "GTD PRO", GTD: "GTD", GTP: "GTP", LMP2: "LMP2" };
 const COLORS = ["var(--accent)", "var(--series-2)"];
 const $ = id => document.getElementById(id);

@@ -77,28 +77,6 @@
     <p class="live-sub">Pick what to plot and which cars. Shaded bands are yellow flags, ▼ marks a pit stop. Your charts are remembered on this device.</p>
     <div id="builder"></div>
   </section>
-  <section class="card m-lite" id="pace-card" style="margin-bottom:16px">
-    <div class="pace-head">
-      <h2>Pace</h2>
-      <div class="cmp"><span class="chips"></span><select class="addcar" aria-label="Add a car to compare"></select></div>
-    </div>
-    <p class="live-sub" id="pace-sub"></p>
-    <div class="charts" style="margin-top:12px">
-      <div>
-        <h2 style="font-size:14px">Lap time through a stint</h2>
-        <div class="legend" id="lg-stint"></div>
-        <div class="chart" id="ch-stint"><div class="tip"></div></div>
-      </div>
-      <div>
-        <h2 style="font-size:14px">Next 20 laps, projected</h2>
-        <div class="legend" id="lg-proj"></div>
-        <div class="chart" id="ch-proj"><div class="tip"></div></div>
-      </div>
-    </div>
-    <h2 id="pace-table-title" style="font-size:14px;margin-top:16px">Class pace</h2>
-    <div class="scroll"><table id="pace-table"></table></div>
-    <p class="note" id="pace-note"></p>
-  </section>
     </div>
   </div>
 
@@ -135,7 +113,9 @@
   </details>
   <footer id="foot"></footer>
 </main>
+<script src="cards.js"></script>
 <script>
+addEventListener("cardtoggle", () => standings && render());
 const CLASS_NAMES = { GTDPRO: "GTD PRO", GTD: "GTD", GTP: "GTP", LMP2: "LMP2" };
 // On-track roles use one validated set; the championship chart uses its own validated pair.
 const C = { me: "var(--s1)", ahead: "var(--s2)", ref: "var(--s3)", ctx: "var(--context)", threat: "var(--s4)", target: "var(--s2)" };
@@ -229,7 +209,6 @@ function render() {
     ["ours-card", "feed-card", "timing-card", "drivers-card", "builder-card"].forEach(id => $(id).hidden = true);
     $("titleline").innerHTML = ""; $("vettes").hidden = true;
     $("board").innerHTML = "";
-    $("pace-card").hidden = true;
     $("timing").innerHTML = ""; $("lg-laps2").innerHTML = ""; $("ch-laps2").querySelector("svg")?.remove();
     return;
   }
@@ -274,11 +253,9 @@ function render() {
   drawEnergyChart(S.slice(0, 2), me);
   drawLeaderChart(S);
   renderTiming(lc, sel, rows, strat, lapsCls, cmpCars, clsName);
-  $("pace-card").hidden = false;
   $("builder-card").hidden = false;
   // Don't redraw the builder under someone's fingers (an open dropdown would close).
   if (!$("builder").contains(document.activeElement)) renderBuilder(sel, rows, lapsCls, cmpCars, clsName);
-  renderPace(lc, sel, rows, lapsCls, fc, clsName, cmpCars);
   renderBoard(rows, strat, sel, lapsCls, clsName, fc);
 
   $("foot").innerHTML = `Timing from IMSA live scoring; energy, refuels and pit lane from IMSA telemetry (unofficial, about 1 Hz). `
@@ -306,60 +283,50 @@ function fillModel(lc) {
   return { perPct: per[Math.floor(per.length / 2)], n: big.length };
 }
 
-function kpi(k, v, s, extra = "", title = "") { return `<div class="kpi"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v">${v}</div>${extra}<div class="s">${s}</div></div>`; }
 
+// Pit strategy: one row per car (selected car and cars to watch).
 function renderKpis(cmpCars, rows, strat, lc, lapsCls) {
-  const html = cmpCars.map(c => {
-    const row = rows.find(r => r.car === c.car);
-    if (!row) return "";
-    const label = `<div class="who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> P${row.class_pos}`
-      + `<small>${esc(c.role === "selected" ? "selected" : c.role)}${row.in_pit ? " · in pit" : ""}</small>`
-      + (c.role === "added" ? `<button class="chip x" data-car="${esc(c.car)}" title="Remove #${esc(c.car)}">×</button>` : "") + `</div>`;
-    return `<div class="kpirow${c.role === "selected" ? " mine" : ""}" style="--c:${c.style.color}">${label}<div class="kpis">${kpiTiles(row, strat[c.car], lc, lapsCls[c.car])}</div></div>`;
+  const fm = fillModel(lc);
+  const body = cmpCars.map(c => {
+    const r = rows.find(x => x.car === c.car);
+    if (!r) return "";
+    const e = r.energy, s = r.stint, st = strat[c.car], done = r.pit_stops ?? 0;
+    let energy = "–", left = "–", next = "–", fill = "–";
+    if (e) {
+      energy = `<span class="mini"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></span>${e.now.toFixed(0)}%`
+        + `<div class="sub">${e.use_per_lap ? `${e.use_per_lap}%/lap${e.mj_per_lap ? ` · ${e.mj_per_lap} MJ` : ""}` : "use/lap after 3 laps"}</div>`;
+      left = e.laps_left != null ? `${Math.floor(e.laps_left)}<div class="sub">${e.full_tank_laps ? `tank ~${Math.floor(e.full_tank_laps)}` : ""}</div>` : "–";
+      next = e.next_stop_lap ? `L${e.next_stop_lap}<div class="sub">${e.eta_min != null ? `in ~${e.eta_min} min` : ""}</div>` : e.refuelling ? "refuelling" : "–";
+      // Exact from IMSA's BoP when we have it (fixed refill rate); otherwise estimated from observed fills.
+      const bopFill = e.fill_source === "bop" ? e.next_fill_secs : null;
+      const arrive = e.use_per_lap && e.laps_left != null ? Math.max(0, e.now - e.use_per_lap * Math.floor(e.laps_left)) : null;
+      const est = bopFill ?? (fm && arrive != null ? Math.round(fm.perPct * (100 - arrive)) : null);
+      fill = est > 0 ? `${bopFill != null ? "" : "~"}${est}s<div class="sub">${bopFill != null ? "BoP, refuel only" : "estimate"}</div>` : "–";
+    } else if (s) {
+      left = s.laps_to_typical != null ? `~${Math.max(s.laps_to_typical, 0)}<div class="sub">no telemetry</div>` : "–";
+      next = s.eta_min ? `~${s.eta_min} min` : "–";
+    }
+    const ls = e?.stops?.at(-1);
+    const last = ls ? `${stopTags(ls)}<div class="sub">L${ls.lap}</div>` : "–";
+    const stops = e?.stops_remaining != null ? `${done} <span class="dim">+${e.stops_remaining}</span>` : done;
+    const fit = paceModel(lapsCls[c.car])?.fit;
+    const trend = fit ? (Math.abs(fit.b) < 0.005 ? "steady" : `${fit.b < 0 ? "▲" : "▼"} ${Math.abs(fit.b).toFixed(2)}s/lap`) : "";
+    return `<tr class="${c.role === "selected" ? "tracked" : ""}" style="--c:${c.style.color}">
+      <td class="l who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> <span class="dim">P${r.class_pos}</span>${r.in_pit ? ` <span class="pit">PIT</span>` : ""}
+        ${c.role === "added" ? `<button class="chip x" data-car="${esc(c.car)}" title="Remove #${esc(c.car)}">×</button>` : ""}<div class="sub role">${esc(c.role)}</div></td>
+      <td class="l">${energy}</td><td>${left}</td><td>${next}</td><td>${fill}</td><td class="l m-hide">${last}</td><td>${stops}</td>
+      <td class="m-hide">${st?.pace ? lapTime(st.pace) : "–"}<div class="sub ${fit ? (fit.b < -0.005 ? "up" : fit.b > 0.005 ? "down" : "") : ""}">${trend}</div></td></tr>`;
   }).join("");
-  if (html) $("kpis").innerHTML = html;
+  if (body) $("kpis").innerHTML = `<div class="scroll"><table class="pittable"><thead><tr><th class="l">Car</th><th class="l">Energy</th><th title="Laps left on this tank">Laps left</th><th>Next stop</th>
+    <th title="Refuelling time for the next stop">Next fill</th><th class="l m-hide" title="Last stop: time in the pit lane · F refuel · T tyres · D driver change">Last stop</th>
+    <th title="Stops made + still needed to the flag">Stops</th><th class="m-hide" title="Median of the last 5 clean laps; trend through the stint">Pace</th></tr></thead><tbody>${body}</tbody></table></div>`;
   $("kpis").querySelectorAll(".chip.x").forEach(b => b.onclick = () => { paceExtra = paceExtra.filter(x => x !== b.dataset.car); render(); });
   const pt = lc.strategy?.pit_types;
-  $("kpi-note").textContent = (lc.strategy ? `Pace and trends recalculated every 5 minutes (last ${new Date(lc.strategy.updated).toLocaleTimeString()}). Energy and stops update every poll.` : "")
+  $("kpi-note").textContent = (lc.strategy ? `Pace recalculated every 5 minutes (last ${new Date(lc.strategy.updated).toLocaleTimeString()}); energy and stops every poll.` : "")
     + (pt && (pt.n_fuel_only || pt.n_full) ? ` Class pit-lane times so far: fuel-only ${pt.fuel_only ?? "–"}s (${pt.n_fuel_only} stops), full service ${pt.full ?? "–"}s (${pt.n_full} stops).` : "");
 }
 
-// The tiles for one car.
-function kpiTiles(me, st, lc, myLaps) {
-  const e = me.energy, s = me.stint, out = [];
-  if (e) {
-    out.push(kpi("Energy now", `${e.now.toFixed(1)}<small>%</small>`, e.use_per_lap ? `${e.use_per_lap}%/lap${e.mj_per_lap ? ` · ${e.mj_per_lap} MJ of ${e.tank_mj}` : ""}` : "use/lap after 3 laps",
-      `<div class="ebar" role="img" aria-label="${e.now.toFixed(0)}% energy"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></div>`));
-    out.push(kpi("Laps left", e.laps_left != null ? Math.floor(e.laps_left) : "–", e.full_tank_laps ? `full tank ~${Math.floor(e.full_tank_laps)} laps` : "needs a few laps"));
-    out.push(kpi("Next stop", e.next_stop_lap ? `Lap ${e.next_stop_lap}` : "–", e.eta_min != null ? `in ~${e.eta_min} min` : e.refuelling ? "refuelling now" : ""));
-    const last = e.refills.at(-1), fm = fillModel(lc);
-    const arrive = e.use_per_lap && e.laps_left != null ? Math.max(0, e.now - e.use_per_lap * Math.floor(e.laps_left)) : null;
-    // Exact from IMSA's BoP when we have it (fixed refill rate); otherwise estimated from observed fills.
-    const bopFill = e.fill_source === "bop" ? e.next_fill_secs : null;
-    const est = bopFill ?? (fm && arrive != null ? Math.round(fm.perPct * (100 - arrive)) : null);
-    const nextFill = est > 0 ? est : null;   // a negative or zero estimate means the fill data is off; show nothing
-    const fillTitle = bopFill != null ? `Refuelling only. IMSA BoP ${live.bop?.bulletin || ""}: a full tank takes ${e.full_fill_secs} s.` : "Estimated from this session's fills of 40%+.";
-    out.push(kpi(bopFill != null ? "Next fill" : "Next fill (est.)", nextFill ? `${bopFill != null ? "" : "~"}${nextFill}<small>s</small>` : "–",
-      (bopFill != null ? `refuel only · BoP ${e.full_fill_secs}s full` : fm ? `from ${fm.n} fills of 40%+` : "needs 2 fills of 40%+")
-      + (last ? ` · last ${last.secs}s` : ""), "", fillTitle));
-  } else if (s) {
-    out.push(kpi("Stint", s.laps ?? "–", s.typical ? `typical full stint ${s.typical} laps (no telemetry)` : "no telemetry for this car"));
-    out.push(kpi("Next stop", s.laps_to_typical != null ? `~${Math.max(s.laps_to_typical, 0)} laps` : "–", s.eta_min ? `~${s.eta_min} min` : ""));
-  } else {
-    out.push(kpi("Energy", "–", "no telemetry for this car yet"));
-  }
-  const ls = e?.stops?.at(-1);
-  if (ls) out.push(kpi("Last stop", `${Math.round(ls.lane)}<small>s</small>`, `L${ls.lap} · ` + stopWords(ls), "", "Time in the pit lane, entry to exit"));
-  const done = me.pit_stops ?? 0;
-  out.push(kpi("Stops", e?.stops_remaining != null ? `${done} + ~${e.stops_remaining}` : done,
-    e?.stops_remaining != null ? `~${done + e.stops_remaining} total by the flag` : "estimate in the race"));
-  const fit = paceModel(myLaps)?.fit;
-  const change = st?.trend == null ? "" : Math.abs(st.trend) <= 0.05 ? "last 5: steady" : `last 5: ${st.trend < 0 ? "▲" : "▼"} ${Math.abs(st.trend).toFixed(2)} s`;
-  out.push(kpi("Pace", st?.pace ? lapTime(st.pace) : "–",
-    `<span class="${fit ? (fit.b < -0.005 ? "up" : fit.b > 0.005 ? "down" : "") : ""}">${fit ? `lap trend ${Math.abs(fit.b) < 0.005 ? "steady" : `${fit.b < 0 ? "▲" : "▼"} ${Math.abs(fit.b).toFixed(3)} s/lap`}` : "lap trend: needs ~8 laps"}</span>${change ? `<br>${change}` : ""}`,
-    "", "Pace: median of the last 5 clean laps. Lap trend: how lap time changes per lap through a stint (tyres + fuel). Last 5 laps: change against the 5 before."));
-  return out.join("");
-}
+
 
 // --- generic line chart with crosshair tooltip (one y axis) ------------------------
 function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = false, empty = "Not enough laps yet.", zeroLine = false, robust = false, xName = "Lap", bands = [], height = 220, step: stepped = false }) {
@@ -542,7 +509,6 @@ function shape(kind, cx, cy, color, r = 3.2) {
   return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" ${ring}/>`;
 }
 const swatchOf = st => `<svg width="30" height="12" aria-hidden="true" style="vertical-align:middle;margin-right:4px;overflow:visible"><line x1="1" x2="29" y1="6" y2="6" stroke="${st.color}" stroke-width="${st.width}" stroke-dasharray="${st.dash}"/>${shape(st.marker, 15, 6, st.color, 3)}</svg>`;
-const trendText = b => b == null ? "–" : Math.abs(b) < 0.005 ? "steady" : b < 0 ? `▲ ${Math.abs(b).toFixed(3)} s/lap quicker` : `▼ ${b.toFixed(3)} s/lap slower`;
 
 let paceExtra = [];          // cars the viewer added (shared by Pit strategy and Pace)
 let paceCompare = null;      // main comparison car (used by the sectors line too)
@@ -598,83 +564,6 @@ function renderAddCar(cars, rows) {
   });
 }
 
-function renderPace(lc, sel, rows, lapsCls, fc, clsName, cars) {
-  const models = Object.fromEntries(rows.map(r => [r.car, paceModel(lapsCls[r.car])]));
-  const me = models[sel.car];
-  const rowOf = c => rows.find(r => r.car === c);
-  const picks = cars.slice(1);
-
-  // Projection over the next 20 laps, resetting at each car's next stop.
-  const proj = (m, row) => {
-    if (!m?.fit) return null;
-    const nextStop = row?.energy?.next_stop_lap ?? (row?.stint?.laps_to_typical != null ? m.lastLap + Math.max(1, row.stint.laps_to_typical) : null);
-    return Array.from({ length: 21 }, (_, k) => {
-      const lap = m.lastLap + k, sl = nextStop && lap > nextStop ? lap - nextStop : m.stintLap + k;
-      return [lap, m.fit.at(Math.max(2, sl)), nextStop];
-    });
-  };
-  cars.forEach(c => { c.m = models[c.car]; c.p = proj(c.m, rowOf(c.car)); });
-  const mine = cars[0];
-
-  // Headline: one line per comparison car.
-  const lines = picks.map(p => {
-    const c = cars.find(x => x.car === p.car), them = c.m;
-    if (!me || !them) return `<li>vs <b>#${esc(p.car)}</b> · ${esc(p.role)}: needs about 8 clean laps.</li>`;
-    // Always phrased from the selected car's point of view.
-    let t = `<li>vs <b>#${esc(p.car)}</b> · ${esc(p.role)}: #${esc(sel.car)} is ${Math.abs(me.pace - them.pace).toFixed(2)} s/lap ${me.pace <= them.pace ? "quicker" : "slower"} on race pace`;
-    if (mine.p && c.p) {
-      const byLap = new Map(c.p.map(q => [q[0], q[1]]));
-      const deltas = mine.p.filter(q => byLap.has(q[0])).map(q => [q[0], q[1] - byLap.get(q[0])]);
-      const next10 = deltas.slice(1, 11), avg = next10.reduce((a, d) => a + d[1], 0) / (next10.length || 1);
-      const flip = deltas.slice(1).find(d => Math.sign(d[1]) !== Math.sign(deltas[0][1]) && Math.abs(d[1]) > 0.02);
-      t += `, and about ${Math.abs(avg).toFixed(2)} s/lap ${avg <= 0 ? "quicker" : "slower"} over the next 10 laps (stint lap ${me.stintLap} vs ${them.stintLap})`
-        + (flip ? `, flips around lap ${flip[0]}` : "");
-    }
-    return t + ".</li>";
-  });
-  $("pace-sub").innerHTML = (me ? `#${esc(sel.car)} race pace <b>${lapTime(me.pace)}</b> (slowest 10% of clean laps thrown away).` : `#${esc(sel.car)} needs about 8 clean laps.`)
-    + (lines.length ? `<ul class="vs">${lines.join("")}</ul>` : "")
-    + (!live.is_race ? `<span class="dim">Practice and qualifying mix run plans, fuel loads and a rubbering-in track, so treat these as rough until the race.</span>` : "");
-
-  // Chart 1: lap time through a stint (dots) with each car's trend line.
-  const stintSeries = [];
-  for (const c of cars) {
-    if (!c.m) continue;
-    stintSeries.push({ name: `#${c.car}`, pts: c.m.kept.map(q => [q.sl, q.t]), color: c.style.color, dots: true });
-    if (c.m.fit) stintSeries.push({ pts: [[c.m.fit.minSl, c.m.fit.at(c.m.fit.minSl)], [c.m.fit.maxSl, c.m.fit.at(c.m.fit.maxSl)]],
-      color: c.style.color, width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}` });
-  }
-  lineChart("ch-stint", { series: stintSeries, yFmt: lapTime, xName: "Stint lap", empty: "Needs a few clean laps." });
-  const legend = cars.map(c => `<span class="sw">${swatchOf(c.style)}#${esc(c.car)} <span class="dim">${esc(c.role === "selected" ? "" : c.role)}</span></span>`).join("");
-  $("lg-stint").innerHTML = legend + `<span class="sw dim">dots: clean laps by laps since the last stop · lines: trend (tyres + fuel)</span>`;
-
-  // Chart 2: projected lap times for the next 20 laps.
-  const projSeries = cars.filter(c => c.p).map(c => ({ name: `#${c.car}`, pts: c.p.map(q => [q[0], q[1]]), color: c.style.color,
-    width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}` }));
-  lineChart("ch-proj", { series: projSeries, yFmt: lapTime, empty: "Projection needs each car's stint trend (about 8 clean laps over several stint laps)." });
-  $("lg-proj").innerHTML = cars.map(c => `<span class="sw">${swatchOf(c.style)}#${esc(c.car)}${c.p?.[0]?.[2] ? ` · pits ~L${c.p[0][2]}` : ""}</span>`).join("")
-    + `<span class="sw dim">lower is quicker · back to fresh-tyre pace after a stop</span>`;
-
-  // Class table.
-  const corvettes = standings.cars.filter(c => c.class === sel.class).map(c => c.car);
-  const worn = lc.stint_model?.typical || 40, fresh = 3;
-  const freshOf = f => f.at(Math.max(f.minSl, fresh));
-  const wornOf = f => f.maxSl >= worn * 0.6 ? f.at(Math.min(worn, f.maxSl)) : null;
-  const ranked = rows.filter(r => models[r.car]).sort((a, b) => models[a.car].pace - models[b.car].pace);
-  const myNow = me?.fit ? me.fit.at(Math.max(2, me.stintLap)) : null;
-  $("pace-table").innerHTML = `<thead><tr><th>#</th><th>Car</th><th>Pos</th><th>Race pace</th><th>Best</th><th title="Trend value early in a stint">Fresh tyres</th><th title="Trend value late in a stint (shown once a car has run at least 60% of a typical ${worn}-lap stint)">Worn</th><th class="l" title="How lap time changes per lap through a stint (tyres wearing and fuel burning off together)">Lap trend</th><th>Stint lap</th><th>Now</th><th>vs #${esc(sel.car)}</th><th>Laps used</th></tr></thead><tbody>`
-    + ranked.map((r, i) => { const m = models[r.car], f = m.fit, now = f ? f.at(Math.max(2, m.stintLap)) : null;
-      return `<tr class="${corvettes.includes(r.car) ? "tracked" : ""}" style="--c:${r.car === sel.car ? C.me : corvettes.includes(r.car) ? "var(--series-2)" : C.ctx}">
-        <td>${i + 1}</td><td>#${esc(r.car)}</td><td class="dim">P${r.class_pos}</td><td class="total">${lapTime(m.pace)}</td><td class="dim">${lapTime(m.best)}</td>
-        <td>${f ? lapTime(freshOf(f)) : "–"}</td><td>${f && wornOf(f) ? lapTime(wornOf(f)) : "–"}</td>
-        <td class="l ${f ? (f.b < -0.005 ? "up" : f.b > 0.005 ? "down" : "dim") : "dim"}">${f ? trendText(f.b) : "–"}</td><td class="dim">${m.stintLap}</td>
-        <td>${now ? lapTime(now) : "–"}</td><td class="${now && myNow ? (now < myNow ? "down" : now > myNow ? "up" : "dim") : "dim"}">${now && myNow && r.car !== sel.car ? signed(now - myNow) : "–"}</td>
-        <td class="dim">${m.n}${m.dropped ? ` (−${m.dropped})` : ""}</td></tr>`; }).join("")
-    + `</tbody>`;
-  $("pace-note").textContent = `Clean laps exclude the first lap, in- and out-laps and anything over 105% of the car's best; then the slowest 10% are dropped. `
-    + `"Lap trend" is how much quicker or slower each lap gets through a stint; it includes tyres wearing and fuel burning off, and "stint lap" (laps since the last stop) stands in for tyre age since teams sometimes double-stint tyres. `
-    + `"vs #${sel.car}": how much slower (+) or quicker (−) each car should be than #${sel.car} on its current stint lap; green is good for #${sel.car}.`;
-}
 
 // --- sectors (from Al Kamel's time cards: after each session, about hourly in the race) ---
 function renderSectors(sel, clsName) {
@@ -887,7 +776,8 @@ function renderDrivers(sel, cars, rows) {
 // can switch the video off; that's remembered and nothing loads while it's off.
 const sessionKind = t => /qualif/i.test(t) ? "qualifying" : /practice/i.test(t) ? "practice" : /warm/i.test(t) ? "warm-up" : "race";
 function renderWatchCard(sel) {
-  const off = store.get("watch") === "off", w = watchData;
+  // A folded card counts as off too, so a hidden video never streams in the background.
+  const off = store.get("watch") === "off" || $("watch-card").classList.contains("collapsed"), w = watchData;
   const running = live && !live.finished && Date.now() - new Date(live.updated) < 30 * 60e3;
   const kind = live ? sessionKind(live.session || "") : null;
   const recent = v => Date.now() - new Date(v.published) < 36 * 3600e3;

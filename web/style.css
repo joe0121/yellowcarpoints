@@ -310,8 +310,6 @@ details.deep[open] > .charts { margin-top: 16px; }
   .kpi { padding: 8px 10px; }
   .kpi .v { font-size: 22px; }
   .watch .dim { display: none; }
-  /* pace: the headline matchup and the projection only */
-  .m-lite .charts > div:first-child, .m-lite #pace-table, .m-lite #pace-table-title, .m-lite #pace-note { display: none; }
   .answer { font-size: 20px; }
   .needs-lines { font-size: 13px; }
   .facts b { font-size: 17px; }
@@ -362,3 +360,18 @@ details.deep[open] > .charts { margin-top: 16px; }
 .bhelp { font-size: 12px; margin: 6px 0 2px; }
 .bandkey { display: inline-block; width: 14px; height: 10px; background: var(--flag-yellow); opacity: .35; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 @media (max-width: 640px) { .bctl select, .bseg button { font-size: 11px; } }
+/* card fold toggle */
+.card-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.card-head > h2 { margin-right: auto; }
+.card-head.pace-head > :first-child { margin-right: auto; }
+.fold-btn { font: 600 11px Inter, sans-serif; color: var(--text-3); background: none; border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px; cursor: pointer; }
+.fold-btn:hover { color: var(--text); border-color: var(--text-3); }
+.card.collapsed > :not(.card-head) { display: none !important; }
+.card.collapsed { padding-bottom: 12px; }
+/* pit strategy table */
+table.pittable td .sub { font-size: 11px; color: var(--text-3); line-height: 1.2; }
+table.pittable td.who { white-space: nowrap; }
+table.pittable td.who b { font: 600 17px Oswald, sans-serif; color: var(--text); }
+table.pittable .mini { margin-right: 4px; }
+@media (max-width: 640px) { table.pittable td.who svg, table.pittable .role { display: none; } table.pittable td.who { border-left: 3px solid var(--c); } }
+@media (min-width: 1280px) { #ours .dn { display: none; } }
