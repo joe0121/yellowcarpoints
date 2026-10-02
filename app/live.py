@@ -21,6 +21,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import bop
 import history
 import telemetry
 import status
@@ -210,7 +211,7 @@ def energy_use(lap_energy):
     return statistics.median(drops[-5:]) if len(drops) >= 2 else None
 
 
-def energy_info(tel, row, pace, remaining_secs, fill_per_pct):
+def energy_info(tel, row, pace, remaining_secs, fill_per_pct, bop_models=None):
     if not tel or tel.get("energy") is None:
         return None
     now, use = tel["energy"], energy_use(tel["lap_energy"])
@@ -222,9 +223,15 @@ def energy_info(tel, row, pace, remaining_secs, fill_per_pct):
         out.update(laps_left=round(laps_left, 1), full_tank_laps=round(full, 1),
                    next_stop_lap=int(row.get("L") or 0) + int(laps_left),
                    eta_min=round(laps_left * pace / 60) if pace else None)
-        if fill_per_pct:
-            arrive = max(now - use * int(laps_left), 0)
-            out["next_fill_secs"] = round((100 - arrive) * fill_per_pct)
+        arrive = max(now - use * int(laps_left), 0)
+        b = (bop_models or {}).get(bop.model_key(row.get("V")))
+        if b:
+            # Exact per the BoP: the virtual tank refills at a fixed rate (a full refill takes energy/rate).
+            out.update(next_fill_secs=round((100 - arrive) / 100 * b["full_fill_secs"]), fill_source="bop",
+                       full_fill_secs=b["full_fill_secs"], tank_mj=b["energy_mj"],
+                       mj_per_lap=round(use / 100 * b["energy_mj"], 1))
+        elif fill_per_pct:
+            out.update(next_fill_secs=round((100 - arrive) * fill_per_pct), fill_source="observed")
     return out
 
 
@@ -532,6 +539,8 @@ def step():
     flag = info.get("F", "")
     tel = TELEMETRY.snapshot()
     remaining = history.secs(info.get("TR")) if is_race else None
+    bop_doc = read("bop.json") or {}
+    bop_models = bop_doc.get("models")
     classes = {}
     for cls, rows in by_class.items():
         model = stint_model(cls, state, baseline)
@@ -541,7 +550,8 @@ def step():
         fill_per_pct = statistics.median(per) if len(per) >= 2 else None
         paces = {r["N"]: strategy_pace(state["cars"][r["N"]]) for r in rows}
         class_pace = statistics.median([p for p in paces.values() if p]) if any(paces.values()) else None
-        energies = {r["N"]: energy_info(tel["cars"].get(r["N"]), r, paces[r["N"]], remaining, fill_per_pct) for r in rows}
+        energies = {r["N"]: energy_info(tel["cars"].get(r["N"]), r, paces[r["N"]], remaining, fill_per_pct, bop_models)
+                    for r in rows}
         stops = {r["N"]: stops_to_flag(r, energies[r["N"]], state["cars"][r["N"]], model, remaining,
                                        paces[r["N"]] or class_pace) for r in rows}
         for n, e in energies.items():
@@ -578,6 +588,7 @@ def step():
         "scheduled_end": active and active["end"],
         "telemetry": {"connected": tel["connected"], "age": round(now - tel["last_data"]) if tel["last_data"] else None},
         "base_event": standings and standings["event"], "classes": classes,
+        "bop": bop_doc and {k: bop_doc.get(k) for k in ("bulletin", "event", "date", "url")},
     }
     write("live.json", live_out)
     RECORDER.output("live.json", live_out)

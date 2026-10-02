@@ -22,6 +22,7 @@ from urllib.parse import quote, unquote
 
 import pdfplumber
 
+import bop
 import history
 import live
 import sectors
@@ -340,6 +341,11 @@ def main():
                 status.mark("history")
             except Exception:
                 log.exception("history failed")
+            try:
+                bop.refresh()
+                status.mark("bop", bulletin=(read("bop.json") or {}).get("bulletin"))
+            except Exception:
+                log.exception("BoP bulletin failed")
         if time.monotonic() >= next_sectors:
             next_sectors = time.monotonic() + (SECTORS_LIVE if live.in_window() else SECTORS_IDLE)
             try:

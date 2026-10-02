@@ -114,3 +114,12 @@ during endurance races), checked every 5 minutes during session windows and ever
 and re-downloaded only when the file changes. Per car: best time in each of IMSA's three sectors, the
 ideal lap, and a typical time per sector (median of clean laps). Shown as the Sectors table on the
 Strategy page.
+
+## Balance of Performance (BoP)
+
+`app/bop.py` reads IMSA's newest event BoP technical bulletin (found on
+imsa.com/competitors/<year>-technical-bulletins/, checked at most every 3 hours) and parses the GTD /
+GTD PRO table: maximum stint energy (MJ) and energy replenishment rate (MJ/s) per make. GTD cars use a
+virtual energy tank refilled at that fixed rate, so a refill takes exactly (energy to add / rate);
+for 2026 that is 40 s for a full tank for every make. The strategy page uses it for the next fill time
+and shows each car's energy use in MJ per lap. Feed vehicle names are matched to BoP rows by model.

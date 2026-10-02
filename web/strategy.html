@@ -244,16 +244,19 @@ function kpi(k, v, s, extra = "") { return `<div class="kpi"><div class="k">${k}
 function renderKpis(me, st, lc) {
   const e = me.energy, s = me.stint, out = [];
   if (e) {
-    out.push(kpi("Energy now", `${e.now.toFixed(1)}<small>%</small>`, e.use_per_lap ? `using ${e.use_per_lap}% per lap` : "use per lap after 3 laps on this tank",
+    out.push(kpi("Energy now", `${e.now.toFixed(1)}<small>%</small>`, e.use_per_lap ? `using ${e.use_per_lap}% per lap${e.mj_per_lap ? ` (${e.mj_per_lap} MJ of a ${e.tank_mj} MJ tank)` : ""}` : "use per lap after 3 laps on this tank",
       `<div class="ebar" role="img" aria-label="${e.now.toFixed(0)}% energy"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></div>`));
     out.push(kpi("Laps left on this tank", e.laps_left != null ? Math.floor(e.laps_left) : "–", e.full_tank_laps ? `a full tank lasts ~${Math.floor(e.full_tank_laps)} laps` : "needs a few laps of data"));
     out.push(kpi("Next stop", e.next_stop_lap ? `Lap ${e.next_stop_lap}` : "–", e.eta_min != null ? `in ~${e.eta_min} min at current pace` : e.refuelling ? "refuelling now" : ""));
     const last = e.refills.at(-1), fm = fillModel(lc);
     const arrive = e.use_per_lap && e.laps_left != null ? Math.max(0, e.now - e.use_per_lap * Math.floor(e.laps_left)) : null;
-    const nextFill = fm && arrive != null ? Math.round(fm.perPct * (100 - arrive)) : null;
-    out.push(kpi("Next fill time (est.)", nextFill ? `~${nextFill}<small>s</small>` : "–",
-      (last ? `last fill ${last.secs}s (${last.from.toFixed(0)}→${last.to.toFixed(0)}%)` : "no refuels seen yet")
-      + (fm ? ` · from ${fm.n} class fills of 40%+` : " · needs two class fills of 40%+")));
+    // Exact from IMSA's BoP when we have it (fixed refill rate); otherwise estimated from observed fills.
+    const bopFill = e.fill_source === "bop" ? e.next_fill_secs : null;
+    const nextFill = bopFill ?? (fm && arrive != null ? Math.round(fm.perPct * (100 - arrive)) : null);
+    out.push(kpi(bopFill != null ? "Next fill time" : "Next fill time (est.)", nextFill ? `${bopFill != null ? "" : "~"}${nextFill}<small>s</small>` : "–",
+      (bopFill != null ? `refuelling only, per IMSA BoP (${e.full_fill_secs}s for a full tank${live.bop?.bulletin ? ", " + esc(live.bop.bulletin) : ""})`
+        : fm ? `from ${fm.n} class fills of 40%+` : "needs two class fills of 40%+")
+      + (last ? ` · last fill ${last.secs}s (${last.from.toFixed(0)}→${last.to.toFixed(0)}%)` : "")));
   } else if (s) {
     out.push(kpi("Stint", s.laps ?? "–", s.typical ? `typical full stint ${s.typical} laps (no telemetry)` : "no telemetry for this car"));
     out.push(kpi("Next stop", s.laps_to_typical != null ? `~${Math.max(s.laps_to_typical, 0)} laps` : "–", s.eta_min ? `~${s.eta_min} min` : ""));
@@ -399,7 +402,7 @@ function renderBoard(rows, strat, sel, lapsCls, clsName, fc) {
         <td>${r.class_pos}</td><td class="dim">${r.net_pos ?? "–"}</td><td>#${esc(r.car)}${[fc.champ_behind, fc.champ_ahead].includes(r.car) ? ` <span class="owes" title="Championship rival">TITLE</span>` : ""}</td>
         <td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}${r.owes_stop ? `<span class="owes" title="Still owes a stop in this pit cycle">OWES STOP</span>` : ""}</td>
         <td class="l">${e.now != null ? `<span class="mini"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></span>${e.now.toFixed(0)}%` : "–"}</td>
-        <td>${e.use_per_lap ?? "–"}</td><td>${e.laps_left != null ? Math.floor(e.laps_left) : "–"}</td><td>${e.next_stop_lap ? "L" + e.next_stop_lap : "–"}</td>
+        <td title="${e.mj_per_lap ? e.mj_per_lap + " MJ per lap of a " + e.tank_mj + " MJ tank" : ""}">${e.use_per_lap ?? "–"}</td><td>${e.laps_left != null ? Math.floor(e.laps_left) : "–"}</td><td>${e.next_stop_lap ? "L" + e.next_stop_lap : "–"}</td>
         <td>${r.pit_stops ?? "–"}${e.stops_remaining != null ? ` <span class="dim">+${e.stops_remaining}</span>` : ""}</td>
         <td class="dim">${e.stops?.length ? stopTags(e.stops.at(-1)) : last ? `fill ${last.secs}s` : "–"}</td><td>${lapTime(x.pace)}</td>
         <td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td>
