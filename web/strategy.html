@@ -105,6 +105,18 @@
     <p class="live-sub">Pick what to plot and which cars. Shaded bands are yellow flags, ▼ marks a pit stop. Your charts are remembered on this device.</p>
     <div id="builder"></div>
   </section>
+  <section class="card" id="pa-card" hidden style="margin-bottom:16px">
+    <div class="pace-head"><h2 id="pa-title">Pace analysis</h2><select id="pa-car" class="addcar" aria-label="Which car"></select></div>
+    <h3 class="wxh3">Stint by stint</h3>
+    <p class="bhelp dim">Each stint's clean laps by lap of the stint, coloured by driver: how much a stint fades as tyres wear and fuel burns off, and which stints were quickest.</p>
+    <div class="legend" id="lg-pa-stint"></div>
+    <div class="chart" id="ch-pa-stint"><div class="tip"></div></div>
+    <h3 class="wxh3">Pace by driver</h3>
+    <p class="bhelp dim">Clean laps per driver: the bar is the middle half of their laps, the line their median, the dot their best. Fastest median on top.</p>
+    <div id="pa-drivers"></div>
+    <h3 class="wxh3">Class pace map</h3>
+    <div class="scroll" id="pa-map"></div>
+  </section>
     </div>
   </div>
 
@@ -283,11 +295,12 @@ function render() {
     $("qnote").hidden = false;
   } else $("qnote").hidden = true;
   $("ours-title").textContent = `Our cars · ${clsName}`;
-  renderOurs(cmpCars, rows, strat);
+  renderOurs(cmpCars, rows, strat, lapsCls);
   renderFeed(sel, cmpCars, rows, lapsCls, fc);
   renderRaceControl(sel, cmpCars);
   renderTrackMap(sel, rows, cmpCars, clsName);
   renderWeather(sel, rows, lc, lapsCls, cmpCars);
+  if (!$("pa-card").classList.contains("collapsed")) renderPaceAnalysis(sel, rows, lapsCls, cmpCars, clsName);
   renderDrivers(sel, cmpCars, rows);
   $("title").textContent = `Pit strategy · ${clsName}`;
   renderWatch(sel, cmpCars, rows, live.is_race, !raceOnly);
@@ -728,7 +741,7 @@ function liveRow(car) {
 }
 
 // Our cars: one row each for the selected car and the cars to watch.
-function renderOurs(cars, rows, strat) {
+function renderOurs(cars, rows, strat, lapsCls = {}) {
   const race = live.is_race, byPos = [...rows].sort((a, b) => a.class_pos - b.class_pos);
   const best = r => secsOf(r.best_lap);
   const gapSecs = r => r.class_pos === 1 ? 0 : secsOf(r.gap);
@@ -738,7 +751,7 @@ function renderOurs(cars, rows, strat) {
     const x = race ? gapSecs(b) - gapSecs(a) : best(b) - best(a);
     return x == null || isNaN(x) ? "–" : `${x.toFixed(race ? 1 : 3)}s`;
   };
-  $("ours").innerHTML = `<thead><tr><th class="l">Car</th><th>Pos</th><th>${race ? `Gap<span class="m-hide"> ahead</span>` : `<span class="m-hide">To car </span>ahead`}</th><th>${race ? "Gap behind" : "To car behind"}</th><th>Last lap</th><th title="Last lap against the car's pace (median of its last 5 clean laps)">vs pace</th><th>${race ? "Next stop" : "Best"}</th><th class="l">Now</th></tr></thead><tbody>`
+  $("ours").innerHTML = `<thead><tr><th class="l">Car</th><th>Pos</th><th>${race ? `Gap<span class="m-hide"> ahead</span>` : `<span class="m-hide">To car </span>ahead`}</th><th>${race ? "Gap behind" : "To car behind"}</th><th>Last lap</th><th title="Last lap against the car's pace (median of its last 5 clean laps)">vs pace</th><th>${race ? "Next stop" : "Best"}</th><th class="l">Now</th>${race ? `<th class="l" title="Gap to the car ahead against the difference in pace (last 5 clean laps)">Closing</th>` : ""}</tr></thead><tbody>`
     + cars.map(c => {
       const r = rows.find(x => x.car === c.car);
       if (!r) return "";
@@ -756,7 +769,7 @@ function renderOurs(cars, rows, strat) {
         <td>${last ? esc(r.last_lap) : "–"}</td>
         <td class="${vs == null || vs > pace * 0.07 ? "dim" : vs < -0.1 ? "up" : vs > 0.5 ? "down" : "dim"}">${vs == null ? "–" : vs > pace * 0.07 ? (r.in_pit || r.energy?.pit_lane ? "pit" : "slow lap") : signed(vs, 1)}</td>
         <td>${race ? (toStop != null ? `${toStop <= 0 ? "due" : `in ${toStop} lap${toStop === 1 ? "" : "s"}`}${e?.next_stop_lap ? ` <span class="dim">L${e.next_stop_lap}</span>` : ""}` : "–") : (timed(r) && r.best_lap ? esc(r.best_lap) : "–")}</td>
-        <td class="l">${now}</td></tr>`;
+        <td class="l">${now}</td>${race ? `<td class="l">${catchText(r, up, lapsCls)}</td>` : ""}</tr>`;
     }).join("") + `</tbody>`;
 }
 
@@ -1098,6 +1111,121 @@ function renderPaceTemp(sel, lapsCls, cars) {
   if (series.length) lineChart("wx-pace", { series, yFmt: lapTime, xName: "Track °F", robust: true, empty: "" });
 }
 
+// --- Pace analysis helpers: clean laps, rolling pace, race trace, drivers per lap -------------------
+// Clean laps: no lap 1, no in- or out-lap, nothing over 107% of the car's best.
+function cleanOf(d) {
+  if (!d?.laps?.length) return [];
+  const pit = new Set((d.stops || []).flatMap(n => [n, n + 1]));
+  const l = d.laps.filter(([n]) => n > 1 && !pit.has(n));
+  const best = Math.min(...l.map(q => q[1]));
+  return l.filter(q => q[1] <= best * 1.07);
+}
+const medianOf = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
+// Rolling pace: median of the last k clean laps, at each clean lap.
+function rollingPace(d, k = 5) {
+  const c = cleanOf(d);
+  return c.map((p, i) => [p[0], +medianOf(c.slice(Math.max(0, i - k + 1), i + 1).map(q => q[1])).toFixed(3)]).slice(Math.min(2, c.length));
+}
+// Class reference lap: median of every car's clean laps.
+function classRefLap(lapsCls) { return medianOf(Object.values(lapsCls).flatMap(d => cleanOf(d).map(q => q[1]))); }
+// Race trace: time gained (+) or lost (−) against a steady reference lap, lap by lap. Missing laps are
+// filled with the car's median so a gap in the data doesn't look like a huge loss.
+function raceTrace(d, ref) {
+  if (!d?.laps?.length || !ref) return [];
+  const byLap = new Map(d.laps), med = medianOf(d.laps.map(l => l[1])), out = [];
+  let t = 0;
+  for (let n = 1; n <= d.laps.at(-1)[0]; n++) {
+    t += byLap.get(n) ?? med;
+    if (byLap.has(n)) out.push([n, +(n * ref - t).toFixed(2)]);
+  }
+  return out;
+}
+// Who drove each lap, from the scraper's driver-change log (and the current driver).
+function driverByLap(d, now) {
+  const ch = (d?.ev || []).filter(e => e[1] === "d").sort((a, b) => a[0] - b[0]);
+  const first = ch[0]?.[2] || now || null;
+  return n => { let who = first; for (const e of ch) { if (n > e[0]) who = e[3]; else break; } return who; };
+}
+
+// --- Pace analysis card: stint overlay, pace by driver, class pace map -----------------------------
+function renderPaceAnalysis(sel, rows, lapsCls, cars, clsName) {
+  const card = $("pa-card");
+  const pick = $("pa-car"), want = pick.value && cars.some(c => c.car === pick.value) ? pick.value : sel.car;
+  pick.innerHTML = cars.map(c => `<option value="${esc(c.car)}"${c.car === want ? " selected" : ""}>#${esc(c.car)} ${esc(c.role)}</option>`).join("");
+  pick.onchange = () => renderPaceAnalysis(sel, rows, lapsCls, cars, clsName);
+  const d = lapsCls[want], row = rows.find(r => r.car === want);
+  $("pa-title").textContent = `Pace analysis · ${clsName}`;
+  card.hidden = false;
+  // 1) Stint overlay: each stint by laps into the stint, coloured by driver.
+  const who = driverByLap(d, row?.driver), clean = cleanOf(d), stops = d?.stops || [];
+  const drivers = [...new Set(clean.map(([n]) => who(n)).filter(Boolean))];
+  const DC = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"];
+  const stintOf = n => stops.filter(s => s < n).length;
+  const stints = {};
+  for (const [n, t] of clean) (stints[stintOf(n)] ||= []).push([n - (stops.filter(s => s < n).at(-1) || 0), t, who(n)]);
+  const series = Object.entries(stints).filter(([, p]) => p.length >= 3).map(([k, p]) => {
+    const drv = p[Math.floor(p.length / 2)][2], i = Math.max(0, drivers.indexOf(drv));
+    return { name: `Stint ${+k + 1}${drv ? ` · ${drv.split(" ").at(-1)}` : ""}`, pts: p.map(q => [q[0], q[1]]), color: DC[i % DC.length], width: 1.75, dash: ["", "6 3", "2 3", "9 3 2 3"][Math.floor(i / DC.length) % 4], end: `S${+k + 1}` };
+  });
+  lineChart("ch-pa-stint", { series, yFmt: lapTime, xName: "Lap of stint", robust: true, empty: "Stints appear after the first stops." });
+  $("lg-pa-stint").innerHTML = drivers.map((dr, i) => `<span style="--c:${DC[i % DC.length]}">${esc(dr)}</span>`).join("") + `<span class="dim">one line per stint, labelled S1, S2… at the end</span>`;
+  // 2) Pace by driver: spread of clean laps (middle half as a bar, median tick, best dot).
+  const byDrv = {};
+  for (const [n, t] of clean) { const dr = who(n); if (dr) (byDrv[dr] ||= []).push(t); }
+  const stats = Object.entries(byDrv).filter(([, v]) => v.length >= 3).map(([dr, v]) => {
+    const s = [...v].sort((a, b) => a - b), q = f => s[Math.floor(f * (s.length - 1))];
+    return { dr, n: s.length, best: s[0], q1: q(0.25), med: q(0.5), q3: q(0.75) };
+  }).sort((a, b) => a.med - b.med);
+  if (stats.length) {
+    const lo = Math.min(...stats.map(x => x.best)) - 0.2, hi = Math.max(...stats.map(x => x.q3)) + 0.2;
+    const W = Math.max(300, $("pa-drivers").clientWidth || 600), L = 150, R = 60, rowH = 30, x = v => L + (v - lo) / (hi - lo) * (W - L - R);
+    let g = "";
+    for (let v = Math.ceil(lo * 2) / 2; v <= hi; v += 0.5) g += `<line x1="${x(v)}" x2="${x(v)}" y1="0" y2="${stats.length * rowH}" stroke="var(--grid)"/><text x="${x(v)}" y="${stats.length * rowH + 14}" text-anchor="middle">${lapTime(v)}</text>`;
+    stats.forEach((s, i) => { const y = i * rowH + rowH / 2, c = DC[Math.max(0, drivers.indexOf(s.dr)) % DC.length];
+      g += `<text class="lbl" x="${L - 8}" y="${y + 4}" text-anchor="end">${esc(s.dr)}</text>`
+        + `<rect x="${x(s.q1)}" y="${y - 7}" width="${Math.max(2, x(s.q3) - x(s.q1))}" height="14" rx="4" fill="${c}" fill-opacity=".55"/>`
+        + `<line x1="${x(s.med)}" x2="${x(s.med)}" y1="${y - 9}" y2="${y + 9}" stroke="var(--text)" stroke-width="2"/>`
+        + `<circle cx="${x(s.best)}" cy="${y}" r="4" fill="var(--surface)" stroke="${c}" stroke-width="2"/>`
+        + `<text x="${W - R + 6}" y="${y + 4}">${lapTime(s.med)} <tspan class="dim">(${s.n})</tspan></text>`; });
+    $("pa-drivers").innerHTML = `<svg viewBox="0 0 ${W} ${stats.length * rowH + 20}" role="img" aria-label="Lap time spread by driver">${g}</svg>`;
+  } else $("pa-drivers").innerHTML = `<p class="empty">Driver comparison appears once each driver has a few clean laps.</p>`;
+  // 3) Class pace map: each car's median clean lap per race hour, against the class that hour.
+  const start = live?.is_race && live.t && hmsSecs(live.elapsed) != null ? live.t - hmsSecs(live.elapsed) : null;
+  const map = $("pa-map");
+  if (!start) { map.innerHTML = `<p class="empty">The class pace map fills in during the race, hour by hour.</p>`; return; }
+  const hourOf = {}, carsIn = rows.slice(0, 16);
+  for (const r of carsIn) {
+    const dd = lapsCls[r.car]; if (!dd?.laps?.length) continue;
+    const byLap = new Map(dd.laps), med = medianOf(dd.laps.map(l => l[1])), cl = new Map(cleanOf(dd));
+    let t = 0;
+    for (let n = 1; n <= dd.laps.at(-1)[0]; n++) { t += byLap.get(n) ?? med; if (cl.has(n)) ((hourOf[r.car] ||= {})[Math.floor(t / 3600)] ||= []).push(cl.get(n)); }
+  }
+  const hours = [...new Set(Object.values(hourOf).flatMap(h => Object.keys(h).map(Number)))].sort((a, b) => a - b);
+  const classMed = Object.fromEntries(hours.map(h => [h, medianOf(Object.values(hourOf).flatMap(x => x[h] || []))]));
+  const cell = (car, h) => { const v = hourOf[car]?.[h]; if (!v || v.length < 3) return `<td class="pm-empty"></td>`;
+    const dlt = medianOf(v) - classMed[h], a = Math.min(1, Math.abs(dlt) / 1.5);
+    const col = dlt < 0 ? `color-mix(in srgb, var(--s2) ${Math.round(a * 85)}%, var(--grid))` : `color-mix(in srgb, var(--s4) ${Math.round(a * 85)}%, var(--grid))`;
+    return `<td style="background:${col}" title="#${esc(car)}, hour ${h + 1}: ${lapTime(medianOf(v))} (${dlt > 0 ? "+" : ""}${dlt.toFixed(2)} s vs class)">${dlt > 0 ? "+" : ""}${dlt.toFixed(1)}</td>`; };
+  const watched = new Set(cars.map(c => c.car));
+  map.innerHTML = hours.length ? `<table class="pacemap"><thead><tr><th>Car</th>${hours.map(h => `<th>H${h + 1}</th>`).join("")}</tr></thead><tbody>`
+    + carsIn.filter(r => hourOf[r.car]).map(r => `<tr class="${watched.has(r.car) ? "tracked" : ""}"><td>#${esc(r.car)}</td>${hours.map(h => cell(r.car, h)).join("")}</tr>`).join("")
+    + `</tbody></table><p class="note"><span class="pm-key q">quicker</span> <span class="pm-key s">slower</span> than the class median that hour, in seconds per lap (median clean lap). Top 16 in class by position.</p>`
+    : `<p class="empty">The class pace map fills in during the race, hour by hour.</p>`;
+}
+
+// Catch estimate for Our cars: gap to the car ahead against the difference in rolling pace.
+function catchText(r, up, lapsCls) {
+  if (!live?.is_race || !up) return "–";
+  const gap = (r.class_pos === 1 ? 0 : secsOf(r.gap)) - (up.class_pos === 1 ? 0 : secsOf(up.gap));
+  const mine = rollingPace(lapsCls[r.car]).at(-1)?.[1], theirs = rollingPace(lapsCls[up.car]).at(-1)?.[1];
+  if (gap == null || isNaN(gap) || !mine || !theirs) return "–";
+  const delta = theirs - mine;   // + = we're quicker
+  if (Math.abs(delta) < 0.05) return `<span class="dim">holding #${esc(up.car)}</span>`;
+  if (delta < 0) return `<span class="down">losing ${(-delta).toFixed(2)} s/lap</span>`;
+  const n = Math.ceil(gap / delta);
+  return `<span class="up">catches #${esc(up.car)} in ~${n} lap${n === 1 ? "" : "s"}</span> <span class="dim">(+${delta.toFixed(2)} s/lap)</span>`;
+}
+
 // Yellow / red flag periods for a class as [fromLap, toLap, kind], from the scraper's flag log.
 function flagBands(cls) {
   const fl = laps?.flags?.[cls] || [], out = [];
@@ -1114,6 +1242,8 @@ const METRICS = {
   gapLead: { name: () => "Gap to class leader", unit: "s", help: () => "Seconds behind the class leader at the end of each lap.", invert: false },
   pos:     { name: () => "Class position", unit: "", help: () => "Running class position, from position changes the site recorded.", invert: true, step: true, int: true },
   energy:  { name: () => "Energy left", unit: "%", help: () => "Virtual energy tank left at the end of each lap (IMSA telemetry, GTD cars).", },
+  trace:   { name: () => "Race trace", unit: "s", help: () => "Time gained (+) or lost (−) against a steady class reference lap (the class's median clean lap). Rising = quicker than the reference; the gap between two lines is the real time between them; pit stops show as drops.", zero: true },
+  rolling: { name: () => "Rolling pace (last 5 laps)", unit: "s", help: () => "Median of each car's last 5 clean laps: pace without the noise of traffic and in/out laps. Watch it fade through a stint and jump at driver changes, dusk or rain.", lapFmt: true },
   stint:   { name: () => "Laps into stint", unit: "laps", help: () => "Laps since the car's last pit stop: a stand-in for tyre and fuel age.", int: true },
 };
 const DEFAULT_CHARTS = [{ metric: "gapSel", cars: "watch", smooth: 0, clean: true }, { metric: "deltaSel", cars: "watch", smooth: 5, clean: true }];
@@ -1133,6 +1263,8 @@ function carSeries(metric, car, d, ref, opts) {
     case "deltaSel": { const rl = new Map((opts.clean ? cleanLaps(ref) : ref?.laps || []).map(([n, t]) => [n, t]));
       return (opts.clean ? cleanLaps(d) : d.laps || []).filter(([n]) => rl.has(n)).map(([n, t]) => [n, +(t - rl.get(n)).toFixed(3)]); }
     case "energy": return d.energy || [];
+    case "trace": return raceTrace(d, opts.classRef);
+    case "rolling": return rollingPace(d);
     case "stint": { const stops = d.stops || []; return (d.laps || []).map(([n]) => { const last = stops.filter(s => s <= n).at(-1); return [n, last ? n - last : n]; }); }
     case "pos": { const ev = (d.ev || []).filter(e => e[1] === "p"); if (!ev.length) return [];
       const out = [[Math.max(1, ev[0][0] - 1), ev[0][2]]]; ev.forEach(e => out.push([e[0], e[3]]));
@@ -1147,7 +1279,7 @@ function renderBuilder(sel, rows, lapsCls, watch, clsName) {
   const corvettes = rows.filter(r => /corvette/i.test(r.vehicle || "")).map(r => r.car);
   const presets = { watch: watch.map(c => c.car), top5: rows.slice(0, 5).map(r => r.car), corvettes, all: rows.map(r => r.car) };
   const watchStyle = new Map(watch.map(c => [c.car, c.style]));
-  const bands = flagBands(sel.class);
+  const bands = flagBands(sel.class), classRef = classRefLap(lapsCls);
   host.innerHTML = charts.map((c, i) => `<div class="bchart" data-i="${i}">
       <div class="bctl">
         <select class="b-metric" aria-label="What to plot">${Object.entries(METRICS).map(([k, m]) => `<option value="${k}"${k === c.metric ? " selected" : ""}>${esc(m.name(sel.car))}</option>`).join("")}</select>
@@ -1168,7 +1300,7 @@ function renderBuilder(sel, rows, lapsCls, watch, clsName) {
     let k = 0;
     const series = cars.map(car => {
       const st = watchStyle.get(car), mine = car === sel.car;
-      const pts = smoothPts(carSeries(c.metric, car, lapsCls[car], lapsCls[sel.car], c), +c.smooth || 0);
+      const pts = smoothPts(carSeries(c.metric, car, lapsCls[car], lapsCls[sel.car], { ...c, classRef }), +c.smooth || 0);
       if ((c.metric === "gapSel" || c.metric === "deltaSel") && mine) return null;   // zero by definition
       return st ? { name: `#${car}`, pts, color: st.color, width: mine ? 2.5 : 2, dash: st.dash, marker: st.marker, end: `#${car}`, stops: lapsCls[car].stops }
         : { name: `#${car}`, pts, color: "var(--text-3)", width: 1.25, dash: OTHER_DASH[k++ % OTHER_DASH.length], end: `#${car}`, stops: cars.length <= 6 ? lapsCls[car].stops : [] };
