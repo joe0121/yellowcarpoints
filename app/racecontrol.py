@@ -9,12 +9,32 @@ the sector times (every 5 minutes in a session window), and only download it whe
 import json
 import logging
 import re
+import time
 from urllib.parse import quote, unquote
 
 from common import http, now_iso, read, write
 
 log = logging.getLogger("scraper.racecontrol")
 RC_FILE = re.compile(r"/25_FlagsAnalysisWithRCMessages_[^/]*\.JSON$")
+FAST_SECS = 15          # check interval once the log turns out to be updated often
+FAST_IF_WITHIN = 600    # two updates this close together (or one file growing in place) = updated often
+_seen = {"path": None, "size": None, "changes": [], "fast": False}
+
+
+def fast():
+    """True once the log has shown it's being updated often enough to be worth a 15 s check."""
+    return _seen["fast"]
+
+
+def _record(path, size):
+    """Note an update; switch to fast checks if updates come quickly or the same file grows."""
+    now = time.time()
+    grew = path == _seen["path"] and size != _seen["size"]
+    _seen["changes"] = (_seen["changes"] + [now])[-10:]
+    quick = len(_seen["changes"]) > 1 and now - _seen["changes"][-2] < FAST_IF_WITHIN
+    if (grew or quick) and not _seen["fast"]:
+        log.info("race control log is updating often (%s): checking every %d s", "file grew in place" if grew else "updates <10 min apart", FAST_SECS)
+    _seen.update(path=path, size=size, fast=_seen["fast"] or grew or quick)
 
 
 def latest_log(page_html, series):
@@ -93,9 +113,33 @@ def refresh(base, page_html, series):
     size = http.head(base + quote(path), timeout=30).headers.get("Content-Length")
     old = read("racecontrol.json") or {}
     if old.get("path") == path and old.get("size") == size:
+        if _seen["path"] is None:
+            _seen.update(path=path, size=size)      # after a restart: known file, not a new update
         return False
     doc = json.loads(http.get(base + quote(path), timeout=60).content.decode("utf-8-sig"))
+    _save(path, size, label, doc)
+    return True
+
+
+def _save(path, size, label, doc):
     out = summarise(doc)
+    prev = _seen["changes"][-1] if _seen["changes"] else None
     write("racecontrol.json", {"updated": now_iso(), "label": label, "path": path, "size": size, **out})
-    log.info("race control: %s, %d messages", label, len(out["messages"]))
+    _record(path, size)
+    # Logged with the gap since the last update, so after the weekend we know how often IMSA publishes it.
+    log.info("race control: %s, %d messages (%s since the previous update)", label, len(out["messages"]),
+             f"{(time.time() - prev) / 60:.0f} min" if prev else "first this run")
+
+
+def quick_check(base):
+    """Fast mode: has the known log file changed? A HEAD request; downloads only when it has."""
+    path = _seen["path"]
+    if not path:
+        return False
+    size = http.head(base + quote(path), timeout=15).headers.get("Content-Length")
+    if size == _seen["size"]:
+        return False
+    old = read("racecontrol.json") or {}
+    doc = json.loads(http.get(base + quote(path), timeout=60).content.decode("utf-8-sig"))
+    _save(path, size, old.get("label"), doc)
     return True

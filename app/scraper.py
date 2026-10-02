@@ -341,7 +341,7 @@ def main():
     status.start()
     # For the web pages: which cars are followed for the race only (their own tab).
     write("config.json", {"race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()]})
-    last, next_pdf, failures, next_sectors, next_watch = None, 0.0, 0, 0.0, 0.0
+    last, next_pdf, failures, next_sectors, next_watch, next_rc = None, 0.0, 0, 0.0, 0.0, 0.0
     while True:
         if time.monotonic() >= next_pdf:
             next_pdf = time.monotonic() + INTERVAL
@@ -366,6 +366,13 @@ def main():
                 refresh_sectors()
             except Exception:
                 log.exception("sectors failed")
+        # Race control: every 15 s, but only once the log has shown it's updated that often.
+        if racecontrol.fast() and live.in_window() and time.monotonic() >= next_rc:
+            next_rc = time.monotonic() + racecontrol.FAST_SECS
+            try:
+                racecontrol.quick_check(BASE)
+            except Exception:
+                log.exception("race control quick check failed")
         if time.monotonic() >= next_watch:
             next_watch = time.monotonic() + (180 if live.in_window() else 3600)
             try:
