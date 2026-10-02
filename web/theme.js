@@ -37,6 +37,10 @@
     wtr40: { name: "Cadillac Wayne Taylor Racing black and white", band: ["#111111", "#ffffff", "#111111"],
       light: { accent: "#333a45", ink: "#333a45", on: "#fff", hl: "#eef0f3", s: ["#4f6fb3", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
       dark:  { accent: "#c9ced8", ink: "#e3e6ec", on: "#111", hl: "#23262c", s: ["#6d8ad0", "#c98500", "#199e70", "#d95926"], other: "#c98500" } },
+    // #99 changes race to race too: purple "Spike" usually, gold at Daytona 2026, red with white wings at Petit Le Mans 2026.
+    red99: { name: "AO Racing red with white wings", band: ["#d7263d", "#ffffff", "#d7263d"],
+      light: { accent: "#d0233a", ink: "#a51c2e", on: "#fff", hl: "#fbe9eb", s: ["#c8102e", "#2a78d6", "#1baf7a", "#eda100"], other: "#2a78d6" },
+      dark:  { accent: "#e5475a", ink: "#f07a88", on: "#111", hl: "#2e1518", s: ["#e0414f", "#3987e5", "#199e70", "#c98500"], other: "#3987e5" } },
     // #77 alternates "Rexy" (green) and "Roxy" (pink-purple); Petit Le Mans 2026: white/black skeleton T-rex.
     skeleton77: { name: "AO Racing skeleton T-rex, white and black", band: ["#ffffff", "#111111", "#ffffff"],
       light: { accent: "#333a45", ink: "#333a45", on: "#fff", hl: "#eef0f3", s: ["#4f6fb3", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
@@ -48,7 +52,7 @@
       light: { accent: "#2f9e44", ink: "#23772f", on: "#fff", hl: "#e8f5ea", s: ["#2f9e44", "#2a78d6", "#eda100", "#8a4fd0"], other: "#2a78d6" },
       dark:  { accent: "#3fb355", ink: "#6fd17f", on: "#111", hl: "#17281a", s: ["#2e9a43", "#3987e5", "#c98500", "#9d6be0"], other: "#3987e5" } },
   };
-  const CAR_LIVERY = { 3: "corvette", 4: "corvette", 13: "awa", 36: "dxdt", 74: "dragonspeed", 81: "dragonspeed", 73: "prattmiller73", 99: "aoracing",
+  const CAR_LIVERY = { 3: "corvette", 4: "corvette", 13: "awa", 36: "dxdt", 74: "dragonspeed", 81: "dragonspeed", 73: "prattmiller73", 99: "red99",   // 99: "aoracing" (purple Spike) other weekends
     31: "cadillac31", 10: "wtr10", 40: "wtr40", 77: "skeleton77" };   // 77: rexy77 / roxy77 other weekends
   const dark = () => root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   let livery = (() => { try { return localStorage.getItem("livery"); } catch (e) { return null; } })() || "corvette";
