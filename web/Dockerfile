@@ -1,6 +1,6 @@
 FROM caddy:2-alpine
 COPY Caddyfile /etc/caddy/Caddyfile
-COPY web/index.html web/strategy.html web/about.html web/contact.html web/guestbook.html web/qr.svg web/style.css web/countdown.js web/theme.js web/cards.js web/links.js web/account.js web/track.js web/picker.js /srv/
+COPY web/index.html web/strategy.html web/about.html web/contact.html web/guestbook.html web/qr.svg web/boo.mp3 web/style.css web/countdown.js web/theme.js web/cards.js web/links.js web/account.js web/track.js web/picker.js /srv/
 COPY web/status.html /srv-status/index.html
 RUN mkdir -p /srv/data /srv-status/data
 # Cache-bust CSS/JS: Cloudflare gives static assets a 4 h browser cache, so link them with a

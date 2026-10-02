@@ -50,8 +50,18 @@
   // pitches, each starting a moment apart with its own wobble, shaped into an "oo" vowel (formants
   // near 300 and 870 Hz), over a bed of crowd noise. Only on a deliberate pick; mutable.
   const muted = () => { try { return localStorage.getItem("booOff") === "1"; } catch (e) { return false; } };
+  // The real thing: a sports crowd booing ("JM_AMB_INT_Crowd Sport 01 - Booing" by Julien_Matthey on
+  // Freesound, CC0), trimmed to 4.5 s. The synthesised crowd below is the fallback if it can't play.
+  let booClip = null;
   window.boo = () => {
     if (muted()) return;
+    try {
+      booClip = booClip || new Audio("boo.mp3");
+      booClip.currentTime = 0; booClip.volume = 0.8;
+      booClip.play().catch(() => synthBoo());
+    } catch (e) { synthBoo(); }
+  };
+  const synthBoo = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)(), t = ctx.currentTime, end = t + 2.6;
       const master = ctx.createGain();
