@@ -494,3 +494,14 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .wxtl .wx-rain .wxwhat b:first-child { color: var(--s2); }
 .wxtl .wxstop { color: var(--accent-ink); }
 .wxfits li { padding: 3px 0; }
+/* arranging cards */
+body.arranging [data-layout] { min-height: 80px; outline: 1px dashed var(--line); outline-offset: 4px; border-radius: 12px; }
+body.arranging [data-layout] > .card { cursor: grab; }
+body.arranging .card.dragging { opacity: .45; }
+.arrange-ctl { display: flex; gap: 4px; align-items: center; justify-content: flex-end; margin: -6px -6px 8px 0; }
+.arrange-ctl .grip { margin-right: auto; color: var(--text-3); font-size: 16px; cursor: grab; }
+.arrange-ctl button, .arrange-bar button { font: 600 12px Inter, sans-serif; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; cursor: pointer; }
+.arrange-ctl button:hover, .arrange-bar button:hover { border-color: var(--accent); }
+.arrange-bar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 60; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--accent); box-shadow: 0 8px 30px rgb(0 0 0 / .35); font-size: 13px; max-width: calc(100vw - 24px); }
+.arrange-bar .copied { color: var(--good); font-weight: 600; }
+.champ-cards { display: flex; flex-direction: column; }
