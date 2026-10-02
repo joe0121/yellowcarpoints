@@ -55,3 +55,4 @@ volumes:
   replay-data:
     name: ycp-dev_replay-data
   dev-status:
+    name: ycp-dev_dev-status

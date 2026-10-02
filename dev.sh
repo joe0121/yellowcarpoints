@@ -39,6 +39,9 @@ case "${1:-up}" in
        for f in schedule.json sectors.json history.json config.json watch.json bop.json; do [ -e /prod/$f ] && cp /prod/$f /devdata/; done; true'
     use_volume ycp-dev_replay-data ;;
   scraper)
+    # The scraper runs as an unprivileged user: make sure it owns its data volumes.
+    docker volume create ycp-dev_dev-data >/dev/null; docker volume create ycp-dev_dev-status >/dev/null
+    docker run --rm --user 0 -v ycp-dev_dev-data:/d -v ycp-dev_dev-status:/s alpine chown -R 65534 /d /s
     "${DC[@]}" --profile scraper up -d --build scraper >/dev/null
     use_volume ycp-dev_dev-data
     echo "Dev scraper running (logs: docker compose -f compose.dev.yaml logs -f scraper)" ;;
