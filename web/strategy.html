@@ -22,10 +22,16 @@
   </header>
   <nav class="picker" id="picker" aria-label="Choose a Corvette"></nav>
 
-  <section class="card live" id="status-card">
+  <section class="sessionbar live" id="status-card">
     <div class="live-head" id="head"></div>
-    <div class="live-verdict" id="title"></div>
-    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section class="card" id="cars-card" style="margin-bottom:16px">
+    <div class="pace-head">
+      <h2 id="title">Car status</h2>
+      <div class="cmp"><span class="chips"></span><select class="addcar" aria-label="Add a car to compare"></select></div>
+    </div>
+    <div id="kpis"></div>
     <p class="note" id="kpi-note"></p>
   </section>
 
@@ -42,7 +48,7 @@
   <section class="card" id="pace-card" style="margin-bottom:16px">
     <div class="pace-head">
       <h2>Pace</h2>
-      <div class="cmp"><span id="pace-chips"></span><select id="cmp" aria-label="Add a car to the pace charts"></select></div>
+      <div class="cmp"><span class="chips"></span><select class="addcar" aria-label="Add a car to compare"></select></div>
     </div>
     <p class="live-sub" id="pace-sub"></p>
     <div class="charts" style="margin-top:12px">
@@ -167,8 +173,8 @@ function render() {
 
   if (!lc) {
     $("head").innerHTML = `<span class="pulse" style="color:var(--text-3)">NO DATA</span>`;
-    $("title").textContent = "No WeatherTech session recorded yet";
-    $("kpis").innerHTML = "";
+    $("title").textContent = "Car status";
+    $("kpis").innerHTML = `<p class="empty">No WeatherTech session recorded yet.</p>`;
     $("kpi-note").textContent = "Strategy data is collected during WeatherTech sessions. It will appear here once the next one starts.";
     ["laps", "gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
     $("board").innerHTML = "";
@@ -194,13 +200,11 @@ function render() {
     <span class="flag" style="--f:${flagColor}">${esc(live.flag)}</span>
     <span class="ttg">${running && !live.finished ? esc((live.remaining || "").replace(/^00:/, "")) + " to go · " : ""}telemetry ${tel.connected ? "connected" : "offline"}</span>`;
 
-  if (!me) {
-    $("title").textContent = `#${sel.car} isn't in this session`;
-    $("kpis").innerHTML = "";
-  } else {
-    $("title").innerHTML = `#${esc(sel.car)} P${me.class_pos} in ${esc(clsName)}${me.in_pit ? " · in the pits" : ""}`;
-    renderKpis(me, strat[me.car], lc, laps?.classes?.[sel.class]?.[me.car]);
-  }
+  const cmpCars = comparisonCars(sel, rows, fc);
+  renderAddCar(cmpCars, rows);
+  $("title").textContent = `Car status · ${clsName}`;
+  if (!me) $("kpis").innerHTML = `<p class="empty">#${esc(sel.car)} isn't in this session.</p>`;
+  renderKpis(cmpCars, rows, strat, lc, lapsCls);
 
   // --- charts
   const series = (car, color, role) => car && lapsCls[car.car] ? { car: car.car, color, role, d: lapsCls[car.car] } : null;
@@ -211,7 +215,7 @@ function render() {
   drawLeaderChart(S);
   renderChampionship(lc, fc, sel, lapsCls[sel.car], lapsCls);
   $("pace-card").hidden = false;
-  renderPace(lc, sel, rows, lapsCls, fc, clsName);
+  renderPace(lc, sel, rows, lapsCls, fc, clsName, cmpCars);
   renderBoard(rows, strat, sel, lapsCls, clsName, fc);
 
   $("foot").innerHTML = `Timing from IMSA live scoring; energy, refuels and pit lane from IMSA telemetry (unofficial, about 1 Hz). `
@@ -241,7 +245,24 @@ function fillModel(lc) {
 
 function kpi(k, v, s, extra = "", title = "") { return `<div class="kpi"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v">${v}</div>${extra}<div class="s">${s}</div></div>`; }
 
-function renderKpis(me, st, lc, myLaps) {
+function renderKpis(cmpCars, rows, strat, lc, lapsCls) {
+  const html = cmpCars.map(c => {
+    const row = rows.find(r => r.car === c.car);
+    if (!row) return "";
+    const label = `<div class="who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> P${row.class_pos}`
+      + `<small>${esc(c.role === "selected" ? "selected" : c.role)}${row.in_pit ? " · in pit" : ""}</small>`
+      + (c.role === "added" ? `<button class="chip x" data-car="${esc(c.car)}" title="Remove #${esc(c.car)}">×</button>` : "") + `</div>`;
+    return `<div class="kpirow${c.role === "selected" ? " mine" : ""}" style="--c:${c.style.color}">${label}<div class="kpis">${kpiTiles(row, strat[c.car], lc, lapsCls[c.car])}</div></div>`;
+  }).join("");
+  if (html) $("kpis").innerHTML = html;
+  $("kpis").querySelectorAll(".chip.x").forEach(b => b.onclick = () => { paceExtra = paceExtra.filter(x => x !== b.dataset.car); render(); });
+  const pt = lc.strategy?.pit_types;
+  $("kpi-note").textContent = (lc.strategy ? `Pace and trends recalculated every 5 minutes (last ${new Date(lc.strategy.updated).toLocaleTimeString()}). Energy and stops update every poll.` : "")
+    + (pt && (pt.n_fuel_only || pt.n_full) ? ` Class pit-lane times so far: fuel-only ${pt.fuel_only ?? "–"}s (${pt.n_fuel_only} stops), full service ${pt.full ?? "–"}s (${pt.n_full} stops).` : "");
+}
+
+// The tiles for one car.
+function kpiTiles(me, st, lc, myLaps) {
   const e = me.energy, s = me.stint, out = [];
   if (e) {
     out.push(kpi("Energy now", `${e.now.toFixed(1)}<small>%</small>`, e.use_per_lap ? `${e.use_per_lap}%/lap${e.mj_per_lap ? ` · ${e.mj_per_lap} MJ of ${e.tank_mj}` : ""}` : "use/lap after 3 laps",
@@ -273,10 +294,7 @@ function renderKpis(me, st, lc, myLaps) {
   out.push(kpi("Pace", st?.pace ? lapTime(st.pace) : "–",
     `<span class="${fit ? (fit.b < -0.005 ? "up" : fit.b > 0.005 ? "down" : "") : ""}">${fit ? `lap trend ${Math.abs(fit.b) < 0.005 ? "steady" : `${fit.b < 0 ? "▲" : "▼"} ${Math.abs(fit.b).toFixed(3)} s/lap`}` : "lap trend: needs ~8 laps"}</span>${change ? `<br>${change}` : ""}`,
     "", "Pace: median of the last 5 clean laps. Lap trend: how lap time changes per lap through a stint (tyres + fuel). Last 5 laps: change against the 5 before."));
-  $("kpis").innerHTML = out.join("");
-  const pt = lc.strategy?.pit_types;
-  $("kpi-note").textContent = (lc.strategy ? `Pace and trends recalculated every 5 minutes (last ${new Date(lc.strategy.updated).toLocaleTimeString()}). Energy and stops update every poll.` : "")
-    + (pt && (pt.n_fuel_only || pt.n_full) ? ` Class pit-lane times so far: fuel-only ${pt.fuel_only ?? "–"}s (${pt.n_fuel_only} stops), full service ${pt.full ?? "–"}s (${pt.n_full} stops).` : "");
+  return out.join("");
 }
 
 // --- generic line chart with crosshair tooltip (one y axis) ------------------------
@@ -510,33 +528,45 @@ function shape(kind, cx, cy, color, r = 3.2) {
 const swatchOf = st => `<svg width="30" height="12" aria-hidden="true" style="vertical-align:middle;margin-right:4px;overflow:visible"><line x1="1" x2="29" y1="6" y2="6" stroke="${st.color}" stroke-width="${st.width}" stroke-dasharray="${st.dash}"/>${shape(st.marker, 15, 6, st.color, 3)}</svg>`;
 const trendText = b => b == null ? "–" : Math.abs(b) < 0.005 ? "steady" : b < 0 ? `▲ ${Math.abs(b).toFixed(3)} s/lap quicker` : `▼ ${b.toFixed(3)} s/lap slower`;
 
-let paceExtra = [];          // cars the viewer added
+let paceExtra = [];          // cars the viewer added (shared by Car status and Pace)
 let paceCompare = null;      // main comparison car (used by the sectors line too)
-function renderPace(lc, sel, rows, lapsCls, fc, clsName) {
-  const models = Object.fromEntries(rows.map(r => [r.car, paceModel(lapsCls[r.car])]));
-  const me = models[sel.car];
+
+// Selected car, race threat (leader, or car behind when leading), title threat, then added cars.
+function comparisonCars(sel, rows, fc) {
   const rowOf = c => rows.find(r => r.car === c);
-  // Default comparison cars: race threat (leader, or car behind when leading) and title threat.
   const raceThreat = fc.ref || (rows[0]?.car !== sel.car ? rows[0]?.car : rows[1]?.car);
   const titleThreat = fc.champ_behind || fc.champ_ahead;
   paceExtra = paceExtra.filter(c => c !== sel.car && rowOf(c));
-  const picks = [];
-  const add = (car, role) => { if (car && car !== sel.car && rowOf(car) && !picks.some(p => p.car === car)) picks.push({ car, role }); };
+  const cars = [{ car: sel.car, role: "selected" }];
+  const add = (car, role) => { if (car && rowOf(car) && !cars.some(p => p.car === car)) cars.push({ car, role }); };
   add(raceThreat, raceThreat === rows[0]?.car ? "race leader" : "car behind on track");
   add(titleThreat, fc.champ_behind ? "title threat" : "title target");
   paceExtra.forEach(c => add(c, "added"));
-  const cars = [{ car: sel.car, role: "selected" }, ...picks];
-  cars.forEach((c, i) => {
-    c.style = c.role === "selected" ? PACE_STYLES[0] : c.role === "race leader" || c.role === "car behind on track" ? PACE_STYLES[1] : c.role.startsWith("title") ? PACE_STYLES[2] : PACE_STYLES[Math.min(3 + paceExtra.indexOf(c.car), PACE_STYLES.length - 1)];
+  let k = 0;
+  cars.forEach(c => {
+    c.style = c.role === "selected" ? PACE_STYLES[0] : c.role === "race leader" || c.role === "car behind on track" ? PACE_STYLES[1]
+      : c.role.startsWith("title") ? PACE_STYLES[2] : PACE_STYLES[Math.min(3 + k++, PACE_STYLES.length - 1)];
   });
-  paceCompare = picks.find(p => p.role.startsWith("title"))?.car || picks[0]?.car || null;
+  paceCompare = cars.find(c => c.role.startsWith("title"))?.car || cars[1]?.car || null;
+  return cars;
+}
 
-  // "Add car" picker + removable chips for added cars.
+function renderAddCar(cars, rows) {
   const options = rows.filter(r => !cars.some(c => c.car === r.car));
-  $("cmp").innerHTML = `<option value="">Add a car…</option>` + options.map(r => `<option value="${esc(r.car)}">#${esc(r.car)} P${r.class_pos}</option>`).join("");
-  $("cmp").onchange = e => { if (e.target.value) { paceExtra.push(e.target.value); render(); } };
-  $("pace-chips").innerHTML = picks.filter(p => p.role === "added").map(p => `<button class="chip" data-car="${esc(p.car)}" title="Remove #${esc(p.car)}">#${esc(p.car)} ×</button>`).join("");
-  $("pace-chips").querySelectorAll(".chip").forEach(b => b.onclick = () => { paceExtra = paceExtra.filter(c => c !== b.dataset.car); render(); });
+  const opts = `<option value="">Add a car…</option>` + options.map(r => `<option value="${esc(r.car)}">#${esc(r.car)} P${r.class_pos}</option>`).join("");
+  const chips = cars.filter(c => c.role === "added").map(c => `<button class="chip" data-car="${esc(c.car)}" title="Remove #${esc(c.car)}">#${esc(c.car)} ×</button>`).join("");
+  document.querySelectorAll(".addcar").forEach(sel => { sel.innerHTML = opts; sel.onchange = e => { if (e.target.value) { paceExtra.push(e.target.value); render(); } }; });
+  document.querySelectorAll(".chips").forEach(el => {
+    el.innerHTML = chips;
+    el.querySelectorAll(".chip").forEach(b => b.onclick = () => { paceExtra = paceExtra.filter(c => c !== b.dataset.car); render(); });
+  });
+}
+
+function renderPace(lc, sel, rows, lapsCls, fc, clsName, cars) {
+  const models = Object.fromEntries(rows.map(r => [r.car, paceModel(lapsCls[r.car])]));
+  const me = models[sel.car];
+  const rowOf = c => rows.find(r => r.car === c);
+  const picks = cars.slice(1);
 
   // Projection over the next 20 laps, resetting at each car's next stop.
   const proj = (m, row) => {
