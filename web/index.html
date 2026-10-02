@@ -17,7 +17,7 @@
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub" id="sub">IMSA WeatherTech SportsCar Championship</p>
-      <div class="navrow"><nav class="tabs"><a href="./" aria-current="page">Championship</a><a id="to-strategy" href="strategy.html">Race</a><a href="strategy.html#73" title="Pratt Miller Motorsports #73, LMP2: race only">#73</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a href="./" aria-current="page">Championship</a><a id="to-strategy" href="strategy.html">Race</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -64,7 +64,7 @@ const roundPts = r => r ? (r.q || 0) + (r.r || 0) : 0;
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
-let standings = null, live = null, hist = null, entries = null;
+let standings = null, live = null, hist = null, entries = null, config;
 
 // The selected car comes from the URL (#13), then the last choice, then the first configured car.
 function selected() {
@@ -94,7 +94,7 @@ async function getJSON(path) {
 }
 
 async function load() {
-  [standings, hist, entries] = await Promise.all([getJSON("data/standings.json"), getJSON("data/history.json"), getJSON("data/entries.json")]);
+  [standings, hist, entries, config] = await Promise.all(["standings", "history", "entries", "config"].map(n => getJSON(`data/${n}.json`)));
   if (!standings || !standings.classes) {
     $("cars").innerHTML = `<div class="card err">Standings aren't available yet. Check back shortly.</div>`;
     return;
@@ -107,10 +107,13 @@ function renderAll() {
   const sel = selected();
   store.set("car", sel.car);
   window.setLivery?.(sel.car);
-  const groups = {};
-  standings.cars.forEach(c => (groups[c.class] ||= []).push(c.car));
-  $("picker").innerHTML = Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
-    + cars.map(c => `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}</a>`).join("") + `</div>`).join("");
+  // Every Pratt Miller-built car we follow, by class. Race-only cars (the #73 LMP2) have no
+  // championship maths, so they link to their Race view.
+  const groups = {}, raceOnly = new Set((config?.race_cars || []).map(c => c.car));
+  [...standings.cars, ...(config?.race_cars || [])].forEach(c => (groups[c.class] ||= []).push(c.car));
+  $("picker").innerHTML = `<span class="pick-title">Pratt Miller Motorsports cars</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
+    + cars.map(c => raceOnly.has(c) ? `<a href="strategy.html#${esc(c)}" title="Race only: no championship data">#${esc(c)}</a>`
+      : `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}</a>`).join("") + `</div>`).join("");
   $("to-strategy").href = "strategy.html#" + sel.car;
   const d = view(sel);
   render(d);

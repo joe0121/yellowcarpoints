@@ -17,7 +17,7 @@
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub" id="sub">Race strategy</p>
-      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Championship</a><a id="to-race" href="strategy.html" aria-current="page">Race</a><a class="racetab" data-car="73" href="strategy.html#73" title="Pratt Miller Motorsports #73, LMP2: race only">#73</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Championship</a><a id="to-race" href="strategy.html" aria-current="page">Race</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -180,11 +180,9 @@ function render() {
   if (!raceOnly) store.set("car", sel.car);
   const home = raceOnly ? (store.get("car") || standings.cars[0].car) : sel.car;
   $("to-race").href = "strategy.html#" + home;
-  $("to-race").toggleAttribute("aria-current", !raceOnly);
-  document.querySelectorAll(".racetab").forEach(a => a.toggleAttribute("aria-current", a.dataset.car === sel.car));
   const groups = {};
-  (raceOnly ? raceCars() : standings.cars).forEach(c => (groups[c.class] ||= []).push(c.car));
-  $("picker").innerHTML = Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
+  [...standings.cars, ...raceCars()].forEach(c => (groups[c.class] ||= []).push(c.car));
+  $("picker").innerHTML = `<span class="pick-title">Pratt Miller Motorsports cars</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
     + cars.map(c => `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}</a>`).join("") + `</div>`).join("");
   $("to-standings").href = "./#" + home;
   const clsName = CLASS_NAMES[sel.class] || sel.class;

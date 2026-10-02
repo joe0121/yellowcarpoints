@@ -375,3 +375,14 @@ table.pittable td.who b { font: 600 17px Oswald, sans-serif; color: var(--text);
 table.pittable .mini { margin-right: 4px; }
 @media (max-width: 640px) { table.pittable td.who svg, table.pittable .role { display: none; } table.pittable td.who { border-left: 3px solid var(--c); } }
 @media (min-width: 1280px) { #ours .dn { display: none; } }
+
+/* centred header and car picker */
+header { flex-direction: column; align-items: center; text-align: center; }
+header .meta { text-align: center; }
+.navrow { justify-content: center; }
+.picker { justify-content: center; align-items: center; }
+.picker > .pick-title { flex-basis: 100%; text-align: center; margin: 0 0 -2px; }
+@media (max-width: 640px) {
+  .picker { flex-wrap: wrap; overflow-x: visible; gap: 8px 14px; margin: 0 0 12px; padding: 0; }
+  .picker div { flex-wrap: wrap; justify-content: center; }
+}
