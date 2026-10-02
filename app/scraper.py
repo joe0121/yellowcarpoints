@@ -26,6 +26,7 @@ import bop
 import watch
 import history
 import live
+import racecontrol
 import sectors
 import status
 from common import CAR_CLASS, CARS, CLASSES, DATA_DIR, LIVE_CLASSES, RACE_CARS, http, now_iso, read, write
@@ -248,10 +249,19 @@ SECTORS_LIVE, SECTORS_IDLE = 300, 1800
 
 
 def refresh_sectors():
-    if _event and sectors.refresh(BASE, _page, _event[0], _event[1], SERIES):
+    """Sector times and the race control log, from one download of the event's results page."""
+    if not _event:
+        return
+    html = _page(_event[0], _event[1])
+    if sectors.refresh(BASE, lambda *_: html, _event[0], _event[1], SERIES):
         status.mark("sectors", session=(read("sectors.json") or {}).get("session"))
-    elif _event:
+    else:
         status.mark("sectors_check")
+    try:
+        if racecontrol.refresh(BASE, html, SERIES):
+            status.mark("racecontrol", session=(read("racecontrol.json") or {}).get("label"))
+    except Exception:
+        log.exception("race control log failed")
 
 
 def refresh_history():

@@ -427,3 +427,18 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .sessionbar .ttg { margin-left: 0; }
 .sessionbar .ttg::before { content: "· "; color: var(--text-3); }
 .dev-badge { position: fixed; top: 10px; left: 10px; z-index: 50; font: 700 12px Inter, sans-serif; letter-spacing: .08em; padding: 3px 10px; border-radius: 6px; background: #d03b3b; color: #fff; }
+/* race control */
+#rc-card { order: 3; } #feed-card { order: 3; }
+.rclist { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; max-height: 520px; overflow-y: auto; }
+.rclist li { display: grid; grid-template-columns: 62px 92px 1fr; gap: 8px; align-items: baseline; padding: 5px 0 5px 6px; border-top: 1px solid var(--line); border-left: 3px solid transparent; }
+.rclist li:first-child { border-top: 0; }
+.rclist li.mine { border-left-color: var(--c); background: var(--row-hl); }
+.rctime { font: 500 12px Inter, sans-serif; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.rctag { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.rc-penalty .rctag, .rctag.rc-penalty { color: var(--critical); }
+.rc-warning .rctag, .rctag.rc-warning { color: var(--flag-yellow); }
+.rc-review .rctag, .rctag.rc-review { color: var(--s2); }
+.rc-decision .rctag, .rctag.rc-decision { color: var(--text-2); }
+.rclist .rccar { color: var(--text); }
+.rclist .rc-flag .rctext, .rclist .rc-info .rctext, .rclist .rc-pit .rctext { color: var(--text-2); }
+@media (max-width: 640px) { .rclist li { grid-template-columns: 54px 1fr; } .rclist .rctag { grid-column: 2; } .rclist .rctext { grid-column: 1 / -1; } }

@@ -87,6 +87,11 @@ local status page: Caddy's :8089 server adds `X-Admin: $ADMIN_TOKEN` for `/api/a
 (random, private). Optional Cloudflare Turnstile spam check: `TURNSTILE_SITEKEY` / `TURNSTILE_SECRET`.
 Client IPs are used in memory for rate limiting only.
 
+`app/racecontrol.py` picks up Al Kamel's `25_FlagsAnalysisWithRCMessages` (the official race control
+log: penalties, reviews, decisions, pit lane, flags) for the newest WeatherTech session, including the
+hourly snapshots in endurance races, in the same 5-minute check as the sector times (`racecontrol.json`).
+IMSA's live feeds don't carry race control messages.
+
 `app/watch.py` reads YouTube's public RSS feed for IMSA's channel (no API key) to find WeatherTech
 session streams for the Race page's Watch card (embedded with YouTube's player, nothing re-hosted), and
 notes which cars IMSA.tv lists with an in-car camera (linked, never embedded: IMSA.tv uses its own

@@ -50,6 +50,13 @@
     <h2>What just happened</h2>
     <ul class="feed" id="feed"></ul>
   </section>
+  <section class="card" id="rc-card" hidden style="margin-bottom:16px">
+    <div class="pace-head"><h2 id="rc-title">Race control</h2><span class="bseg" id="rc-filter" role="group" aria-label="Which messages"></span></div>
+    <p class="live-sub" id="rc-note" hidden></p>
+    <ul class="rclist" id="rc-list"></ul>
+    <button class="linkbtn" id="rc-more" type="button" hidden></button>
+    <p class="note" id="rc-foot"></p>
+  </section>
   <section class="card" id="drivers-card" hidden style="margin-bottom:16px">
     <h2>Drivers</h2>
     <div class="dgrid" id="drivers"></div>
@@ -134,18 +141,18 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
 
-let standings, live, laps, schedule, entries, sectorData, config, watchData;
+let standings, live, laps, schedule, entries, sectorData, config, watchData, rcData;
 
 // Live timing every 10 s, lap history every 30 s, everything else every 5 minutes; the page
 // only redraws when something changed (unchanged files come back as cheap 304s).
 const loadedAt = { laps: 0, slow: 0 };
 async function load() {
   const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
-  const names = ["live", ...(wantLaps ? ["laps", "watch"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
+  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
   live = got.live;
-  if (wantLaps) { laps = got.laps; watchData = got.watch; loadedAt.laps = now; }
+  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; loadedAt.laps = now; }
   if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config } = got); loadedAt.slow = now; }
   if (changed) render();
 }
@@ -246,6 +253,7 @@ function render() {
   $("ours-title").textContent = `Our cars · ${clsName}`;
   renderOurs(cmpCars, rows, strat);
   renderFeed(sel, cmpCars, rows, lapsCls, fc);
+  renderRaceControl(sel, cmpCars);
   renderDrivers(sel, cmpCars, rows);
   $("title").textContent = `Pit strategy · ${clsName}`;
   renderWatch(sel, cmpCars, rows, live.is_race, !raceOnly);
@@ -738,6 +746,12 @@ function renderFeed(sel, cars, rows, lapsCls, fc) {
       }
     });
   }
+  if (rcForSession()) for (const m of rcData.messages) {
+    const car = m.cars.find(c => watched.has(c));
+    if (!car || !["penalty", "warning", "review", "decision"].includes(m.kind)) continue;
+    const lap = lapAtElapsed(rows, lapsCls, m.elapsed);
+    if (lap != null) items.push({ lap, i: 5e5, text: `${tag(car)} <span class="rctag rc-${m.kind}">${RC_LABEL[m.kind]}</span> ${esc(m.text)}` });
+  }
   (fc.events || []).forEach(ev => ev.to && items.push({ lap: ev.lap, i: 1e6, text: `Closest title rival ${ev.role === "champ_behind" ? "behind" : "ahead"} is now <b>#${esc(ev.to)}</b>${ev.from ? ` <span class="dim">(was #${esc(ev.from)})</span>` : ""}` }));
   items.sort((a, b) => b.lap - a.lap || b.i - a.i);
   $("feed").innerHTML = items.length ? items.slice(0, 10).map(i => `<li><span class="lap">L${i.lap}</span>${i.text}</li>`).join("")
@@ -805,6 +819,46 @@ function renderWatchCard(sel) {
   } else {
     body.querySelector(".wlinks").innerHTML = incar;
   }
+}
+
+// --- Race control: IMSA's official log (penalties, reviews, decisions, pit lane, flags) from Al Kamel,
+// published after each session and hourly during endurance races.
+const RC_LABEL = { penalty: "Penalty", warning: "Warning", review: "Under review", decision: "Decision", pit: "Pit lane", flag: "Flag", info: "Info" };
+// The log is for the current session? (Its session name is "Race" during the race.)
+const rcForSession = () => rcData && live && (live.is_race ? /race/i.test(rcData.session || "") : (live.session || "").toLowerCase().includes((rcData.session || "~").toLowerCase()));
+const hms = s => s == null ? "" : `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+// Rough lap for a session time, from the class leader's lap times (the log itself has no laps).
+function lapAtElapsed(rows, lapsCls, elapsed) {
+  const lead = lapsCls[rows?.[0]?.car]?.laps || [];
+  let t = 0;
+  for (const [n, s] of lead) { t += s; if (t >= elapsed) return n; }
+  return lead.at(-1)?.[0] ?? null;
+}
+function renderRaceControl(sel, cars) {
+  const card = $("rc-card");
+  if (!rcData?.messages?.length) { card.hidden = true; return; }
+  card.hidden = false;
+  const watched = new Map(cars.map(c => [c.car, c]));
+  const ours = store.get("rcOurs") === "1";
+  const msgs = [...rcData.messages].reverse().filter(m => !ours || m.cars.some(c => watched.has(c)));
+  const all = store.get("rcAll") === "1";
+  const shown = all ? msgs : msgs.slice(0, 25);
+  const carHtml = text => esc(text).replace(/\b(\d{1,3})\b/g, (n, d) => watched.has(d) ? `<b class="rccar" style="--c:${watched.get(d).style.color}">${d}</b>` : n);
+  $("rc-title").textContent = `Race control · ${rcData.label || rcData.session || ""}`;
+  $("rc-filter").innerHTML = [["0", "All"], ["1", "Our cars"]].map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${(ours ? "1" : "0") === v}">${l}</button>`).join("");
+  $("rc-filter").querySelectorAll("button").forEach(b => b.onclick = () => { store.set("rcOurs", b.dataset.v === "1" ? "1" : ""); renderRaceControl(sel, cars); });
+  $("rc-note").innerHTML = rcData.note ? `<b>Stewards:</b> ${carHtml(rcData.note)}` : "";
+  $("rc-note").hidden = !rcData.note;
+  $("rc-list").innerHTML = shown.length ? shown.map(m => {
+    const mine = m.cars.find(c => watched.has(c));
+    return `<li class="rc-${m.kind}${mine ? " mine" : ""}"${mine ? ` style="--c:${watched.get(mine).style.color}"` : ""}>
+      <span class="rctime" title="Track time ${esc(m.time || "")}">${hms(m.elapsed)}</span><span class="rctag">${RC_LABEL[m.kind] || m.kind}</span><span class="rctext">${carHtml(m.text)}</span></li>`;
+  }).join("") : `<li class="dim">${ours ? "Nothing about our cars in this log." : "No messages."}</li>`;
+  $("rc-more").hidden = msgs.length <= 25;
+  $("rc-more").textContent = all ? "Show the latest 25" : `Show all ${msgs.length}`;
+  $("rc-more").onclick = () => { store.set("rcAll", all ? "" : "1"); renderRaceControl(sel, cars); };
+  $("rc-foot").textContent = `Official race control log (IMSA via Al Kamel), ${rcForSession() ? "this session" : `from ${rcData.session || "the last session"}`}`
+    + `. It's published after each session and about hourly during long races, so it trails live timing. Times are from the session start.`;
 }
 
 // Yellow / red flag periods for a class as [fromLap, toLap, kind], from the scraper's flag log.
