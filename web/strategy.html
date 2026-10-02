@@ -24,23 +24,36 @@
 
   <section class="sessionbar live" id="status-card">
     <div class="live-head" id="head"></div>
+    <div class="titleline" id="titleline"></div>
+    <nav class="vettes" id="vettes" hidden aria-label="Corvettes in this session"></nav>
   </section>
 
-  <section class="card" id="cars-card" style="margin-bottom:16px">
+  <section class="card" id="ours-card" style="margin-bottom:16px">
     <div class="pace-head">
-      <h2 id="title">Pit strategy</h2>
-      <div class="cmp"><span class="chips"></span><select class="addcar" aria-label="Add a car to compare"></select></div>
+      <h2 id="ours-title">Our cars</h2>
+      <div class="cmp"><span class="chips"></span><select class="addcar" aria-label="Add a car to watch"></select></div>
     </div>
+    <div class="scroll"><table id="ours" class="ours"></table></div>
     <div class="watch" id="watch" hidden></div>
-    <div id="kpis"></div>
-    <p class="note" id="kpi-note"></p>
+  </section>
+
+  <section class="card" id="feed-card" style="margin-bottom:16px">
+    <h2>What just happened</h2>
+    <ul class="feed" id="feed"></ul>
   </section>
 
   <section class="card" id="timing-card" style="margin-bottom:16px">
-    <div class="pace-head"><h2 id="timing-title">Timing</h2><span class="dim" id="champ-link"></span></div>
+    <h2 id="timing-title">Timing</h2>
     <div class="legend" id="lg-laps2"></div>
     <div class="chart" id="ch-laps2"><div class="tip"></div></div>
     <div class="scroll" style="margin-top:12px"><table id="timing" class="timing"></table></div>
+    <button class="linkbtn" id="timing-more" type="button"></button>
+  </section>
+
+  <section class="card" id="cars-card" style="margin-bottom:16px">
+    <h2 id="title">Pit strategy</h2>
+    <div id="kpis"></div>
+    <p class="note" id="kpi-note"></p>
   </section>
 
   <section class="card" id="pace-card" style="margin-bottom:16px">
@@ -66,6 +79,8 @@
     <p class="note" id="pace-note"></p>
   </section>
 
+  <details class="card fold deep" id="deep">
+    <summary><h2>More detail</h2><span class="dim">sectors, gap and energy charts, class strategy board</span></summary>
   <section class="card" id="sector-card" hidden style="margin-bottom:16px">
     <h2>Sectors</h2>
     <p class="live-sub" id="sector-sub"></p>
@@ -73,33 +88,28 @@
     <p class="note" id="sector-note"></p>
   </section>
 
-  <div class="charts">
-    <section class="card">
-      <h2>Lap times</h2>
-      <div class="legend" id="lg-laps"></div>
-      <div class="chart" id="ch-laps"><div class="tip"></div></div>
+    <div class="charts">
+      <section class="card">
+        <h2>Gap to the car ahead and the leader</h2>
+        <div class="legend" id="lg-gaps"></div>
+        <div class="chart" id="ch-gaps"><div class="tip"></div></div>
+      </section>
+      <section class="card">
+        <h2>Energy by lap</h2>
+        <div class="legend" id="lg-energy"></div>
+        <div class="chart" id="ch-energy"><div class="tip"></div></div>
+      </section>
+      <section class="card">
+        <h2>Gap to the class leader</h2>
+        <div class="legend" id="lg-lead"></div>
+        <div class="chart" id="ch-lead"><div class="tip"></div></div>
+      </section>
+    </div>
+    <section class="card" style="margin-top:16px">
+      <h2 id="board-title">Class strategy board</h2>
+      <div class="scroll"><table id="board"></table></div>
     </section>
-    <section class="card">
-      <h2>Gap to the car ahead and the leader</h2>
-      <div class="legend" id="lg-gaps"></div>
-      <div class="chart" id="ch-gaps"><div class="tip"></div></div>
-    </section>
-    <section class="card">
-      <h2>Energy by lap</h2>
-      <div class="legend" id="lg-energy"></div>
-      <div class="chart" id="ch-energy"><div class="tip"></div></div>
-    </section>
-    <section class="card">
-      <h2>Gap to the class leader</h2>
-      <div class="legend" id="lg-lead"></div>
-      <div class="chart" id="ch-lead"><div class="tip"></div></div>
-    </section>
-  </div>
-
-  <section class="card" style="margin-top:16px">
-    <h2 id="board-title">Class strategy board</h2>
-    <div class="scroll"><table id="board"></table></div>
-  </section>
+  </details>
   <footer id="foot"></footer>
 </main>
 <script>
@@ -175,7 +185,9 @@ function render() {
     $("watch").hidden = true;
     $("kpis").innerHTML = `<p class="empty">No WeatherTech session recorded yet.</p>`;
     $("kpi-note").textContent = "Strategy data is collected during WeatherTech sessions. It will appear here once the next one starts.";
-    ["laps", "gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
+    ["gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
+    ["ours-card", "feed-card", "timing-card"].forEach(id => $(id).hidden = true);
+    $("titleline").innerHTML = ""; $("vettes").hidden = true;
     $("board").innerHTML = "";
     $("pace-card").hidden = true;
     $("timing").innerHTML = ""; $("lg-laps2").innerHTML = ""; $("ch-laps2").querySelector("svg")?.remove();
@@ -202,6 +214,13 @@ function render() {
 
   const cmpCars = comparisonCars(sel, rows, fc);
   renderAddCar(cmpCars, rows);
+  ["ours-card", "feed-card", "timing-card"].forEach(id => $(id).hidden = false);
+  renderTitleLine(sel, lc, fc);
+  renderVettes(sel);
+  $("ours-title").textContent = `Our cars · ${clsName}`;
+  renderOurs(cmpCars, rows, strat);
+  trackPositions();
+  renderFeed(sel, cmpCars, rows, lapsCls, fc);
   $("title").textContent = `Pit strategy · ${clsName}`;
   renderWatch(sel, cmpCars, rows, live.is_race);
   if (!me) $("kpis").innerHTML = `<p class="empty">#${esc(sel.car)} isn't in this session.</p>`;
@@ -210,7 +229,6 @@ function render() {
   // --- charts
   const series = (car, color, role) => car && lapsCls[car.car] ? { car: car.car, color, role, d: lapsCls[car.car] } : null;
   const S = [series(me, C.me, "this car"), series(ahead, C.ahead, "car ahead"), series(ref, C.ref, fc.ref_role || "leader")].filter(Boolean);
-  drawLapChart(S);
   drawGapChart(me && lapsCls[me.car], ahead, ref, fc.ref_role, lapsCls);
   drawEnergyChart(S.slice(0, 2), me);
   drawLeaderChart(S);
@@ -354,18 +372,6 @@ function trendSeries(pts, color, unit) {
   const f = fit(pts);
   if (!f) return [];
   return [{ pts: [[f.x0, f.at(f.x0)], [f.x1, f.at(f.x1)]], color, dash: "5 4", width: 1.5, end: `${signed(f.slope)}${unit}` }];
-}
-
-function drawLapChart(S) {
-  const series = [];
-  for (const s of S) {
-    const c = clean(s.d);
-    series.push({ name: `#${s.car} (${s.role})`, pts: c, color: s.color, width: s.role === "this car" ? 2 : 1.25 });
-    series.push(...trendSeries(c, s.color, "s/lap"));
-  }
-  lineChart("ch-laps", { series, yFmt: lapTime, invert: false });
-  $("lg-laps").innerHTML = S.map(s => `<span style="--c:${s.color}">#${esc(s.car)} ${s.role}</span>`).join("")
-    + `<span style="--c:var(--text-3)">dashed: trend over the last 10 clean laps</span>`;
 }
 
 // Laps affected by a pit stop (in-lap through two laps after), left out of gap lines and trends.
@@ -663,7 +669,6 @@ function renderSectors(sel, clsName) {
 // Timing: lap-time chart for the cars to watch and the whole class's timing table.
 function renderTiming(lc, sel, rows, strat, lapsCls, cars, clsName) {
   $("timing-title").textContent = `Timing · ${clsName}`;
-  $("champ-link").innerHTML = live.is_race ? `Title picture: <a href="./#${esc(sel.car)}">Championship tab</a>` : "";
   const series = [];
   for (const c of cars) {
     const d = lapsCls[c.car];
@@ -682,14 +687,124 @@ function renderTiming(lc, sel, rows, strat, lapsCls, cars, clsName) {
   const classBest = Math.min(...rows.map(r => toSecs(r.best_lap) ?? Infinity));
   const gapOf = r => live.is_race ? (r.class_pos === 1 ? "—" : esc(r.gap)) : (toSecs(r.best_lap) == null ? "–" : toSecs(r.best_lap) === classBest ? "Fastest" : `+${(toSecs(r.best_lap) - classBest).toFixed(3)}`);
   const watched = new Map(cars.map(c => [c.car, c]));
+  const near = new Set(rows.filter(r => watched.has(r.car)).flatMap(r => [+r.class_pos - 1, +r.class_pos, +r.class_pos + 1]));
+  const shown = fullTiming ? rows : rows.filter(r => near.has(+r.class_pos));
+  $("timing-more").hidden = shown.length === rows.length && !fullTiming;
+  $("timing-more").textContent = fullTiming ? "Show only our cars and the cars around them" : `Show the full class (${rows.length} cars)`;
+  $("timing-more").onclick = () => { fullTiming = !fullTiming; store.set("fullTiming", fullTiming ? "1" : ""); render(); };
   $("timing").innerHTML = `<thead><tr><th>Pos</th><th>Car</th><th class="l">Driver</th><th>Laps</th><th>${live.is_race ? "Gap" : "To fastest"}</th><th>Last</th><th>Best</th><th>Pace</th><th title="Last 5 clean laps against the 5 before">Pace change</th><th>Stops</th></tr></thead><tbody>`
-    + rows.map(r => { const x = strat[r.car] || {}, w = watched.get(r.car);
+    + shown.map(r => { const x = strat[r.car] || {}, w = watched.get(r.car);
       return `<tr class="${w ? "tracked" : ""}" style="--c:${w ? w.style.color : "var(--context)"}">
         <td>${r.class_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}<div>${esc(r.vehicle)}</div></td>
         <td>${r.laps ?? "–"}</td><td class="dim">${gapOf(r)}</td><td>${lapStr(r.last_lap)}</td><td>${lapStr(r.best_lap)}</td>
         <td>${lapTime(x.pace)}</td><td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td><td class="dim">${r.pit_stops ?? "–"}</td></tr>`; }).join("")
     + `</tbody>`;
 }
+
+// --- the glance layer: title status, where the Corvettes are, our cars, what just happened ---------
+const secsOf = t => { if (t == null || /^[-0:.\s]*$/.test(String(t))) return null; let v = 0; for (const p of String(t).split(":")) v = v * 60 + parseFloat(p); return isNaN(v) ? null : v; };
+const ordinal = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+
+// One line in the session bar: the title picture for the selected car, linking to the Championship tab.
+function renderTitleLine(sel, lc, fc) {
+  const link = ` <a class="golink" href="./#${esc(sel.car)}">Championship →</a>`;
+  const cls = standings.classes?.[sel.class], st = cls?.standings || [], me = st.find(s => s.car === sel.car);
+  let text = "";
+  if (live?.is_race && lc && fc.champ_pos && live.base_event === standings.event) {
+    const net = fc.basis === "net", final = lc.max_points_after === 0;
+    const m = n => Math.abs(n ?? 0).toLocaleString();
+    text = fc.champ_pos === 1
+      ? `<b>${final ? "Champion" : "Title leader"} if it ends now</b>, +${m(net ? fc.net_margin_behind : fc.margin_behind)} over #${esc(fc.champ_behind)}`
+      : `<b>${ordinal(fc.champ_pos)} in the title if it ends now</b>, ${m(net ? fc.net_margin_ahead : fc.margin_ahead)} behind #${esc(fc.champ_ahead)}`;
+  } else if (me) {
+    const second = st.find(s => s.car !== sel.car), left = cls.max_points_remaining;
+    text = me.pos === 1 ? `<b>Title: P1</b>, leads by ${(me.points - (second?.points ?? 0)).toLocaleString()} with ${left} left`
+      : me.alive ? `<b>Title: P${me.pos}</b>, ${me.gap.toLocaleString()} behind with ${left} left` : `<b>Title: P${me.pos}</b>, out of title contention`;
+  }
+  $("titleline").innerHTML = text ? `#${esc(sel.car)} · ${text}.${link}` : "";
+}
+
+// Every Corvette in the session, by class, one click to switch to it.
+function renderVettes(sel) {
+  const parts = Object.entries(live?.classes || {}).map(([cls, c]) => {
+    const vs = c.cars.filter(r => /corvette/i.test(r.vehicle || ""));
+    return vs.length ? `<span class="vcls">${esc(CLASS_NAMES[cls] || cls)}</span>` + vs.map(r =>
+      `<a href="#${esc(r.car)}"${r.car === sel.car ? ' aria-current="true"' : ""}>#${esc(r.car)} <b>P${r.class_pos}</b>${r.in_pit ? ` <span class="pit">PIT</span>` : ""}</a>`).join("") : "";
+  }).filter(Boolean);
+  $("vettes").innerHTML = parts.length ? `<span class="dim">Corvettes</span> ` + parts.join("") : "";
+  $("vettes").hidden = !parts.length;
+}
+
+// Our cars: one row each for the selected car and the cars to watch.
+function renderOurs(cars, rows, strat) {
+  const race = live.is_race, byPos = [...rows].sort((a, b) => a.class_pos - b.class_pos);
+  const best = r => secsOf(r.best_lap);
+  const gapSecs = r => r.class_pos === 1 ? 0 : secsOf(r.gap);
+  // Race: time to the car ahead / behind in class. Elsewhere: best-lap difference to the car ahead / behind.
+  const diff = (a, b) => {
+    if (!a || !b) return "–";
+    const x = race ? gapSecs(b) - gapSecs(a) : best(b) - best(a);
+    return x == null || isNaN(x) ? "–" : `${x.toFixed(race ? 1 : 3)}s`;
+  };
+  $("ours").innerHTML = `<thead><tr><th class="l">Car</th><th>Pos</th><th>${race ? "Gap ahead" : "To car ahead"}</th><th>${race ? "Gap behind" : "To car behind"}</th><th>Last lap</th><th title="Last lap against the car's pace (median of its last 5 clean laps)">vs pace</th><th>${race ? "Next stop" : "Best"}</th><th class="l">Now</th></tr></thead><tbody>`
+    + cars.map(c => {
+      const r = rows.find(x => x.car === c.car);
+      if (!r) return "";
+      const i = byPos.indexOf(r), up = byPos[i - 1], down = byPos[i + 1];
+      const e = r.energy, pace = strat[r.car]?.pace, last = secsOf(r.last_lap);
+      const vs = pace && last ? last - pace : null;
+      const toStop = e?.next_stop_lap ? e.next_stop_lap - (+r.laps || 0) : r.stint?.laps_to_typical;
+      const now = [r.in_pit ? `<span class="pit">PIT</span>` : "", r.owes_stop ? `<span class="owes" title="Still owes a stop in this pit cycle">OWES STOP</span>` : "",
+        race && r.net_pos && r.net_pos !== r.class_pos ? `<span class="dim">P${r.net_pos} after stops</span>` : "", esc(r.driver)].filter(Boolean).join(" ");
+      return `<tr class="${c.role === "selected" ? "tracked" : ""}" style="--c:${c.style.color}">
+        <td class="l who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> <small class="dim">${esc(c.role)}</small></td>
+        <td class="total">P${r.class_pos}</td>
+        <td>${up ? `${diff(r, up) === "–" ? "–" : diff(r, up).replace(/^-/, "")} <span class="dim">#${esc(up.car)}</span>` : "—"}</td>
+        <td>${down ? `${diff(down, r) === "–" ? "–" : diff(down, r).replace(/^-/, "")} <span class="dim">#${esc(down.car)}</span>` : "—"}</td>
+        <td>${last ? esc(r.last_lap) : "–"}</td>
+        <td class="${vs == null || vs > pace * 0.07 ? "dim" : vs < -0.1 ? "up" : vs > 0.5 ? "down" : "dim"}">${vs == null ? "–" : vs > pace * 0.07 ? (r.in_pit || r.energy?.pit_lane ? "pit" : "slow lap") : signed(vs, 1)}</td>
+        <td>${race ? (toStop != null ? `${toStop <= 0 ? "due" : `in ${toStop} lap${toStop === 1 ? "" : "s"}`}${e?.next_stop_lap ? ` <span class="dim">L${e.next_stop_lap}</span>` : ""}` : "–") : (r.best_lap ? esc(r.best_lap) : "–")}</td>
+        <td class="l">${now}</td></tr>`;
+    }).join("") + `</tbody>`;
+}
+
+// What just happened to our cars: pit stops (telemetry), title-rival changes (scraper) and
+// position changes (seen by this page between polls, kept for the browser session).
+let seenPos = {}, posEvents = [];
+try { const s = JSON.parse(sessionStorage.getItem("posEvents") || "{}"); if (s.session) ({ seenPos = {}, posEvents = [] } = s); } catch (e) {}
+function trackPositions() {
+  const session = `${live.event}|${live.session}`;
+  if (seenPos.__session !== session) { seenPos = { __session: session }; posEvents = []; }
+  for (const [cls, c] of Object.entries(live.classes || {})) for (const r of c.cars) {
+    const k = cls + ":" + r.car, was = seenPos[k];
+    if (was && was !== r.class_pos && (+r.laps || 0) > 1) posEvents.push({ cls, car: r.car, lap: +r.laps || 0, from: was, to: r.class_pos, t: Date.now() });
+    seenPos[k] = r.class_pos;
+  }
+  posEvents = posEvents.slice(-300);
+  try { sessionStorage.setItem("posEvents", JSON.stringify({ session, seenPos, posEvents })); } catch (e) {}
+}
+function renderFeed(sel, cars, rows, lapsCls, fc) {
+  const watched = new Map(cars.map(c => [c.car, c]));
+  const items = [];
+  const tag = car => { const c = watched.get(car); return `<span class="sw">${swatchOf(c.style)}<b>#${esc(car)}</b></span>`; };
+  for (const c of cars) {
+    const r = rows.find(x => x.car === c.car);
+    const stops = r?.energy?.stops || [];
+    if (stops.length) stops.forEach(s => items.push({ lap: s.lap, text: `${tag(c.car)} pitted: ${Math.round(s.lane)}s in the lane · ${stopWords(s)}` }));
+    else (lapsCls[c.car]?.stops || []).forEach(n => items.push({ lap: n, text: `${tag(c.car)} pitted` }));
+  }
+  posEvents.filter(e => e.cls === sel.class && watched.has(e.car)).forEach(e =>
+    items.push({ lap: e.lap, t: e.t, text: `${tag(e.car)} ${e.to < e.from ? `<span class="up">up to P${e.to}</span>` : `<span class="down">down to P${e.to}</span>`} <span class="dim">from P${e.from}</span>` }));
+  (fc.events || []).forEach(ev => ev.to && items.push({ lap: ev.lap, text: `Closest title rival ${ev.role === "champ_behind" ? "behind" : "ahead"} is now <b>#${esc(ev.to)}</b>${ev.from ? ` <span class="dim">(was #${esc(ev.from)})</span>` : ""}` }));
+  items.sort((a, b) => b.lap - a.lap || (b.t || 0) - (a.t || 0));
+  $("feed").innerHTML = items.length ? items.slice(0, 8).map(i => `<li><span class="lap">L${i.lap}</span>${i.text}</li>`).join("")
+    : `<li class="dim">Nothing yet. Pit stops, position changes and title-rival changes for the cars above show up here.</li>`;
+}
+
+let fullTiming = !!store.get("fullTiming");
+// The detail section remembers whether it was open, and redraws its charts at full width when opened.
+$("deep").open = store.get("deep") === "1";
+$("deep").addEventListener("toggle", () => { store.set("deep", $("deep").open ? "1" : ""); if ($("deep").open) render(); });
 
 let width = innerWidth;
 addEventListener("resize", () => { if (Math.abs(innerWidth - width) > 40) { width = innerWidth; render(); } });

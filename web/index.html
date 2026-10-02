@@ -21,31 +21,27 @@
     <div class="meta" id="meta"></div>
   </header>
   <nav class="picker" id="picker" aria-label="Choose a Corvette"></nav>
-  <section class="card live" id="proj-card" hidden aria-live="polite"></section>
   <section class="cars" id="cars"></section>
+  <section class="card live" id="proj-card" hidden aria-live="polite"></section>
   <section class="card" id="fight-card" hidden>
     <h2 id="fight-title">Still in contention</h2>
     <p class="live-sub" id="fight-sub"></p>
     <div class="legend" id="fight-legend"></div>
     <div class="chart" id="fight-chart"><div class="tip"></div></div>
-    <h2 style="margin-top:18px" id="needs-title">What it needs</h2>
-    <p class="live-sub" id="needs-sub"></p>
-    <div class="scroll"><table id="needs"></table></div>
-    <p class="note" id="needs-note"></p>
+  </section>
+  <section class="card" id="table-card" hidden>
+    <h2 id="table-title">Standings</h2>
+    <div class="scroll"><table id="table"></table></div>
   </section>
   <section class="card" id="chart-card" hidden>
     <h2>Points behind the leader</h2>
     <div class="legend" id="legend"></div>
     <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
   </section>
-  <section class="card" id="table-card" hidden>
-    <h2 id="table-title">Standings</h2>
-    <div class="scroll"><table id="table"></table></div>
-  </section>
-  <section class="card" id="hist-card" hidden>
-    <h2 id="hist-title">Race by race</h2>
+  <details class="card fold" id="hist-card" hidden>
+    <summary><h2 id="hist-title">Race by race</h2></summary>
     <div class="scroll"><table id="hist"></table></div>
-  </section>
+  </details>
   <footer id="foot"></footer>
 </main>
 <script>
@@ -144,31 +140,17 @@ function render(d) {
   } else {
     const ahead = st.find(s => s.pos === t.pos - 1), behind = st.find(s => s.pos === t.pos + 1);
     const left = d.max_points_remaining;
-    let status, color, verdict;
-    if (t.pos === 1) {
-      const lead = behind ? t.points - behind.points : t.points;
-      if (lead > left) {
-        [status, color] = ["Champions", "var(--good)"];
-        verdict = `Title clinched. The ${fmt(lead)}-point lead can't be overturned.`;
-      } else {
-        [status, color] = ["Leading", "var(--accent-ink)"];
-        verdict = `Leads by <strong>${fmt(lead)}</strong> with ${fmt(left)} still available. `
-          + (behind ? `#${esc(behind.car)} ${esc(behind.team)} is the closest title rival.` : "");
-      }
-    } else if (t.alive) {
-      [status, color] = ["In contention", "var(--accent-ink)"];
-      verdict = `<strong>${fmt(t.gap)}</strong> behind the leader with ${fmt(left)} still available.`;
-    } else {
-      [status, color] = ["Out of title contention", "var(--text-3)"];
-      verdict = `${fmt(t.gap)} behind with only ${fmt(left)} left. Fighting for ${ord(t.pos)}.`;
-    }
+    // The headline answer (what it needs) is filled in by renderTitle.
+    const lead = t.pos === 1 && behind ? t.points - behind.points : 0;
+    const [status, color] = t.pos === 1 && lead > left ? ["Champions", "var(--good)"] : t.pos === 1 ? ["Leading", "var(--accent-ink)"]
+      : t.alive ? ["In contention", "var(--accent-ink)"] : ["Out of title contention", "var(--text-3)"];
     const best = Math.max(...t.rounds.map(roundPts));
     $("cars").innerHTML = `<article class="card car" style="--c:${colorOf(car)}">
       <div class="car-head"><div class="car-no"><i></i>#${esc(car)} <small class="drivers">${esc(t.team)}</small></div><span class="status" style="color:${color}">${status}</span></div>
       <div class="drivers">${esc(t.drivers.join(" · "))}</div>
       ${weekend}
       <div class="hero"><span class="num pos">P${t.pos}</span><span class="num pts">${fmt(t.points)}<small>pts</small></span></div>
-      <p class="verdict">${verdict}</p>
+      <div id="answer"></div>
       <div class="facts">
         <div>To car ahead<b>${ahead ? "−" + fmt(ahead.points - t.points) : "—"}</b></div>
         <div>To car behind<b>${behind ? "+" + fmt(t.points - behind.points) : "—"}</b></div>
@@ -305,68 +287,88 @@ function renderTitle(d) {
     + (d.rounds_remaining === 1 ? " (one race: up to 350 for the win plus up to 35 for qualifying)." : ` over ${d.rounds_remaining} rounds.`)
     + (lc ? ` Live from the race, ${esc((live.remaining || "").replace(/^00:/, ""))} to go.` : "");
 
-  // What the selected car needs.
-  $("needs-title").textContent = me.alive ? `What #${car} needs` : `#${car}: best possible finish`;
+  // What the selected car needs: one headline answer, a plain line per rival, and the full table on request.
+  const ans = $("answer");
+  if (!ans) return;
+  const word = after ? "leads the championship" : "is champion";
   const myQ = q(car), qKnown = qmap != null;
   const myTot = p => me.points + (myQ ?? 0) + racePts(p);
+  const rTot = (r, p) => r.points + (q(r.car) ?? 0) + racePts(p);
+  const fc = lc?.focus?.[car] || {};
+  const raceLink = lc ? ` <a class="golink" href="strategy.html#${esc(car)}">Race tab →</a>` : "";
+  let head, sub = "", lines = [], more = "";
+  const second = st.find(s => s.car !== car);
   if (!me.alive) {
     const myMax = me.points + left;
     const best = 1 + st.filter(s => s.car !== car && s.points > myMax).length;
     const toBeat = st.filter(s => s.car !== car && s.points <= myMax && s.pos < me.pos);
-    $("needs-sub").innerHTML = `<b>#${esc(car)} is mathematically out of the title fight</b>: ${fmt(me.gap)} points behind with only ${fmt(left)} left. `
-      + `The highest it can still finish the championship is <b>${ord(best)}</b>${best < me.pos ? ` (it's ${ord(me.pos)} now)` : ""}`
-      + (best < me.pos ? `, by scoring the maximum (${d.rounds_remaining === 1 ? "pole and the win" : "maximum points"}) while the cars just ahead score less than:` : ".");
-    $("needs").innerHTML = best < me.pos && toBeat.length ? `<thead><tr><th>Car</th><th class="l">Team</th><th>Points now</th><th>Must score fewer than</th><th>Roughly</th></tr></thead><tbody>`
-      + toBeat.map(s => { const room = myMax - s.points; const worst = RACE_POINTS.findIndex(v => v < room) + 1;
-        return `<tr style="--c:${colorOf(s.car)}"><td>#${esc(s.car)}</td><td class="l team">${esc(s.team)}</td><td>${fmt(s.points)}</td><td>${fmt(room)} pts</td><td>${worst ? `finishing P${worst} or lower` : "scoring nothing"}</td></tr>`; }).join("") + `</tbody>` : "";
-    $("needs-note").textContent = "\"Roughly\" ignores the few qualifying points those cars may also pick up.";
-    return;
-  }
-  const second = st.find(s => s.car !== car);
-  if (me.pos === 1 && me.points - (second?.points ?? 0) > left) {
-    $("needs-sub").innerHTML = `<b>#${esc(car)} has clinched the title.</b>`;
-    $("needs").innerHTML = ""; $("needs-note").textContent = "";
-    return;
-  }
-  const rivals = contenders.filter(s => s.car !== car && s.alive).slice(0, 6);
-  // Field size: live cars, else this weekend's entries in the class, else the standings.
-  const field = lc ? lc.cars.length : Object.values(entries?.cars || {}).filter(e => e.class === d.class).length || st.length;
-  const maxFinish = Math.max(2, field);
-  // Guaranteed: beats every rival's best case (the rival wins; qualifying points known, or the maximum).
-  let guaranteed = null;
-  for (let p = 1; p <= maxFinish; p++) {
-    const ok = rivals.every(r => myTot(p) - (r.points + (q(r.car) ?? 35) + racePts(p === 1 ? 2 : 1)) > after);
-    if (ok) guaranteed = p; else break;
-  }
-  const liveNeed = lc?.worst_winning_finish?.[car];
-  let sub = "";
-  if (lc && liveNeed !== undefined) {
-    const now = running[car];
-    sub += `<b>Right now</b> #${esc(car)} is running P${now?.class_pos ?? "–"}: `
-      + (liveNeed ? `it needs <b>P${liveNeed} or better</b> to ${after ? "lead" : "win the title"} if everyone else holds position.` : `as things stand it can't win the title unless cars ahead drop back.`) + "<br>";
-  }
-  sub += guaranteed === 1 ? `<b>Winning the race</b> ${after ? "keeps the lead" : "wins the title"}, whatever anyone else does.`
-    : guaranteed ? `<b>Whatever anyone else does</b>, finishing <b>P${guaranteed} or better</b> ${after ? "keeps the lead" : "wins the title"}.`
-    : `No finish guarantees it on its own: it depends on where the rivals finish (table below).`;
-  $("needs-sub").innerHTML = sub;
-  // Matrix: the rival's finish across the top; each cell is the lowest finish the selected car can afford.
-  const cols = Array.from({ length: Math.min(10, maxFinish) }, (_, i) => i + 1);
-  const need = (r, rf) => {
-    let worst = null;
+    head = best < me.pos ? `Out of the title fight. Best possible: <em>${ord(best)}</em>` : `Out of the title fight. It can't climb above ${ord(me.pos)}`;
+    sub = `${fmt(me.gap)} points behind the leader with only ${fmt(left)} left.`
+      + (best < me.pos ? ` To reach ${ord(best)}, #${esc(car)} needs ${d.rounds_remaining === 1 ? "pole and the win" : "maximum points"}, and:` : "");
+    if (best < me.pos) lines = toBeat.map(s => { const room = myMax - s.points, worst = RACE_POINTS.findIndex(v => v < room) + 1;
+      return `<li style="--c:${colorOf(s.car)}"><b>#${esc(s.car)}</b> <span class="dim">${fmt(s.points)} pts</span> must score fewer than ${fmt(room)}: about ${worst ? `P${worst} or lower` : "no points at all"}${running[s.car] ? `, running P${running[s.car].class_pos}` : ""}</li>`; });
+  } else if (me.pos === 1 && me.points - (second?.points ?? 0) > left) {
+    head = `<em>Champion.</em> The ${fmt(me.points - second.points)}-point lead can't be overturned`;
+  } else {
+    const rivals = contenders.filter(s => s.car !== car && s.alive).slice(0, 4);
+    const field = lc ? lc.cars.length : Object.values(entries?.cars || {}).filter(e => e.class === d.class).length || st.length;
+    const maxFinish = Math.max(2, field);
+    // Lowest finish the selected car can afford against rival r finishing rf (null: not even a win).
+    const need = (r, rf) => { let worst = null;
+      for (let p = 1; p <= maxFinish; p++) { if (p === rf) continue; if (myTot(p) - rTot(r, rf) > after) worst = p; else if (p > rf) break; }
+      return worst; };
+    // Guaranteed: beats every rival's best case (the rival wins; qualifying points known, or the maximum).
+    let guaranteed = null;
     for (let p = 1; p <= maxFinish; p++) {
-      if (p === rf) continue;
-      if (myTot(p) - (r.points + (q(r.car) ?? 0) + racePts(rf)) > after) worst = p; else if (p > rf) break;
+      if (rivals.every(r => myTot(p) - (r.points + (q(r.car) ?? 35) + racePts(p === 1 ? 2 : 1)) > after)) guaranteed = p; else break;
     }
-    return worst;
-  };
-  $("needs").innerHTML = `<thead><tr><th class="l">If this rival finishes →</th>${cols.map(c => `<th>P${c}</th>`).join("")}</tr></thead><tbody>`
-    + rivals.map(r => `<tr style="--c:${colorOf(r.car)}"><td class="l">#${esc(r.car)} <span class="dim">${fmt(r.points)} pts${running[r.car] ? ` · running P${running[r.car].class_pos}` : ""}</span></td>`
-      + cols.map(c => { const w = need(r, c), now = running[r.car]?.class_pos === c;
-        return `<td class="${now ? "nowcol" : ""}">${w == null ? "✕" : w >= maxFinish ? "any" : `P${w}`}</td>`; }).join("") + `</tr>`).join("")
-    + `</tbody>`;
-  $("needs-note").textContent = `Each cell is the lowest class finish #${car} can afford to stay ahead of that rival if the rival finishes there (✕ = not even a win is enough; "any" = even last of the ${maxFinish} entries is enough). `
-    + (qKnown ? "This weekend's qualifying points are included. " : "Qualifying points aren't known yet, so the table leaves them out; the guaranteed finish assumes each rival takes the maximum 35. ")
-    + (lc ? "Highlighted: where each rival is running now. " : "") + "Ties and penalties aren't modelled.";
+    const pre = guaranteed === 1 ? `Win the race and #${esc(car)} ${word}, whatever anyone else does`
+      : guaranteed ? `Finish P${guaranteed} or better and #${esc(car)} ${word}, whatever anyone else does`
+      : me.pos === 1 ? `No finish guarantees it alone: it depends on where the rivals finish` : `#${esc(car)} needs help from the cars ahead`;
+    const liveNeed = lc?.worst_winning_finish?.[car];
+    if (lc && fc.champ_pos) {
+      const margin = n => fmt(Math.abs(n ?? 0));
+      const net = fc.basis === "net";
+      head = fc.champ_pos === 1
+        ? `<em>${after ? "Leads" : "Champion"}</em> if it ends now, ${margin(net ? fc.net_margin_behind : fc.margin_behind)} ahead of #${esc(fc.champ_behind)}`
+        : `${ord(fc.champ_pos)} if it ends now, ${margin(net ? fc.net_margin_ahead : fc.margin_ahead)} behind #${esc(fc.champ_ahead)}`;
+      sub = `Running <b>P${running[car]?.class_pos ?? "–"}</b>. `
+        + (liveNeed ? (fc.champ_pos === 1 ? `Can drop to <b>P${liveNeed}</b> and still ${after ? "lead" : "win the title"} if everyone else holds position.` : `Needs <b>P${liveNeed} or better</b> if everyone else holds position.`)
+          : `Can't ${after ? "take the lead" : "win the title"} unless cars ahead drop back.`)
+        + ` Before the race: ${pre.charAt(0).toLowerCase() + pre.slice(1)}.${raceLink}`;
+    } else {
+      head = pre;
+      sub = me.pos === 1 ? `Leads by ${fmt(me.points - second.points)} with ${fmt(left)} points left.` : `${ord(me.pos)}, ${fmt(me.gap)} behind the leader with ${fmt(left)} points left.`;
+    }
+    lines = rivals.map(r => {
+      const w = need(r, 1);
+      let safe = null, winVs = null;
+      for (let rf = 1; rf <= maxFinish; rf++) { const n = need(r, rf); if (n != null && n >= maxFinish) { safe = rf; break; } }
+      for (let rf = 2; rf <= maxFinish; rf++) if (myTot(1) - rTot(r, rf) > after) { winVs = rf; break; }
+      const who = `<b>#${esc(r.car)}</b> <span class="dim">${fmt(r.points)} pts${running[r.car] ? `, running P${running[r.car].class_pos}` : ""}</span>: `;
+      let text;
+      if (safe === 1) text = `#${esc(car)} stays ahead whatever happens`;
+      else {
+        text = w ? `if it wins, #${esc(car)} needs P${w} or better` : `if it wins, #${esc(car)} can't finish ahead of it`;
+        if (!w && winVs) text += `. If #${esc(car)} wins, #${esc(r.car)} must finish P${winVs} or lower`;
+        else if (!w) text += `, and it stays ahead even if #${esc(car)} wins and it finishes last`;
+        if (safe && w) text += `. If it finishes P${safe} or lower, any finish will do`;
+      }
+      return `<li style="--c:${colorOf(r.car)}">${who}${text}</li>`;
+    });
+    // The full table: rival's finish across the top; each cell is the lowest finish the selected car can afford.
+    const cols = Array.from({ length: Math.min(10, maxFinish) }, (_, i) => i + 1);
+    more = `<details class="more"><summary>Every finish, rival by rival</summary><div class="scroll"><table class="needs"><thead><tr><th class="l">If this rival finishes →</th>${cols.map(c => `<th>P${c}</th>`).join("")}</tr></thead><tbody>`
+      + rivals.map(r => `<tr style="--c:${colorOf(r.car)}"><td class="l">#${esc(r.car)} <span class="dim">${fmt(r.points)} pts</span></td>`
+        + cols.map(c => { const w = need(r, c), now = running[r.car]?.class_pos === c;
+          return `<td class="${now ? "nowcol" : ""}">${w == null ? "✕" : w >= maxFinish ? "any" : `P${w}`}</td>`; }).join("") + `</tr>`).join("")
+      + `</tbody></table></div><p class="note">Each cell is the lowest class finish #${esc(car)} can afford to stay ahead of that rival if the rival finishes there (✕ = not even a win is enough; "any" = even last of ${maxFinish} is enough). `
+      + (lc ? "Highlighted: where each rival is running now. " : "") + `</p></details>`;
+  }
+  const qNote = me.alive && !qKnown ? `Qualifying points aren't in yet: the rival lines leave them out, and "whatever anyone else does" assumes each rival takes the maximum 35. ` : qKnown ? "This weekend's qualifying points are included. " : "";
+  ans.innerHTML = `<p class="answer">${head}.</p>${sub ? `<p class="verdict">${sub}</p>` : ""}`
+    + (lines.length ? `<ul class="needs-lines">${lines.join("")}</ul>` : "") + more
+    + `<p class="note">${qNote}Ties and penalties aren't modelled.</p>`;
 }
 
 // Live championship projection during the race.
@@ -377,14 +379,7 @@ function renderProjection(d) {
   const car = d.tracked[0], colorOf = colorFor(d), cls = CLASS_NAMES[d.class] || d.class;
   const fc = c.focus?.[car] || {}, proj = c.standings, me = proj.find(r => r.car === car);
   const flagKey = Object.keys(FLAG_COLORS).find(k => (live.flag || "").toLowerCase().includes(k));
-  const final = c.max_points_after === 0, worst = c.worst_winning_finish?.[car];
   const net = fc.basis === "net";
-  let verdict;
-  if (me && fc.champ_pos) {
-    verdict = fc.champ_pos === 1
-      ? `#${esc(car)} <em>${final ? "champion" : "championship leader"}</em> by ${fmt(Math.abs((net ? fc.net_margin_behind : fc.margin_behind) ?? 0))} if it ends like this`
-      : `#${esc(proj[0].car)} ${final ? "takes the title" : "leads"} · #${esc(car)} ${ord(fc.champ_pos)}, ${fmt(Math.abs((net ? fc.net_margin_ahead : fc.margin_ahead) ?? 0))} behind #${esc(fc.champ_ahead)}`;
-  } else verdict = `#${esc(car)} isn't in this race`;
   const ev = fc.events?.at(-1);
   const mg = n => n == null ? "–" : `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;
   const k = (a, b, s) => `<div class="kpi"><div class="k">${a}</div><div class="v">${b}</div><div class="s">${s}</div></div>`;
@@ -404,8 +399,7 @@ function renderProjection(d) {
   el.classList.toggle("done", !!live.finished);
   el.innerHTML = `<div class="live-head"><span class="pulse">${live.finished ? "FINISHED" : "LIVE"}</span><b>${esc(live.event)}</b> · race · ${esc(cls)}
       <span class="flag" style="--f:${FLAG_COLORS[flagKey] || "var(--text-2)"}">${esc(live.flag)}</span>${live.finished ? "" : `<span class="ttg">${esc((live.remaining || "").replace(/^00:/, ""))} to go</span>`}</div>
-    <div class="live-verdict">${verdict}</div>
-    <p class="live-sub">${worst ? `Can finish as low as <strong>P${worst}</strong> in class and still ${final ? "win the title" : "lead"}, if everyone else holds position.` : ""}</p>
+    <p class="live-sub">#${esc(car)}${me && fc.champ_pos ? ` is ${ord(fc.champ_pos)} in the title if it ends like this` : " isn't in this race"}. Pit strategy and lap times: <a href="strategy.html#${esc(car)}">Race tab →</a></p>
     ${ev && ev.to ? `<p class="event">Closest title rival ${ev.role === "champ_behind" ? "behind" : "ahead"} is now <b>#${esc(ev.to)}</b>${ev.from ? ` (was #${esc(ev.from)})` : ""}, since lap ${ev.lap}.</p>` : ""}
     <div class="kpis">${tiles}</div>
     <h2 style="margin-top:16px">Championship if it finished now${net ? " (after pit stops)" : ""}</h2>${table}

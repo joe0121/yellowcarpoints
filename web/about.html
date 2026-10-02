@@ -52,29 +52,29 @@ dl.terms dd { margin: 0; color: var(--text-2); }
     <section class="card" id="use">
       <h2>How to use it</h2>
 
-      <h3>Championship</h3>
+      <h3>Championship: where we are and what we must do</h3>
       <ul>
-        <li><strong>Car card:</strong> the selected car's championship position, points, gap to the cars around it, and whether it can still win the title with the points left. Also its drivers this weekend.</li>
-        <li><strong>Points behind the leader:</strong> a chart of each car's gap to the championship leader after every round. The selected car is yellow, the other Corvettes in its class blue. Hover to see the order after any round.</li>
-        <li><strong>Still in contention:</strong> every car that can still mathematically win the title, with points now and the most it can still reach; during the race, where each is running and its points if the race ended now.</li>
-        <li><strong>What it needs:</strong> the finish that guarantees the title whatever anyone else does, and a table of the finish needed against each rival's result. If the car is out of the title fight, the highest championship position it can still reach and what that would take.</li>
-        <li><strong>Team standings:</strong> the full class table with points from every round.</li>
-        <li><strong>Race by race:</strong> the selected car's season: finishing and starting position, best lap and how it ranked, pit stops and average stop time, every stint length, and laps per driver.</li>
+        <li><strong>The answer at the top:</strong> one line saying what the selected car needs, for example "Win the race and #4 is champion, whatever anyone else does". During the race it becomes where the title stands if the race ended now and the lowest finish the car can afford.</li>
+        <li><strong>Rival by rival:</strong> a plain line for each car still in the fight ("if #1 wins, #4 needs P2 or better"), with the full finish-by-finish table one click away. If the car is out of the title fight, the highest championship position it can still reach and what that would take.</li>
+        <li><strong>If the race ended now</strong> (race only): the projected championship table, the margin to the title rivals either side, and the title margin lap by lap.</li>
+        <li><strong>Still in contention:</strong> every car that can still win the title, with points now and the most it can still reach; in the race, where each is running.</li>
+        <li><strong>Standings, points behind the leader, and race by race</strong> (folded away; tap to open) for the background.</li>
       </ul>
-
-      <h3>Race</h3>
+      <h3>Race: what's happening now, for the cars we care about</h3>
       <p>For the selected car during a session (it shows the last session between events):</p>
       <ul>
-        <li><strong>Tiles:</strong> energy left and energy used per lap, laps left on this tank, the next pit stop (lap and minutes away), estimated refuel time, stops made plus stops still needed to the finish, and recent pace.</li>
-        <li><strong>Championship if it finished now</strong> (race only): title position, margin to the car just ahead and just behind in the championship, what one place is worth in points, and what each side needs.</li>
-        <li><strong>Charts:</strong> lap times, the gap to the car ahead and to the leader, energy by lap, and the gap to the class leader. Dashed lines are trends over the last 10 laps. Hover any chart for exact values.</li>
-        <li><strong>Strategy board:</strong> the whole class at a glance: running and net position, energy, next stop, stops, last refuel time, pace and trends. Corvettes are highlighted, title rivals tagged.</li>
+        <li><strong>Session bar:</strong> flag, time to go, a one-line title status, and where every Corvette is running (tap one to switch to it).</li>
+        <li><strong>Our cars:</strong> the selected car and the cars to watch: position, gap ahead and behind, last lap against its pace, laps to the next stop, and pit-lane status. Add any other car with "Add a car".</li>
+        <li><strong>What just happened:</strong> pit stops (time in the lane, fuel, tyres, driver change), position changes and title-rival changes for those cars, newest first. Position changes are the ones seen while the page is open.</li>
+        <li><strong>Timing:</strong> lap-time chart for our cars, and the timing table for them and the cars around them (or the full class).</li>
+        <li><strong>Pit strategy and pace:</strong> energy, laps left, next stop and fill time per car, and race pace through a stint with a projected matchup.</li>
+        <li><strong>More detail</strong> (folded away): sectors, gap and energy charts, and the strategy board for the whole class.</li>
       </ul>
     </section>
 
     <section class="card" id="race">
       <h2>On race day</h2>
-      <p>During a WeatherTech session the Race page fills in with timing, pit strategy and pace, and in the race the Championship page adds a live <strong>championship if it finished now</strong> card. Both refresh every 30 seconds by themselves; no need to reload.</p>
+      <p>During a WeatherTech session the Race tab fills in with our cars, timing, pit strategy and pace, and in the race the Championship tab switches its answer to "if it ended now". Both refresh every 30 seconds by themselves; no need to reload.</p>
       <ul>
         <li>In the race, the headline tells you where the title stands if the race ended now, for example "#4 champion by 23 if it ends like this", and the lowest finish the car can afford.</li>
         <li>The site works out which rivals matter <em>right now</em>. If a different car becomes the closest title rival mid-race, a banner says so.</li>
