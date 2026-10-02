@@ -29,6 +29,31 @@
     const url = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CW} ${CH}">${body}</svg>`)}")`;
     for (const p of ["maskImage", "webkitMaskImage"]) bg.style[p] = url;
   }
+  // Corvette Racing's honours, up the page margins (left: titles and Le Mans; right: the numbers).
+  // Sources: Wikipedia (Corvette Racing; C7.R; C8.R; Michelin Endurance Cup), Chevrolet newsroom
+  // (Oct 2025: 15th IMSA GT-class manufacturers' title), Corvette Racing release (Mar 2026: 154 wins
+  // worldwide entering 2026), GM Authority (Jun 2026: 10th Le Mans class win). Endurance Cup years are
+  // the ones we could confirm (2015 Patrón Endurance Cup GTLM; 2016 and 2017 team titles).
+  const HONOURS = {
+    left: ["Class champions 2001–08 · 2012 · 2013 · 2016–18 · 2020 · 2021 · 2023 (WEC) · 2025",
+           "Le Mans class wins 2001 · 2002 · 2004 · 2005 · 2006 · 2009 · 2011 · 2015 · 2023 · 2026"],
+    winsBefore: 154, season: "2026", otherWinsThisSeason: 1,   // + Le Mans 2026 (TF Sport #33)
+    teamCars: ["3", "4"],
+    right: wins => [`${wins}+ race wins`, "15 IMSA manufacturer titles", "Endurance Cup 2015 · 2016 · 2017"],
+  };
+  async function honours() {
+    let wins = HONOURS.winsBefore + HONOURS.otherWinsThisSeason;
+    try {
+      const h = await (await fetch("data/history.json", { cache: "no-cache" })).json();
+      if (h?.season === HONOURS.season) wins += HONOURS.teamCars.reduce((n, c) => n + (h.cars?.[c] || []).filter(r => r.class_pos === 1).length, 0);
+    } catch (e) {}
+    const strip = (side, lines) => { const d = document.createElement("div"); d.className = `honours honours-${side}`; d.setAttribute("aria-hidden", "true");
+      d.innerHTML = lines.map(l => `<span>${l}</span>`).join(""); document.body.prepend(d); };
+    strip("l", HONOURS.left);
+    strip("r", HONOURS.right(wins));
+  }
+  document.addEventListener("DOMContentLoaded", honours);
+
   // The Race page's track map uses the same outline.
   window.trackReady = new Promise(res => { window._trackResolve = res; });
   document.addEventListener("DOMContentLoaded", async () => {

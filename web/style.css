@@ -593,3 +593,15 @@ body.mode-fan #pw { display: none !important; }
 body.mode-fan .sv-wide { display: none !important; }
 .sgwx { font-size: 10px; fill: var(--text-2); }
 #sg-chart .tip { min-width: 150px; }
+
+/* Corvette Racing's honours up the page margins, as faint as the track outline */
+.honours { position: fixed; top: 0; bottom: 0; z-index: -1; pointer-events: none; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center;
+  writing-mode: vertical-rl; transform: rotate(180deg); font: 600 clamp(11px, 1.35vh, 16px) / 1 Oswald, Impact, sans-serif; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent); opacity: .22; white-space: nowrap; }
+.honours-l { left: 4px; }
+.honours-r { right: 4px; }
+:root[data-theme="dark"] .honours { opacity: .3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .honours { opacity: .3; } }
+@media (max-width: 900px) { .honours { display: none; } }
+/* Keep the outline pattern off the margins the honours run up. */
+@media (min-width: 901px) { .track-bg { left: 62px; right: 62px; } }
