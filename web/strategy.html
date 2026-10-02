@@ -717,7 +717,7 @@ function renderOurs(cars, rows, strat) {
   const gapSecs = r => r.class_pos === 1 ? 0 : secsOf(r.gap);
   // Race: time to the car ahead / behind in class. Elsewhere: best-lap difference to the car ahead / behind.
   const diff = (a, b) => {
-    if (!a || !b) return "–";
+    if (!a || !b || !timed(a) || !timed(b)) return "–";
     const x = race ? gapSecs(b) - gapSecs(a) : best(b) - best(a);
     return x == null || isNaN(x) ? "–" : `${x.toFixed(race ? 1 : 3)}s`;
   };
@@ -738,7 +738,7 @@ function renderOurs(cars, rows, strat) {
         <td>${down ? `${diff(down, r) === "–" ? "–" : diff(down, r).replace(/^-/, "")} <span class="dim">#${esc(down.car)}</span>` : "—"}</td>
         <td>${last ? esc(r.last_lap) : "–"}</td>
         <td class="${vs == null || vs > pace * 0.07 ? "dim" : vs < -0.1 ? "up" : vs > 0.5 ? "down" : "dim"}">${vs == null ? "–" : vs > pace * 0.07 ? (r.in_pit || r.energy?.pit_lane ? "pit" : "slow lap") : signed(vs, 1)}</td>
-        <td>${race ? (toStop != null ? `${toStop <= 0 ? "due" : `in ${toStop} lap${toStop === 1 ? "" : "s"}`}${e?.next_stop_lap ? ` <span class="dim">L${e.next_stop_lap}</span>` : ""}` : "–") : (r.best_lap ? esc(r.best_lap) : "–")}</td>
+        <td>${race ? (toStop != null ? `${toStop <= 0 ? "due" : `in ${toStop} lap${toStop === 1 ? "" : "s"}`}${e?.next_stop_lap ? ` <span class="dim">L${e.next_stop_lap}</span>` : ""}` : "–") : (timed(r) && r.best_lap ? esc(r.best_lap) : "–")}</td>
         <td class="l">${now}</td></tr>`;
     }).join("") + `</tbody>`;
 }

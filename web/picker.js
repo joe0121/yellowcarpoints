@@ -71,9 +71,12 @@
     const mine = !followed.has(sel.car), rival = !window.isFriend(sel.car, data);
     // Look-away banner: a rival leading our car's class (live during a session, else the championship).
     const lc = data.live?.classes?.[sel.class], fresh = data.live && !data.live.finished && Date.now() - new Date(data.live.updated) < 30 * 60e3;
-    const leader = fresh && lc?.cars?.[0] ? lc.cars[0].car : data.standings?.classes?.[sel.class]?.standings?.[0]?.car;
+    // Live leader only once the class has set times (class-by-class qualifying lists everyone else as P1).
+    const hasTime = r => data.live?.is_race || (+r.laps || 0) > 0 || /[1-9]/.test(String(r.best_lap || "").replace(/^0+:/, ""));
+    const liveLead = fresh && lc?.cars?.find(hasTime);
+    const leader = liveLead ? liveLead.car : data.standings?.classes?.[sel.class]?.standings?.[0]?.car;
     const look = leader && !window.isFriend(leader, data)
-      ? `<p class="lookaway">🙈 ${fresh && lc ? `A ${esc(window.makeOf(leader, data))} is leading ${NAMES[sel.class]}` : `A ${esc(window.makeOf(leader, data))} leads the ${NAMES[sel.class]} championship`}. We're choosing to look away.</p>` : "";
+      ? `<p class="lookaway">🙈 ${liveLead ? `A ${esc(window.makeOf(leader, data))} is leading ${NAMES[sel.class]}` : `A ${esc(window.makeOf(leader, data))} leads the ${NAMES[sel.class]} championship`}. We're choosing to look away.</p>` : "";
     el.innerHTML = groups.map(section).join("")
       + `<div class="pick-sec pick-any${mine ? " active" : ""}"><span class="pick-title">This is my car</span>`
       + `<select aria-label="Pick any car as my car"><option value="">Any car…</option>${opts}</select>`
