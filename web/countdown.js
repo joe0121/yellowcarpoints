@@ -38,7 +38,8 @@
       const age = live ? now - new Date(live.updated) / 1e3 : Infinity;
       const feedLeft = age < 180 && !live.finished ? hms(live.remaining) : null;
       if (live && age < 180 && live.finished) {
-        text = `${label(cur.name)} · finished`; state = "done";
+        // Over: count down to the next session if there is one, otherwise just say it's done.
+        if (!next) { text = `${label(cur.name)} · finished`; state = "done"; }
       } else if (feedLeft != null) {
         text = `LIVE · ${label(cur.name)} · ${span(feedLeft - age)} left`; state = "live";
       } else if (now < cur.t1) {
