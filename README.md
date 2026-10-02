@@ -96,6 +96,12 @@ IMSA's live feeds don't carry race control messages.
 livery colour (picked from live timing's event, else the next round). Outlines are generated from
 OpenStreetMap raceway data (credited in the footer, ODbL); only Road Atlanta is in the list so far.
 
+`app/weather.py`: National Weather Service hourly forecast and Open-Meteo (rain, 15-minute
+precipitation, sunrise/sunset) for the event's track every 30 minutes around race weekends, plus IMSA's
+track weather (`26_Weather`, air/track temperature, wind) with the sector check (`weather.json`). The
+Race page turns it into a forecast strip, a "what changes when" timeline with estimated laps, rain/night
+chart bands and pace vs track temperature. Track coordinates are in `TRACKS` (Road Atlanta so far).
+
 `app/watch.py` reads YouTube's public RSS feed for IMSA's channel (no API key) to find WeatherTech
 session streams for the Race page's Watch card (embedded with YouTube's player, nothing re-hosted), and
 notes which cars IMSA.tv lists with an in-car camera (linked, never embedded: IMSA.tv uses its own

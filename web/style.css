@@ -477,3 +477,20 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .picker .allow .linkbtn { margin: 0 0 0 6px; padding: 0; font-size: 12px; }
 .qnote { margin-top: 6px; font-size: 13px; color: var(--text-2); }
 .qnote b { color: var(--flag-yellow); }
+/* weather */
+#wx-card { order: 2; }
+.wxstrip { display: flex; gap: 4px; overflow-x: auto; padding: 6px 0 4px; scrollbar-width: thin; }
+.wxh { flex: 0 0 auto; min-width: 54px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 8px; border: 1px solid var(--line); font-size: 12px; }
+.wxh.race { border-color: var(--accent); }
+.wxh.wet { background: color-mix(in srgb, var(--s2) 12%, transparent); }
+.wxh .wxt { color: var(--text-3); font-size: 11px; }
+.wxh .wxi { font-size: 18px; line-height: 1.1; }
+.wxh .wxr { font-size: 11px; color: var(--text-2); background: linear-gradient(to right, color-mix(in srgb, var(--s2) 35%, transparent) var(--p), transparent var(--p)); border-radius: 4px; padding: 0 4px; }
+.wxh3 { font: 600 13px Inter, sans-serif; margin: 12px 0 4px; color: var(--text-2); }
+.wxtl, .wxfits { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.wxtl li { display: grid; grid-template-columns: 58px 1fr; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.wxtl li:first-child { border-top: 0; }
+.wxtl .wxwhen { font: 600 12px Inter, sans-serif; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.wxtl .wx-rain .wxwhat b:first-child { color: var(--s2); }
+.wxtl .wxstop { color: var(--accent-ink); }
+.wxfits li { padding: 3px 0; }

@@ -82,6 +82,17 @@
     <p class="live-sub" id="map-pit"></p>
     <p class="note" id="map-note"></p>
   </section>
+  <section class="card" id="wx-card" hidden style="margin-bottom:16px">
+    <h2 id="wx-title">Weather</h2>
+    <p class="live-sub" id="wx-now"></p>
+    <div class="wxstrip" id="wx-strip"></div>
+    <h3 class="wxh3">What changes when</h3>
+    <ul class="wxtl" id="wx-timeline"></ul>
+    <h3 class="wxh3" id="wx-pace-title" hidden>Pace vs track temperature</h3>
+    <ul class="wxfits" id="wx-fits"></ul>
+    <div class="chart" id="wx-pace" hidden><div class="tip"></div></div>
+    <p class="note" id="wx-note"></p>
+  </section>
   <section class="card" id="timing-card" style="margin-bottom:16px">
     <h2 id="timing-title">Timing</h2>
     <div class="legend" id="lg-laps2"></div>
@@ -158,12 +169,12 @@ let standings, live, laps, schedule, entries, sectorData, config, watchData, rcD
 const loadedAt = { laps: 0, slow: 0 };
 async function load() {
   const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
-  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
+  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
   if (got.live?.updated !== live?.updated) liveFetchedAt = Date.now();
   live = got.live;
-  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; loadedAt.laps = now; }
+  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; loadedAt.laps = now; }
   if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config } = got); loadedAt.slow = now; }
   if (changed) render();
 }
@@ -242,7 +253,7 @@ function render() {
   const ahead = byCar(fc.ahead), ref = byCar(fc.ref);
   const strat = lc.strategy?.cars || {};
   const lapsCls = laps?.classes?.[sel.class] || {};
-  bandsNow = flagBands(sel.class);
+  bandsNow = [...flagBands(sel.class), ...weatherBands(lc.cars, lc)];
 
   // --- status line
   const sess = live.session.replace(/^WeatherTech Championship( - )?/, "") || "Session";
@@ -276,6 +287,7 @@ function render() {
   renderFeed(sel, cmpCars, rows, lapsCls, fc);
   renderRaceControl(sel, cmpCars);
   renderTrackMap(sel, rows, cmpCars, clsName);
+  renderWeather(sel, rows, lc, lapsCls, cmpCars);
   renderDrivers(sel, cmpCars, rows);
   $("title").textContent = `Pit strategy · ${clsName}`;
   renderWatch(sel, cmpCars, rows, live.is_race, !raceOnly);
@@ -390,7 +402,8 @@ function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = fal
   // Yellow / red flag periods behind everything; pit stops as small ticks along the top in each car's colour.
   for (const [a, b, kind] of bands) {
     const xa = Math.max(m.l, x(a)), xb = Math.min(W - m.r, x(b));
-    if (xb > xa) g += `<rect x="${xa}" y="${m.t}" width="${xb - xa}" height="${ih}" fill="${kind === "red" ? "var(--critical)" : "var(--flag-yellow)"}" fill-opacity=".13"><title>${kind === "red" ? "Red flag" : "Full-course yellow"}, laps ${a}–${b}</title></rect>`;
+    const look = { red: ["var(--critical)", "Red flag"], rain: ["var(--s2)", "Rain forecast (estimated laps)"], night: ["var(--text-3)", "Dark (estimated laps)"] }[kind] || ["var(--flag-yellow)", "Full-course yellow"];
+    if (xb > xa) g += `<rect x="${xa}" y="${m.t}" width="${xb - xa}" height="${ih}" fill="${look[0]}" fill-opacity=".13"><title>${look[1]}, laps ${a}–${b}</title></rect>`;
   }
   let lines = "", labels = "";
   const ends = [];
@@ -947,6 +960,142 @@ function renderTrackMap(sel, rows, cars, clsName) {
   clearInterval(mapTimer);
   draw();
   if (running) mapTimer = setInterval(draw, 500);
+}
+
+// --- Weather: forecast for the race (NWS + Open-Meteo), IMSA's track weather, when conditions change
+// (with estimated laps), rain/night bands on the charts, and pace vs track temperature.
+let wxData = null;
+const WX_LOCAL = { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" };
+const wxTime = t => new Date(t).toLocaleTimeString([], WX_LOCAL);
+const raceWindow = () => {
+  const r = (schedule?.sessions || []).find(s => !/practice|qualif|warm|test/i.test(s.name));
+  return r ? { start: Date.parse(r.start) / 1000, end: Date.parse(r.end) / 1000, name: r.name } : null;
+};
+const hmsSecs = t => { const p = String(t || "").split(":").map(Number); return p.length === 3 && p.every(x => !isNaN(x)) ? p[0] * 3600 + p[1] * 60 + p[2] : null; };
+// Estimated class-leader lap at a moment: from the live lap count and pace in the race, else from the start.
+function lapEstimator(rows, lc) {
+  const paces = Object.values(lc?.strategy?.cars || {}).map(x => x.pace).filter(Boolean).sort((a, b) => a - b);
+  const bests = rows.map(r => secsOf(r.best_lap)).filter(Boolean).sort((a, b) => a - b);
+  const pace = paces.length ? paces[Math.floor(paces.length / 2)] : bests.length ? bests[Math.floor(bests.length / 2)] * 1.06 : null;
+  const rw = raceWindow();
+  if (!pace || !rw) return null;
+  const nowT = (live?.t || Date.now() / 1000) + (Date.now() - liveFetchedAt) / 1000;
+  const inRace = live?.is_race && !live.finished && rows[0];
+  return t => {
+    if (t < rw.start || t > rw.end) return null;
+    return Math.max(1, Math.round(inRace ? (+rows[0].laps || 0) + (t - nowT) / pace : (t - rw.start) / pace));
+  };
+}
+// Conditions changes in the race window: rain windows, sunset, darkness, cooling.
+function wxEvents() {
+  const rw = raceWindow(), w = wxData;
+  if (!rw || !w) return [];
+  const inWin = t => t >= rw.start - 1800 && t <= rw.end;
+  const out = [];
+  const nws = (w.nws || []).map(h => ({ ...h, ts: Date.parse(h.t) / 1000 })).filter(h => inWin(h.ts));
+  const om = (w.om || []).map(h => ({ ...h, ts: Date.parse(h.t) / 1000 }));
+  const omAt = ts => om.reduce((b, h) => Math.abs(h.ts - ts) < Math.abs((b?.ts ?? 1e12) - ts) ? h : b, null);
+  // Rain: hours with a 50%+ chance (NWS), else the most likely 30%+ stretch.
+  const wet = th => { const runs = []; let cur = null;
+    for (const h of nws) { if (h.rain >= th) { cur = cur || { from: h.ts, to: h.ts + 3600, max: 0, sky: h.sky }; cur.to = h.ts + 3600; cur.max = Math.max(cur.max, h.rain); } else if (cur) { runs.push(cur); cur = null; } }
+    if (cur) runs.push(cur); return runs; };
+  let runs = wet(50), likely = true;
+  if (!runs.length) { runs = wet(30); likely = false; }
+  for (const r of runs) {
+    const omMax = Math.max(...om.filter(h => h.ts >= r.from && h.ts < r.to).map(h => h.rain ?? 0), 0);
+    out.push({ ts: r.from, to: r.to, kind: "rain", text: `${likely ? "Showers likely" : "Chance of showers"} ${wxTime(r.from * 1000)}–${wxTime(r.to * 1000)}`,
+      sub: `${r.max}% (National Weather Service: ${esc((r.sky || "").toLowerCase())}); Open-Meteo says ${omMax}%` });
+  }
+  const q = (w.rain15 || []).map(x => ({ ts: Date.parse(x.t) / 1000, mm: x.mm })).find(x => inWin(x.ts) && x.mm >= 0.2);
+  if (q) out.push({ ts: q.ts, kind: "rain", text: `Rain forecast to start ~${wxTime(q.ts * 1000)}`, sub: `Open-Meteo 15-minute forecast, ${q.mm} mm` });
+  const sun = (w.sun || []).find(s => inWin(Date.parse(s.sunset) / 1000));
+  if (sun) {
+    out.push({ ts: Date.parse(sun.sunset) / 1000, kind: "sun", text: `Sunset ${wxTime(sun.sunset)}` });
+    out.push({ ts: Date.parse(sun.dusk) / 1000, kind: "night", text: `Dark ${wxTime(sun.dusk)}`, sub: "end of twilight: headlights, and the track cools" });
+  }
+  const temps = nws.map(h => h.f);
+  if (temps.length > 2) {
+    const hi = nws.reduce((a, h) => h.f > a.f ? h : a), last = nws[nws.length - 1];
+    if (hi.f - last.f >= 5) out.push({ ts: last.ts, kind: "cool", text: `Air cools from ${hi.f}°F (${wxTime(hi.ts * 1000)}) to ${last.f}°F by ${wxTime(last.ts * 1000)}`, sub: "cooler track usually means quicker laps" });
+  }
+  return out.sort((a, b) => a.ts - b.ts);
+}
+// Rain and night as lap bands for the charts (race only).
+function weatherBands(rows, lc) {
+  if (!live?.is_race) return [];
+  const lapAt = lapEstimator(rows, lc), rw = raceWindow();
+  if (!lapAt || !rw) return [];
+  const out = [];
+  for (const e of wxEvents()) {
+    if (e.kind === "rain" && e.to) { const a = lapAt(e.ts), b = lapAt(Math.min(e.to, rw.end)); if (a && b) out.push([a, b, "rain"]); }
+    if (e.kind === "night") { const a = lapAt(e.ts), b = lapAt(rw.end); if (a && b) out.push([a, b, "night"]); }
+  }
+  return out;
+}
+const wxIcon = h => /thunder/i.test(h.sky || "") ? "⛈" : h.rain >= 50 || /rain|shower/i.test(h.sky || "") && h.rain >= 30 ? "🌧" : !h.day ? "🌙" : /cloud|overcast/i.test(h.sky || "") ? (/partly|mostly sunny/i.test(h.sky) ? "⛅" : "☁️") : "☀️";
+function renderWeather(sel, rows, lc, lapsCls, cars) {
+  const card = $("wx-card"), w = wxData;
+  if (!w?.nws?.length && !w?.obs) { card.hidden = true; return; }
+  card.hidden = false;
+  $("wx-title").textContent = `Weather · ${w.place || ""}`;
+  // Now: IMSA's track station if it's fresh, else the forecast hour.
+  const s = w.obs?.samples?.at(-1), nowT = Date.now() / 1000;
+  const h0 = (w.nws || []).find(h => Date.parse(h.t) / 1000 > nowT - 3600);
+  $("wx-now").innerHTML = s && nowT - s[0] < 45 * 60
+    ? `<b>Track ${Math.round(s[2])}°F</b> · air ${Math.round(s[1])}°F · wind ${s[3]} mph <span class="dim">(IMSA track weather, ${wxTime(s[0] * 1000)})</span>`
+    : h0 ? `${wxIcon(h0)} <b>${h0.f}°F</b> · ${esc(h0.sky)} · ${h0.rain}% chance of rain · wind ${esc(h0.wind)} ${esc(h0.dir || "")} <span class="dim">(forecast)</span>` : "";
+  // Strip: the race window if it's today or under way, else the next 12 hours.
+  const rw = raceWindow(), from = rw && nowT < rw.end ? Math.max(rw.start - 3600, nowT - 3600) : nowT - 3600, to = rw && nowT < rw.end ? rw.end : nowT + 12 * 3600;
+  const hours = (w.nws || []).filter(h => { const t = Date.parse(h.t) / 1000; return t >= from && t <= to; });
+  $("wx-strip").innerHTML = hours.map(h => { const t = Date.parse(h.t) / 1000, inRace = rw && t >= rw.start - 3599 && t < rw.end;
+    return `<div class="wxh${inRace ? " race" : ""}${h.rain >= 50 ? " wet" : ""}" title="${esc(h.sky)}"><span class="wxt">${new Date(h.t).toLocaleTimeString([], { timeZone: "America/New_York", hour: "numeric" })}</span>
+      <span class="wxi">${wxIcon(h)}</span><b>${h.f}°</b><span class="wxr" style="--p:${h.rain}%">${h.rain}%</span></div>`; }).join("");
+  // When conditions change, with estimated laps (class leader) and our car's next stop nearby.
+  const lapAt = lapEstimator(rows, lc), me = rows.find(r => r.car === sel.car), myStop = me?.energy?.next_stop_lap;
+  const evs = wxEvents();
+  $("wx-timeline").innerHTML = evs.length ? evs.map(e => {
+    const lap = lapAt?.(e.ts), into = rw ? e.ts - rw.start : null;
+    const near = lap && myStop && Math.abs(myStop - lap) <= 4 ? ` <b class="wxstop">#${esc(sel.car)} is due to pit around L${myStop}</b>` : "";
+    return `<li class="wx-${e.kind}"><span class="wxwhen">${into != null && into >= 0 ? `+${Math.floor(into / 3600)}h${String(Math.floor(into % 3600 / 60)).padStart(2, "0")}` : wxTime(e.ts * 1000)}</span>
+      <span class="wxwhat"><b>${esc(e.text)}</b>${lap ? ` · about <b>lap ${lap}</b> for the ${esc(CLASS_NAMES[sel.class] || sel.class)} leader` : ""}${near}${e.sub ? `<br><span class="dim">${e.sub}</span>` : ""}</span></li>`;
+  }).join("") : `<li class="dim">No rain or big temperature swings forecast for the race window.</li>`;
+  // Pace vs track temperature: each clean lap's time against the track temperature when it was run.
+  renderPaceTemp(sel, lapsCls, cars);
+  $("wx-note").innerHTML = `Forecast: <a href="https://www.weather.gov/" target="_blank" rel="noopener">National Weather Service</a> and <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0), updated every 30 minutes. Track weather: IMSA's station via its results service, about hourly in the race. Lap estimates use the class's current pace and assume green-flag running.`;
+}
+function renderPaceTemp(sel, lapsCls, cars) {
+  const s = wxData?.obs?.samples || [], el = $("wx-pace");
+  const start = live?.is_race && live.t && hmsSecs(live.elapsed) != null ? live.t - hmsSecs(live.elapsed) : null;
+  const series = [], fits = [];
+  if (start && s.length > 10) {
+    const tempAt = t => { let best = null; for (const x of s) if (Math.abs(x[0] - t) < 300 && (!best || Math.abs(x[0] - t) < Math.abs(best[0] - t))) best = x; return best?.[2] ?? null; };
+    for (const c of cars) {
+      const d = lapsCls[c.car];
+      if (!d?.laps?.length) continue;
+      const med = [...d.laps.map(l => l[1])].sort((a, b) => a - b)[Math.floor(d.laps.length / 2)];
+      const byLap = new Map(d.laps), pit = new Set((d.stops || []).flatMap(n => [n, n + 1]));
+      const best = Math.min(...d.laps.map(l => l[1]));
+      let t = start; const pts = [];
+      for (let n = 1; n <= d.laps.at(-1)[0]; n++) {
+        const lt = byLap.get(n) ?? med; t += lt;
+        if (!byLap.has(n) || n < 2 || pit.has(n) || lt > best * 1.05) continue;
+        const temp = tempAt(t - lt / 2);
+        if (temp != null) pts.push([Math.round(temp * 10) / 10, lt]);
+      }
+      if (pts.length < 15) continue;
+      const xs = pts.map(p => p[0]), span = Math.max(...xs) - Math.min(...xs);
+      series.push({ name: `#${c.car}`, pts: pts.sort((a, b) => a[0] - b[0]), color: c.style.color, dots: true });
+      if (span >= 4) {
+        const mx = xs.reduce((a, b) => a + b) / xs.length, my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+        const b = pts.reduce((a, p) => a + (p[0] - mx) * (p[1] - my), 0) / pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0);
+        fits.push(`<li><span class="sw">${swatchOf(c.style)}<b>#${esc(c.car)}</b></span> ${Math.abs(b) < 0.005 ? "no clear effect" : `${Math.abs(b).toFixed(3)} s/lap ${b > 0 ? "slower" : "quicker"} per °F hotter`} <span class="dim">(${pts.length} clean laps, ${Math.min(...xs).toFixed(0)}–${Math.max(...xs).toFixed(0)}°F)</span></li>`);
+      }
+    }
+  }
+  $("wx-pace-title").hidden = el.hidden = !series.length;
+  $("wx-fits").innerHTML = series.length ? (fits.join("") || `<li class="dim">The track temperature hasn't moved enough yet to measure an effect.</li>`)
+    : `<li class="dim">Pace vs track temperature builds up during the race, as IMSA's track weather comes in.</li>`;
+  if (series.length) lineChart("wx-pace", { series, yFmt: lapTime, xName: "Track °F", robust: true, empty: "" });
 }
 
 // Yellow / red flag periods for a class as [fromLap, toLap, kind], from the scraper's flag log.

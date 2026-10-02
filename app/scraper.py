@@ -24,6 +24,7 @@ import pdfplumber
 
 import bop
 import watch
+import weather
 import history
 import live
 import racecontrol
@@ -258,6 +259,10 @@ def refresh_sectors():
     else:
         status.mark("sectors_check")
     try:
+        weather.refresh_observed(BASE, html, SERIES)
+    except Exception:
+        log.exception("track weather failed")
+    try:
         if racecontrol.refresh(BASE, html, SERIES):
             status.mark("racecontrol", session=(read("racecontrol.json") or {}).get("label"))
     except Exception:
@@ -346,7 +351,7 @@ def main():
     rest = [c for c in CAR_CLASS if c not in grouped]
     write("config.json", {"race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()],
                           "groups": groups + ([{"name": "Other cars", "cars": rest}] if rest else [])})
-    last, next_pdf, failures, next_sectors, next_watch, next_rc = None, 0.0, 0, 0.0, 0.0, 0.0
+    last, next_pdf, failures, next_sectors, next_watch, next_rc, next_wx = None, 0.0, 0, 0.0, 0.0, 0.0, 0.0
     while True:
         if time.monotonic() >= next_pdf:
             next_pdf = time.monotonic() + INTERVAL
@@ -378,6 +383,14 @@ def main():
                 racecontrol.quick_check(BASE)
             except Exception:
                 log.exception("race control quick check failed")
+        # Forecast for the Race page: every 30 minutes around a race weekend.
+        if time.monotonic() >= next_wx:
+            next_wx = time.monotonic() + 1800
+            try:
+                if weather.in_weekend():
+                    weather.refresh_forecast()
+            except Exception:
+                log.exception("weather forecast failed")
         if time.monotonic() >= next_watch:
             next_watch = time.monotonic() + (180 if live.in_window() else 3600)
             try:
