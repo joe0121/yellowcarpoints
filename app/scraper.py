@@ -271,7 +271,8 @@ def refresh_history():
     cars = {c: [] for c in CARS}
     for event, summary in races.items():
         for car, row in summary["cars"].items():
-            cars[car].append({"round": event.split("_", 1)[1], "date": summary["date"], **row})
+            if car in cars:          # cached races may include cars we no longer follow
+                cars[car].append({"round": event.split("_", 1)[1], "date": summary["date"], **row})
     write("history.json", {"updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                             "season": current.split("_", 1)[1], "cars": cars})
 
