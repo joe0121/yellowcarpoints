@@ -171,6 +171,7 @@ def summarise(http, base, files, cars, classes):
     out["results_status"] = files["results"][1]
     out["results_path"] = files["results"][0]
     out["version"] = VERSION
+    out["classes"] = list(classes)
     return out
 
 
@@ -196,7 +197,8 @@ def update(http, base, page, options, data_dir, series, cars, classes, season=No
     for event in only or events:
         path = cache / f"{season}__{event}.json"
         cached = json.loads(path.read_text()) if path.exists() else None
-        if cached and cached.get("version") != VERSION:
+        # Rebuild when the format changed or a class we now follow (e.g. LMP2) wasn't in the cached summary.
+        if cached and (cached.get("version") != VERSION or not set(classes) <= set(cached.get("classes", []))):
             cached = None
         if cached and cached.get("results_status") == "Official":
             out[event] = cached
