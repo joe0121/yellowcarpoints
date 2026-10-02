@@ -8,18 +8,23 @@ from pathlib import Path
 import requests
 
 # Tracked cars as CLASS:NUMBER (class as printed in the points PDF: GTP, LMP2, GTDPRO, GTD).
-DEFAULT_CARS = "GTDPRO:4,GTDPRO:3,GTDPRO:74,GTD:13,GTD:36,GTD:81,LMP2:73,LMP2:99"
+# Followed cars ("ours"): Pratt Miller Motorsports first, then the other cars we follow.
+DEFAULT_CARS = "GTDPRO:4,GTDPRO:3,LMP2:73,GTP:31,GTP:40,GTP:10,LMP2:99,GTDPRO:77,GTDPRO:74,GTD:13,GTD:36,GTD:81"
+PMM_CARS = [c.strip() for c in os.environ.get("PMM_CARS", "4,3,73").split(",") if c.strip()]
 CAR_CLASS = {c.split(":")[-1].strip(): (c.split(":")[0].strip() if ":" in c else os.environ.get("CLASS", "GTDPRO"))
              for c in (os.environ.get("CARS") or DEFAULT_CARS).split(",") if c.strip()}
 CARS = list(CAR_CLASS)
-CLASSES = list(dict.fromkeys(CAR_CLASS.values()))
+# Every WeatherTech class is read (standings, live timing, telemetry), so any car can be picked as
+# "my car" on the site, not just the followed ones.
+ALL_CLASSES = [c.strip() for c in os.environ.get("CLASSES", "GTP,LMP2,GTDPRO,GTD").split(",") if c.strip()]
+CLASSES = list(dict.fromkeys([*ALL_CLASSES, *CAR_CLASS.values()]))
 # Race-only cars (CLASS:NUMBER): followed in live timing and on the Race page, no championship maths.
 # Default: none (the LMP2 #73 and #99 are full championship cars in CARS now).
 RACE_CARS = {c.split(":")[-1].strip(): c.split(":")[0].strip()
              for c in os.environ.get("RACE_CARS", "").split(",") if ":" in c}
 RACE_CARS = {c: k for c, k in RACE_CARS.items() if c not in CAR_CLASS}
 LIVE_CAR_CLASS = {**CAR_CLASS, **RACE_CARS}
-LIVE_CLASSES = list(dict.fromkeys(LIVE_CAR_CLASS.values()))
+LIVE_CLASSES = list(dict.fromkeys([*CLASSES, *LIVE_CAR_CLASS.values()]))
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
 http = requests.Session()

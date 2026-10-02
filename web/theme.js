@@ -28,8 +28,21 @@
     aoracing: { name: "AO Racing \"Spike\" purple dragon", band: ["#5b2a91", "#f08a24", "#5b2a91"],
       light: { accent: "#7a3fc0", ink: "#5f2d9e", on: "#fff", hl: "#f1eafa", s: ["#8a4fd0", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
       dark:  { accent: "#9d6be0", ink: "#c3a2f2", on: "#111", hl: "#241a33", s: ["#9d6be0", "#c98500", "#199e70", "#d95926"], other: "#c98500" } },
+    cadillac31: { name: "Cadillac Whelen red and black", band: ["#111111", "#c8102e", "#111111"],
+      light: { accent: "#c8102e", ink: "#a00d24", on: "#fff", hl: "#fbe9ec", s: ["#c8102e", "#2a78d6", "#1baf7a", "#eda100"], other: "#2a78d6" },
+      dark:  { accent: "#e0414f", ink: "#f07a85", on: "#111", hl: "#2e1518", s: ["#e0414f", "#3987e5", "#199e70", "#c98500"], other: "#3987e5" } },
+    wtr10: { name: "Cadillac Wayne Taylor Racing metallic blue and white", band: ["#1f4fa0", "#ffffff", "#1f4fa0"],
+      light: { accent: "#1f5fa8", ink: "#1a4f8c", on: "#fff", hl: "#e7eef8", s: ["#2a78d6", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
+      dark:  { accent: "#3987e5", ink: "#7fb2f5", on: "#fff", hl: "#14233a", s: ["#3987e5", "#c98500", "#199e70", "#d95926"], other: "#c98500" } },
+    wtr40: { name: "Cadillac Wayne Taylor Racing black and white", band: ["#111111", "#ffffff", "#111111"],
+      light: { accent: "#333a45", ink: "#333a45", on: "#fff", hl: "#eef0f3", s: ["#4f6fb3", "#eda100", "#1baf7a", "#eb6834"], other: "#eda100" },
+      dark:  { accent: "#c9ced8", ink: "#e3e6ec", on: "#111", hl: "#23262c", s: ["#6d8ad0", "#c98500", "#199e70", "#d95926"], other: "#c98500" } },
+    rexy77: { name: "AO Racing \"Rexy\" green", band: ["#2f9e44", "#111111", "#2f9e44"],
+      light: { accent: "#2f9e44", ink: "#23772f", on: "#fff", hl: "#e8f5ea", s: ["#2f9e44", "#2a78d6", "#eda100", "#8a4fd0"], other: "#2a78d6" },
+      dark:  { accent: "#3fb355", ink: "#6fd17f", on: "#111", hl: "#17281a", s: ["#2e9a43", "#3987e5", "#c98500", "#9d6be0"], other: "#3987e5" } },
   };
-  const CAR_LIVERY = { 3: "corvette", 4: "corvette", 13: "awa", 36: "dxdt", 74: "dragonspeed", 81: "dragonspeed", 73: "prattmiller73", 99: "aoracing" };
+  const CAR_LIVERY = { 3: "corvette", 4: "corvette", 13: "awa", 36: "dxdt", 74: "dragonspeed", 81: "dragonspeed", 73: "prattmiller73", 99: "aoracing",
+    31: "cadillac31", 10: "wtr10", 40: "wtr40", 77: "rexy77" };
   const dark = () => root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   let livery = (() => { try { return localStorage.getItem("livery"); } catch (e) { return null; } })() || "corvette";
   const paint = () => {

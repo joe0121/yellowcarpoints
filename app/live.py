@@ -401,7 +401,7 @@ def projection(cls, order, net, standings, quali, info):
         "quali_counted": bool(q),
         "max_points_after": after,
         "worst_winning_finish": {car: worst_winning_finish(car, base, q, order, after)
-                                 for car in order if CAR_CLASS.get(car) == cls and car in base},
+                                 for car in order if car in base},
         "standings": [{"car": car, "team": base[car]["team"] if car in base else "",
                        "points_before": base[car]["points"] if car in base else 0,
                        "quali_pts": _pts(q.get(car), 10),
@@ -473,9 +473,10 @@ def focus(car, rows, proj, state):
         "rival_needs": champ_behind and worst_winning_finish(champ_behind, ctx["base"], ctx["q"], net, 0, vs=car),
         "events": w["events"][-5:],
     })
-    # Title margin history, one point per lap of ours.
-    hist = state.setdefault("margins", {}).setdefault(car, [])
-    if lap and (not hist or lap > hist[-1][0]):
+    # Title margin history, one point per lap, for followed cars only (it grows with every car and
+    # lap, and every visitor downloads it).
+    hist = state.setdefault("margins", {}).setdefault(car, []) if car in LIVE_CAR_CLASS else None
+    if hist is not None and lap and (not hist or lap > hist[-1][0]):
         hist.append([lap, out["margin_behind"], out["net_margin_behind"], out["margin_ahead"], out["net_margin_ahead"],
                      champ_behind, champ_ahead])
     return out
@@ -664,7 +665,8 @@ def step():
         if standings and cls in standings["classes"]:
             proj = projection(cls, [r["N"] for r in rows], net, standings["classes"][cls], read("quali.json"), info)
             out.update({k: v for k, v in proj.items() if k != "_ctx"})
-        out["focus"] = {car: focus(car, rows, proj, state) for car, k in LIVE_CAR_CLASS.items() if k == cls}
+        # Cars to watch for every car in the class, so any car can be "my car" on the site.
+        out["focus"] = {r["N"]: focus(r["N"], rows, proj, state) for r in rows}
         classes[cls] = out
     live_out = {
         "updated": now_iso(), "t": round(now, 1), "event": info.get("E"), "session": name, "is_race": is_race,

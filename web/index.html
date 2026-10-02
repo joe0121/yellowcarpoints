@@ -61,6 +61,7 @@
 </main>
 <script src="cards.js"></script>
 <script src="links.js"></script>
+<script src="picker.js"></script>
 <script>
 addEventListener("cardtoggle", () => standings && renderAll());
 const CLASS_NAMES = { GTDPRO: "GTD PRO", GTD: "GTD", GTP: "GTP", LMP2: "LMP2" };
@@ -77,9 +78,7 @@ let standings = null, live = null, hist = null, entries = null, config;
 
 // The selected car comes from the URL (#13), then the last choice, then the first configured car.
 function selected() {
-  const cars = standings.cars;
-  const want = location.hash.slice(1) || store.get("car");
-  return cars.find(c => c.car === want) || cars[0];
+  return window.pickCar({ standings, entries, live }, store);
 }
 
 // One class's standings, shaped for rendering: tracked[0] is the selected car,
@@ -119,11 +118,7 @@ function renderAll() {
   window.renderLinks?.(sel.car);
   // Every Pratt Miller-built car we follow, by class. Race-only cars (the #73 LMP2) have no
   // championship maths, so they link to their Race view.
-  const groups = {}, raceOnly = new Set((config?.race_cars || []).map(c => c.car));
-  [...standings.cars, ...(config?.race_cars || [])].forEach(c => (groups[c.class] ||= []).push(c.car));
-  $("picker").innerHTML = `<span class="pick-title">Cars we follow</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
-    + cars.map(c => raceOnly.has(c) ? `<a href="strategy.html#${esc(c)}" title="Race only: no championship data">#${esc(c)}</a>`
-      : `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}</a>`).join("") + `</div>`).join("");
+  window.buildPicker($("picker"), sel, { standings, entries, live, config });
   $("to-strategy").href = "strategy.html#" + sel.car;
   const d = view(sel);
   render(d);

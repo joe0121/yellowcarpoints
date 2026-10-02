@@ -461,3 +461,10 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .trackmap .mapdot { fill: var(--text-3); opacity: .75; }
 .trackmap .maplbl { font: 700 38px Inter, sans-serif; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 8px; }
 .rc-live { font-size: 12px; margin-left: auto; }
+/* picker sections: Pratt Miller Motorsports, Other cars, This is my car */
+.picker { flex-direction: column; align-items: center; gap: 10px; }
+.picker .pick-sec { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.picker .pick-sec > .pick-title { flex-basis: auto; margin: 0; }
+.picker .pick-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; }
+.picker .pick-any select { font: 600 13px Inter, sans-serif; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; max-width: min(360px, 90vw); }
+.picker .pick-any.active select { border-color: var(--accent); background: var(--row-hl); }

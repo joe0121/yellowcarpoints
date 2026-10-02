@@ -15,10 +15,15 @@
     aoracing: { name: "AO Racing", links: [["Website", "https://aoracing.com/"], ["X", "https://x.com/AORacingUSA"],
       ["Instagram", "https://www.instagram.com/aoracingusa/"], ["Facebook", "https://www.facebook.com/AORacingUSA"], ["YouTube", "https://www.youtube.com/@aoracingusa"],
       ["TikTok", "https://www.tiktok.com/@aoracingusa"], ["Reddit", "https://www.reddit.com/user/AORacingUSA"]] },
+    actionexpress: { name: "Action Express Racing", links: [["Website", "https://axracing.com/"], ["X", "https://x.com/AX_Racing"],
+      ["Instagram", "https://www.instagram.com/ax_racing/"], ["Facebook", "https://www.facebook.com/ActionExpressRacing/"]] },
+    wtr: { name: "Wayne Taylor Racing", links: [["Website", "https://www.waynetaylorracing.com/"], ["X", "https://x.com/WayneTaylorRcng"],
+      ["Instagram", "https://www.instagram.com/waynetaylorracingofficial/"], ["Facebook", "https://www.facebook.com/waynetaylorracingofficial"]] },
     awa: { name: "AWA (runs the car)", links: [["Website", "https://awa.team/"], ["Instagram", "https://www.instagram.com/awaracingteam/"]] },
   };
   const CAR_TEAMS = { 3: ["corvette", "prattmiller"], 4: ["corvette", "prattmiller"], 73: ["prattmiller"],
-    74: ["dragonspeed"], 81: ["dragonspeed"], 13: ["autosport13", "awa"], 36: ["dxdt"], 99: ["aoracing"] };
+    74: ["dragonspeed"], 81: ["dragonspeed"], 13: ["autosport13", "awa"], 36: ["dxdt"], 99: ["aoracing"], 77: ["aoracing"],
+    31: ["actionexpress"], 10: ["wtr"], 40: ["wtr"] };
   // Simple monochrome platform icons (drawn here, nothing loaded from elsewhere); they take the text colour.
   const svg = body => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${body}</svg>`;
   const ICONS = {

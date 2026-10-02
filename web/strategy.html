@@ -135,6 +135,7 @@
 </main>
 <script src="cards.js"></script>
 <script src="links.js"></script>
+<script src="picker.js"></script>
 <script>
 addEventListener("cardtoggle", () => standings && render());
 const CLASS_NAMES = { GTDPRO: "GTD PRO", GTD: "GTD", GTP: "GTP", LMP2: "LMP2" };
@@ -171,9 +172,7 @@ setInterval(load, 10e3);
 const raceCars = () => config?.race_cars || live?.race_cars || [];
 const isRaceOnly = car => raceCars().some(c => c.car === car);
 function selected() {
-  const cars = [...(standings?.cars || []), ...raceCars()];
-  const want = location.hash.slice(1) || store.get("car");
-  return cars.find(c => c.car === want) || standings?.cars?.[0];
+  return standings ? window.pickCar({ standings, entries, live }, store) : null;
 }
 
 // Least-squares line through the last n points: slope per x unit.
@@ -203,11 +202,11 @@ function render() {
   if (!raceOnly) store.set("car", sel.car);
   const home = raceOnly ? (store.get("car") || standings.cars[0].car) : sel.car;
   $("to-race").href = "strategy.html#" + home;
-  const groups = {};
-  [...standings.cars, ...raceCars()].forEach(c => (groups[c.class] ||= []).push(c.car));
-  $("picker").innerHTML = `<span class="pick-title">Cars we follow</span>` + Object.entries(groups).map(([cls, cars]) => `<div><span>${esc(CLASS_NAMES[cls] || cls)}</span>`
-    + cars.map(c => { const r = liveRow(c);   // live running position (and PIT) on each car's button
-        return `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}${r ? `<small class="ppos">P${r.class_pos}</small>${r.in_pit ? `<span class="pit">PIT</span>` : ""}` : ""}</a>`; }).join("") + `</div>`).join("");
+  // Live running position (and PIT) on each car's button.
+  window.buildPicker($("picker"), sel, { standings, entries, live, config }, c => {
+    const r = liveRow(c);
+    return r ? `<small class="ppos">P${r.class_pos}</small>${r.in_pit ? `<span class="pit">PIT</span>` : ""}` : "";
+  });
   $("to-standings").href = "./#" + home;
   const clsName = CLASS_NAMES[sel.class] || sel.class;
   document.title = `Race · #${sel.car}`;

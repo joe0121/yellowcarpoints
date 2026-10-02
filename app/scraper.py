@@ -29,7 +29,7 @@ import live
 import racecontrol
 import sectors
 import status
-from common import CAR_CLASS, CARS, CLASSES, DATA_DIR, LIVE_CLASSES, RACE_CARS, http, now_iso, read, write
+from common import CAR_CLASS, CARS, CLASSES, PMM_CARS, DATA_DIR, LIVE_CLASSES, RACE_CARS, http, now_iso, read, write
 
 BASE = "https://imsa.results.alkamelcloud.com/"
 SERIES = "IMSA WeatherTech SportsCar Championship"
@@ -340,7 +340,10 @@ def main():
     logging.getLogger().addHandler(fh)
     status.start()
     # For the web pages: which cars are followed for the race only (their own tab).
-    write("config.json", {"race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()]})
+    others = [c for c in CAR_CLASS if c not in PMM_CARS]
+    write("config.json", {"race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()],
+                          "groups": [{"name": "Pratt Miller Motorsports", "cars": [c for c in PMM_CARS if c in CAR_CLASS]},
+                                     {"name": "Other cars", "cars": others}]})
     last, next_pdf, failures, next_sectors, next_watch, next_rc = None, 0.0, 0, 0.0, 0.0, 0.0
     while True:
         if time.monotonic() >= next_pdf:
