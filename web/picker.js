@@ -31,7 +31,8 @@
     const section = g => {
       const byClass = {};
       g.cars.filter(c => followed.has(c)).forEach(c => (byClass[followed.get(c)] ||= []).push(c));
-      const cls = CLASS_ORDER.filter(k => byClass[k]);
+      // Classes in the order their first car appears in the list (so #4, #3 come before #73).
+      const cls = Object.keys(byClass);
       return cls.length ? `<div class="pick-sec"><span class="pick-title">${esc(g.name)}</span><div class="pick-row">`
         + cls.map(k => `<div><span>${NAMES[k]}</span>${byClass[k].map(button).join("")}</div>`).join("") + `</div></div>` : "";
     };

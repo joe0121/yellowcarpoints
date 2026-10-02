@@ -389,7 +389,8 @@ function renderTitle(d) {
     for (let p = 1; p <= maxFinish; p++) {
       if (rivals.every(r => ok(myTot(p) - (r.points + (q(r.car) ?? 35) + racePts(p === 1 ? 2 : 1))))) guaranteed = p; else break;
     }
-    const pre = guaranteed === 1 ? `Win${final ? " the race" : ` at ${esc(nextName)}`} and #${esc(car)} ${goal.replace(/ at .*| after .*/, "")}, whatever anyone else does`
+    const pre = guaranteed && guaranteed >= maxFinish ? `#${esc(car)} ${goal.replace(/ at .*| after .*/, "")} as long as it takes the start${final ? "" : ` at ${esc(nextName)}`}`
+      : guaranteed === 1 ? `Win${final ? " the race" : ` at ${esc(nextName)}`} and #${esc(car)} ${goal.replace(/ at .*| after .*/, "")}, whatever anyone else does`
       : guaranteed ? `Finish P${guaranteed} or better${final ? "" : ` at ${esc(nextName)}`} and #${esc(car)} ${goal.replace(/ at .*| after .*/, "")}, whatever anyone else does`
       : mode === "survive" ? `#${esc(car)} could be knocked out of the title fight at ${esc(nextName)}: it depends on the rivals`
       : mode === "clinch" ? `#${esc(car)} can clinch at ${esc(nextName)}, but only with help: it depends on where the rivals finish`
