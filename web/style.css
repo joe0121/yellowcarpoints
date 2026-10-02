@@ -543,13 +543,14 @@ ul.oddsbars li.me b { color: var(--accent-ink); }
 /* Caution history */
 .cauhours { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; align-items: end; }
 .cauhours div { display: grid; grid-template-rows: auto 56px auto; text-align: center; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.cauhours .bar { display: flex; align-items: flex-end; background: var(--grid); border-radius: 4px; overflow: hidden; }
+.cauhours .bar { height: 56px; display: flex; align-items: flex-end; background: var(--grid); border-radius: 4px; overflow: hidden; }
 .cauhours .bar i { display: block; width: 100%; background: var(--flag-yellow); border-radius: 4px 4px 0 0; }
 .cauhours .now { color: var(--text); font-weight: 600; }
 .cauhours .now .bar { outline: 2px solid var(--text); outline-offset: 1px; }
-table.cauheat { border-collapse: separate; border-spacing: 1px; font-size: 10px; }
+table.cauheat { width: auto; border-collapse: separate; border-spacing: 1px; font-size: 10px; }
 table.cauheat th { color: var(--text-3); font-weight: 600; padding: 0 4px; text-align: right; white-space: nowrap; }
-table.cauheat thead th { text-align: left; padding: 0; height: 14px; }
+table.cauheat thead th { position: relative; padding: 0; height: 14px; }
+table.cauheat thead th span { position: absolute; left: 0; bottom: 1px; font-weight: 600; }
 table.cauheat td { width: 9px; min-width: 9px; height: 14px; border-radius: 2px; padding: 0; }
 table.cauheat td.off { background: none; }
 table.cauheat td.now { outline: 2px solid var(--text); outline-offset: -1px; }

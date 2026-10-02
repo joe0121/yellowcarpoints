@@ -1075,7 +1075,7 @@ function renderPrediction(sel, rows, cars, clsName) {
   $("pred-title").textContent = `Race prediction · ${clsName}`;
   const fav = P.cars[0];
   $("pred-lead").innerHTML = me
-    ? `<b>#${esc(me.car)}</b>: <b>${pct(me.win)}</b> to win, <b>${pct(me.podium)}</b> to finish on the podium, most likely finish <b>P${me.likely}</b>.`
+    ? `<b>#${esc(me.car)}</b>: <b>${pct(me.win)}</b> to win, <b>${pct(me.podium)}</b> to finish on the podium, average finish around <b>P${Math.round(me.expected)}</b>.`
       + (fav.car !== me.car ? ` Favourite: #${esc(fav.car)} at ${pct(fav.win)}.` : " It's the favourite.")
     : `Favourite: #${esc(fav.car)} at ${pct(fav.win)} to win.`;
   // Table: everyone with a real chance, plus our cars; the strip is the chance of each finishing position.
@@ -1117,7 +1117,7 @@ function renderCautions(rows) {
   const grid = ys.map(cover), often = [...Array(nb).keys()].map(i => grid.filter(c => c[i] > 0).length / ys.length);
   const nowB = leadLap != null ? Math.floor(leadLap / B) : null;
   const cell = (v, i, t) => `<td class="${i === nowB ? "now" : ""}" style="background:${v > 0 ? `color-mix(in srgb, var(--flag-yellow) ${Math.round(25 + 75 * Math.min(1, v))}%, var(--surface))` : "var(--grid)"}" title="${t}"></td>`;
-  $("cau-heat").innerHTML = `<table class="cauheat"><thead><tr><th></th>${[...Array(nb).keys()].map(i => `<th>${i % 5 === 0 ? i * B : ""}</th>`).join("")}</tr></thead><tbody>`
+  $("cau-heat").innerHTML = `<table class="cauheat"><thead><tr><th></th>${[...Array(nb).keys()].map(i => `<th>${i % 5 === 0 ? `<span>${i * B}</span>` : ""}</th>`).join("")}</tr></thead><tbody>`
     + ys.slice().reverse().map(y => { const c = grid[ys.indexOf(y)];
       return `<tr><th title="${y.cautions.length} cautions, ${y.laps} laps (${y.source === "flags" ? "IMSA flags" : "estimated from lap times"})">${y.year}${y.source === "flags" ? "" : "*"}</th>${c.map((v, i) => i * B < y.laps ? cell(v, i, `${y.year}, laps ${i * B}–${i * B + B - 1}: ${Math.round(v * 100)}% under caution`) : `<td class="off"></td>`).join("")}</tr>`; }).join("")
     + `<tr class="often"><th>How often</th>${often.map((p, i) => `<td class="${i === nowB ? "now" : ""}" style="background:color-mix(in srgb, var(--flag-yellow) ${Math.round(p * 100)}%, var(--grid))" title="Laps ${i * B}–${i * B + B - 1}: caution in ${Math.round(p * ys.length)} of ${ys.length} races"></td>`).join("")}</tr></tbody></table>`;
