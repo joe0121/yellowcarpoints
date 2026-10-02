@@ -22,6 +22,7 @@
     <div class="meta" id="meta"></div>
   </header>
   <nav class="picker" id="picker" aria-label="Choose a Corvette"></nav>
+  <nav class="links" id="links" aria-label="IMSA and team links"></nav>
 
   <section class="sessionbar live" id="status-card">
     <div class="live-head" id="head"></div>
@@ -114,6 +115,7 @@
   <footer id="foot"></footer>
 </main>
 <script src="cards.js"></script>
+<script src="links.js"></script>
 <script>
 addEventListener("cardtoggle", () => standings && render());
 const CLASS_NAMES = { GTDPRO: "GTD PRO", GTD: "GTD", GTP: "GTP", LMP2: "LMP2" };
@@ -177,6 +179,7 @@ function render() {
   if (!standings?.cars) return;
   const sel = selected(), raceOnly = isRaceOnly(sel.car);
   window.setLivery?.(sel.car);
+  window.renderLinks?.(sel.car);
   if (!raceOnly) store.set("car", sel.car);
   const home = raceOnly ? (store.get("car") || standings.cars[0].car) : sel.car;
   $("to-race").href = "strategy.html#" + home;
