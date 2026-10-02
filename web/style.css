@@ -399,3 +399,7 @@ header .meta { text-align: center; }
 .links .team { display: inline-flex; align-items: center; gap: 6px; }
 .links a.ico { display: inline-flex; color: var(--text-2); padding: 2px; border-radius: 6px; }
 .links a.ico:hover { color: var(--accent-ink); background: var(--row-hl); text-decoration: none; }
+/* bottom links: repo, Instagram, contact */
+.footlinks { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; margin-top: 14px; font-size: 13px; }
+.footlinks a { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); text-decoration: none; }
+.footlinks a:hover { color: var(--accent-ink); }
