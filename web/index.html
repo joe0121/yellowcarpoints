@@ -16,13 +16,23 @@
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub" id="sub">IMSA WeatherTech SportsCar Championship</p>
-      <div class="navrow"><nav class="tabs"><a href="./" aria-current="page">Standings</a><a id="to-strategy" href="strategy.html">Strategy</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a href="./" aria-current="page">Championship</a><a id="to-strategy" href="strategy.html">Race</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
     <div class="meta" id="meta"></div>
   </header>
   <nav class="picker" id="picker" aria-label="Choose a Corvette"></nav>
-  <section class="card live" id="live" hidden aria-live="polite"></section>
+  <section class="card live" id="proj-card" hidden aria-live="polite"></section>
   <section class="cars" id="cars"></section>
+  <section class="card" id="fight-card" hidden>
+    <h2 id="fight-title">Still in contention</h2>
+    <p class="live-sub" id="fight-sub"></p>
+    <div class="legend" id="fight-legend"></div>
+    <div class="chart" id="fight-chart"><div class="tip"></div></div>
+    <h2 style="margin-top:18px" id="needs-title">What it needs</h2>
+    <p class="live-sub" id="needs-sub"></p>
+    <div class="scroll"><table id="needs"></table></div>
+    <p class="note" id="needs-note"></p>
+  </section>
   <section class="card" id="chart-card" hidden>
     <h2>Points behind the leader</h2>
     <div class="legend" id="legend"></div>
@@ -99,7 +109,8 @@ function renderAll() {
   const d = view(sel);
   render(d);
   renderHistory(sel, d);
-  renderLiveCard(d);
+  renderTitle(d);
+  renderProjection(d);
 }
 addEventListener("hashchange", () => standings && renderAll());
 
@@ -128,7 +139,7 @@ function render(d) {
     $("cars").innerHTML = `<article class="card car" style="--c:${colorOf(car)}">
       <div class="car-head"><div class="car-no"><i></i>#${esc(car)} <small class="drivers">${esc(entry?.team || "")}</small></div><span class="status" style="color:var(--text-3)">No ${esc(cls)} points</span></div>
       ${entry ? `<div class="drivers">${esc(entry.drivers.join(" · "))}</div>` : ""}
-      <p class="verdict">${where} It hasn't scored ${esc(cls)} championship points in ${d.season}, so it isn't in the standings. Live timing, lap times and pit windows still show here when it's on track.</p>
+      <p class="verdict">${where} It hasn't scored ${esc(cls)} championship points in ${d.season}, so it isn't in the standings. Its live timing, lap times and pit strategy are on the Race tab.</p>
     </article>`;
   } else {
     const ahead = st.find(s => s.pos === t.pos - 1), behind = st.find(s => s.pos === t.pos + 1);
@@ -227,225 +238,228 @@ function renderHistory(sel, d) {
 }
 const secsOf = t => { if (!t) return null; let s = 0; for (const p of String(t).split(":")) s = s * 60 + parseFloat(p); return s; };
 
-// --- live timing (data/live.json + data/laps.json, written by the scraper during WeatherTech sessions)
+// --- championship maths (title fight, what the selected car needs, live projection) ---
 const FLAG_COLORS = { green: "var(--good)", yellow: "var(--accent-ink)", fcy: "var(--accent-ink)", red: "var(--critical)" };
-let laps = null;
-const lapStr = t => !t || /^[0:.\s-]*$/.test(String(t)) ? "–" : esc(t);   // feed sends 0.000 before a timed lap
-const lapTime = t => t == null ? "–" : `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
-const signed = (v, unit = "s") => v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v).toFixed(2)}${unit}`;
+const RACE_POINTS = [350, 320, 300, 280, 260, 250, 240, 230, 220, 210, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
+const racePts = p => p >= 1 && p <= RACE_POINTS.length ? RACE_POINTS[p - 1] : 0;
+const qualiPts = p => Math.floor(racePts(p) / 10);
+let laps = null, quali = null;
 
 async function loadLive() {
-  live = await getJSON("data/live.json");
-  laps = live ? await getJSON("data/laps.json") : null;
+  [live, laps, quali] = await Promise.all(["live", "laps", "quali"].map(n => getJSON(`data/${n}.json`)));
 }
-
-function liveFresh(cls) {
-  if (!live || !live.classes || !live.classes[cls]) return false;
-  const age = Date.now() - new Date(live.updated);
-  // A race stays up until the official points include it; other sessions only while they run.
-  return live.is_race ? live.base_event === standings.event && age < 48 * 3600e3 : age < 30 * 60e3;
+// A race projection stays up until the official points include it.
+function raceLive(cls) {
+  return live?.is_race && live.classes?.[cls]?.standings && live.base_event === standings.event
+    && Date.now() - new Date(live.updated) < 48 * 3600e3 ? live.classes[cls] : null;
 }
+setInterval(async () => { if (!standings) return; await loadLive(); const d = view(selected()); renderTitle(d); renderProjection(d); }, 30e3);
 
-function renderLiveCard(d) {
-  const fresh = liveFresh(d.class);
-  $("live").hidden = !fresh;
-  if (fresh) renderLive(live, live.classes[d.class], d);
-}
-setInterval(async () => { if (!standings) return; await loadLive(); renderLiveCard(view(selected())); }, 30e3);
-
-function stintHTML(s) {
-  if (!s) return "";
-  if (s.laps === null) return `<div class="stint">Stint length known after the next pit stop.</div>`;
-  if (!s.typical) return `<div class="stint">Stint lap <b>${s.laps}</b></div>`;
-  const max = Math.max(s.window_close, s.laps) * 1.05, w = v => (v / max * 100).toFixed(1) + "%";
-  let msg;
-  if (s.laps_to_window > 0) msg = `window opens in <b>${s.laps_to_window}</b> laps`;
-  else if (s.laps_to_typical > 0) msg = `stop expected in ~<b>${s.laps_to_typical}</b> laps` + (s.eta_min ? ` (~${s.eta_min} min)` : "");
-  else if (s.laps <= s.window_close) msg = `<b>in the window</b>, stop due`;
-  else msg = `<b>past a normal stint</b> (fuel saving or a yellow)`;
-  return `<div class="stint">Stint lap <b>${s.laps}</b> · window ${s.window_open}–${s.window_close} · ${msg}
-    <div class="bar" role="img" aria-label="Stint lap ${s.laps} of a typical ${s.typical}"><div class="win" style="left:${w(s.window_open)};width:calc(${w(s.window_close)} - ${w(s.window_open)})"></div>
-    <div class="fill" style="width:${w(s.laps)}"></div><div class="typ" style="left:${w(s.typical)}"></div></div></div>`;
-}
-
-function strategyHTML(x) {
-  if (!x || !x.pace) return "";
-  const trend = x.trend == null ? "" : x.trend < -0.05 ? ` <span class="up">▲ ${Math.abs(x.trend).toFixed(2)}s quicker</span>`
-    : x.trend > 0.05 ? ` <span class="down">▼ ${x.trend.toFixed(2)}s slower</span>` : " · steady";
-  return `<div class="stint">Pace <b>${lapTime(x.pace)}</b> (last 5 clean laps)${trend}`
-    + (x.vs_ahead != null ? ` · vs car ahead <b>${signed(x.vs_ahead)}</b>/lap` : "")
-    + (x.rejoin ? ` · pits now → rejoins ~<b>P${x.rejoin}</b>` : "") + `</div>`;
-}
-
-function renderLive(l, c, d) {
-  const colorOf = colorFor(d);
-  const car = d.tracked[0];
+// Title fight: who can still win, where they are running, and what the selected car needs.
+function renderTitle(d) {
+  const st = d.standings, car = d.tracked[0], me = st.find(s => s.car === car);
+  $("fight-card").hidden = !me;
+  if (!me) return;
   const cls = CLASS_NAMES[d.class] || d.class;
-  const flagKey = Object.keys(FLAG_COLORS).find(k => (l.flag || "").toLowerCase().includes(k));
-  const left = (l.remaining || "").replace(/^00:/, "");
-  const sess = l.session.replace(/^WeatherTech Championship( - )?/, "") || "Session";
-  const strat = c.strategy?.cars || {};
-  const mine = c.cars.find(r => r.car === car);
-  // Practice/qualifying: IMSA's gap column is a laps difference, so show the gap to the class's fastest lap instead.
-  const toSecs = t => { if (!t || /^[0:.\s-]*$/.test(String(t))) return null; let v = 0; for (const p of String(t).split(":")) v = v * 60 + parseFloat(p); return isNaN(v) ? null : v; };
-  const classBest = Math.min(...c.cars.map(r => toSecs(r.best_lap) ?? Infinity));
-  const gapOf = (r, leaderWord) => {
-    if (l.is_race) return r.class_pos === 1 ? leaderWord : esc(r.gap);
-    const b = toSecs(r.best_lap);
-    return b == null ? "–" : b === classBest ? "Fastest" : `+${(b - classBest).toFixed(3)}`;
-  };
+  const left = d.max_points_remaining, after = Math.max(d.rounds_remaining - 1, 0) * d.max_points_per_round;
+  const lc = raceLive(d.class);
+  const running = lc ? Object.fromEntries(lc.cars.map(r => [r.car, r])) : {};
+  const proj = lc ? Object.fromEntries(lc.standings.map(r => [r.car, r])) : {};
+  const qmap = quali && live && quali.event === live.event ? quali.classes?.[d.class] : null;
+  const q = c => qmap && qmap[c] ? qualiPts(qmap[c]) : null;
+  const colorOf = colorFor(d);
+  const contenders = st.filter(s => s.alive || s.car === car).sort((a, b) => b.points - a.points);
 
-  // --- headline: championship projection in the race, timing otherwise
-  let verdict = "", sub = "";
-  const proj = c.standings || [];
-  const me = proj.find(r => r.car === car);
-  if (l.is_race && me && mine && c.worst_winning_finish[car] !== undefined) {
-    const final = c.max_points_after === 0, worst = c.worst_winning_finish[car];
-    if (me.proj_pos === 1) {
-      verdict = `#${esc(car)} <em>${final ? "champion" : "championship leader"}</em> by ${fmt(me.projected - proj[1].projected)} if it ends like this`;
-      sub = worst ? `Can finish as low as <strong>P${worst}</strong> in class and still ${final ? "win the title" : "clinch"}, if everyone else holds position.`
-        : final ? "" : `Not enough to clinch yet: ${fmt(c.max_points_after)} points still to come after this race.`;
-    } else {
-      verdict = `#${esc(proj[0].car)} ${final ? "takes the title" : "leads"} · #${esc(car)} P${me.proj_pos}, ${fmt(me.proj_gap)} back`;
-      sub = worst ? `#${esc(car)} needs <strong>P${worst}</strong> or better in class, with everyone else holding position.`
-        : `#${esc(car)} can't reach the top from here unless cars ahead drop back. Projected ${ord(me.proj_pos)} in the championship.`;
-    }
-  } else if (mine) {
-    verdict = `#${esc(car)} P${mine.class_pos} in ${esc(cls)}` + (lapStr(mine.best_lap) !== "–" ? ` · best ${lapStr(mine.best_lap)}` : "");
-  } else {
-    verdict = `#${esc(car)} isn't in this session`;
-  }
-
-  // --- the Corvettes in this class
-  const runners = d.tracked.map(t => c.cars.find(r => r.car === t)).filter(Boolean).map(x => `
-    <div class="runner" style="--c:${colorOf(x.car)}">
-      <div class="runner-top"><span class="num">#${esc(x.car)} P${x.class_pos}</span><small>in class · ${esc(x.driver)}</small>${x.in_pit ? `<span class="pit">IN PIT</span>` : ""}</div>
-      <dl><dt>${l.is_race ? "Gap" : "To fastest"}</dt><dt>Last lap</dt><dt>Best lap</dt><dt>Stops</dt>
-        <dd>${gapOf(x, "Leader")}</dd><dd>${lapStr(x.last_lap)}</dd><dd>${lapStr(x.best_lap)}</dd><dd>${x.pit_stops ?? "–"}</dd></dl>
-      ${strategyHTML(strat[x.car])}${stintHTML(x.stint)}
-    </div>`).join("");
-
-  // --- whole-class timing
-  const timing = `<div class="scroll"><table class="timing"><thead><tr><th>Pos</th><th>Car</th><th class="l">Driver</th><th>Laps</th><th>${l.is_race ? "Gap" : "To fastest"}</th><th>Last</th><th>Best</th><th>Pace</th><th>Trend</th>${l.is_race ? "<th>Stint</th>" : ""}<th>Stops</th>${l.is_race ? `<th title="Estimated class position after a stop now">Pit now</th>` : ""}</tr></thead><tbody>`
-    + c.cars.map(r => { const x = strat[r.car] || {};
-      return `<tr class="${d.tracked.includes(r.car) ? "tracked" : ""}" style="--c:${colorOf(r.car)}">
-        <td>${r.class_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}<div>${esc(r.vehicle)}</div></td>
-        <td>${r.laps ?? "–"}</td><td class="dim">${gapOf(r, "—")}</td><td>${lapStr(r.last_lap)}</td><td>${lapStr(r.best_lap)}</td>
-        <td>${lapTime(x.pace)}</td><td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td>
-        ${l.is_race ? `<td class="dim">${r.stint?.laps ?? "–"}</td>` : ""}<td class="dim">${r.pit_stops ?? "–"}</td>${l.is_race ? `<td class="dim">${x.rejoin ? "P" + x.rejoin : "–"}</td>` : ""}</tr>`; }).join("")
-    + `</tbody></table></div>`;
-
-  // --- championship if it finished now (race only)
-  const projTable = proj.length ? `<h2 style="margin-top:20px">Championship if it finished now</h2><div class="scroll"><table><thead><tr><th>Pos</th><th>Car</th><th class="l">Team</th><th>Running</th><th>This race</th><th>Total</th><th>Gap</th></tr></thead><tbody>`
-    + proj.filter((r, i) => i < 6 || d.tracked.includes(r.car)).map(r => { const run = c.cars.find(x => x.car === r.car);
-      return `<tr class="${d.tracked.includes(r.car) ? "tracked" : ""}" style="--c:${colorOf(r.car)}">
-        <td>${r.proj_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.team || run?.vehicle)}</td>
-        <td>${run ? "P" + run.class_pos + (run.in_pit ? " · pit" : "") : "–"}</td><td class="dim">+${fmt(r.race_pts + r.quali_pts)}</td>
-        <td class="total">${fmt(r.projected)}</td><td class="dim">${r.proj_gap ? "−" + fmt(r.proj_gap) : "—"}</td></tr>`; }).join("")
-    + `</tbody></table></div>` : "";
-
-  const m = c.stint_model, st = c.strategy;
-  const el = $("live");
-  el.classList.toggle("done", !!l.finished);
-  el.innerHTML = `<div class="live-head"><span class="pulse">${l.finished ? "FINISHED" : "LIVE"}</span>
-      <b>${esc(l.event)}</b> · ${esc(sess)} · ${esc(cls)}
-      <span class="flag" style="--f:${FLAG_COLORS[flagKey] || "var(--text-2)"}">${esc(l.flag)}</span>
-      ${l.finished ? "" : `<span class="ttg">${esc(left)} to go</span>`}</div>
-    <div class="live-verdict">${verdict}</div>
-    <p class="live-sub">${sub}</p>
-    <div class="runners">${runners}</div>
-    <h2 style="margin-top:20px">Lap times</h2>
-    <div class="legend" id="lap-legend"></div>
-    <div class="chart" id="lapchart"><div class="tip" id="laptip"></div></div>
-    <h2 style="margin-top:20px">${esc(cls)} timing</h2>
-    ${timing}
-    ${projTable}
-    <p class="note">${l.finished && l.is_race ? "Provisional until IMSA publishes the official points. " : ""}`
-      + `From IMSA live timing, updated ${new Date(l.updated).toLocaleTimeString()}. `
-      + (st ? `Pace, trends and pit-now estimates are recalculated every 5 minutes (last ${new Date(st.updated).toLocaleTimeString()})`
-        + (st.pit_loss && l.is_race ? `, using ${Math.round(st.pit_loss)}s in the pit lane per stop (${st.pit_loss_source === "telemetry" ? "timed from this race's stops" : "last year's race here"}). ` : ". ") : "")
-      + (l.is_race ? (c.quali_counted ? "Includes qualifying points. " : "Qualifying points not included. ") + "Ties and penalties aren't accounted for. " : "")
-      + (m && l.is_race ? `Pit windows: full-tank stints of ${m.short}–${m.long} laps (typically ${m.typical}) from ${esc(m.source)}. A yellow or a short fill moves them.` : "")
-      + `</p>`;
-  drawLaps(d, colorOf);
-}
-
-// Lap time chart: the selected car, the other Corvettes in its class, and the class leader.
-// Each line differs by colour AND dash pattern AND marker shape, and is labelled at its end,
-// so the cars stay distinguishable with only a few laps, in print, or with colour-blindness.
-const LAP_STYLES = [
-  { color: "var(--s1)", dash: "", marker: "circle", width: 2.5 },        // selected car
-  { color: "var(--s2)", dash: "7 4", marker: "square", width: 2 },       // other Corvette
-  { color: "var(--s3)", dash: "2 4", marker: "triangle", width: 2 },     // other Corvette
-  { color: "var(--text-3)", dash: "9 4 2 4", marker: "diamond", width: 1.75 }, // class leader
-];
-function marker(shape, cx, cy, color, r = 3.5) {
-  const ring = `stroke="var(--surface)" stroke-width="1.5"`;
-  if (shape === "square") return `<rect x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}" fill="${color}" ${ring}/>`;
-  if (shape === "triangle") return `<path d="M${cx} ${cy - r * 1.2}L${cx + r * 1.1} ${cy + r * .8}L${cx - r * 1.1} ${cy + r * .8}Z" fill="${color}" ${ring}/>`;
-  if (shape === "diamond") return `<path d="M${cx} ${cy - r * 1.25}L${cx + r} ${cy}L${cx} ${cy + r * 1.25}L${cx - r} ${cy}Z" fill="${color}" ${ring}/>`;
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" ${ring}/>`;
-}
-function swatch(st) {
-  return `<svg width="30" height="12" aria-hidden="true" style="vertical-align:middle;margin-right:4px;overflow:visible">`
-    + `<line x1="1" x2="29" y1="6" y2="6" stroke="${st.color}" stroke-width="${st.width}" stroke-dasharray="${st.dash}"/>${marker(st.marker, 15, 6, st.color, 3)}</svg>`;
-}
-
-function drawLaps(d, colorOf) {
-  const el = $("lapchart"), cls = laps?.classes?.[d.class];
-  if (!el || !cls) return;
-  const leader = live.classes[d.class].cars[0]?.car;
-  const cars = [...new Set([...d.tracked, leader])].filter(c => cls[c]?.laps?.length);
+  // Chart: points now (bar), the most each can still reach (dashed), points if the race ended now (diamond).
+  const el = $("fight-chart");
   el.querySelector("svg")?.remove();
-  el.querySelector("p.note")?.remove();
-  if (!cars.length) { el.insertAdjacentHTML("afterbegin", `<p class="note">No laps recorded yet.</p>`); $("lap-legend").innerHTML = ""; return; }
-  // Fixed style per role: selected first, then the other Corvettes in picker order, then the leader.
-  const styleOf = {};
-  let k = 1;
-  for (const c of cars) styleOf[c] = c === d.tracked[0] ? LAP_STYLES[0] : d.tracked.includes(c) ? LAP_STYLES[Math.min(k++, 2)] : LAP_STYLES[3];
-  const all = cars.flatMap(c => cls[c].laps.map(l => l[1]));
-  const best = Math.min(...all), cap = best * 1.07;   // slower laps (pits, yellows) pinned to the top edge
-  const W = Math.max(320, el.clientWidth), H = W < 600 ? 210 : 250, m = { t: 12, r: 44, b: 24, l: 48 };
-  const iw = W - m.l - m.r, ih = H - m.t - m.b;
-  const maxLap = Math.max(...cars.flatMap(c => cls[c].laps.map(l => l[0])));
-  const x = n => m.l + (maxLap <= 1 ? iw / 2 : ((n - 1) / (maxLap - 1)) * iw);
-  const y = t => m.t + ih - ((Math.min(t, cap) - best) / (cap - best)) * ih;
+  const W = Math.max(320, el.clientWidth), rowH = 32, m = { t: 24, r: W < 560 ? 110 : 170, b: 22, l: 56 };
+  const H = m.t + m.b + contenders.length * rowH, iw = W - m.l - m.r;
+  const lo = Math.min(...contenders.map(s => s.points)) - 40;
+  const hi = Math.max(...contenders.map(s => s.points + left), ...contenders.map(s => proj[s.car]?.projected || 0)) + 10;
+  const x = v => m.l + (v - lo) / (hi - lo) * iw;
+  const step = (hi - lo) > 700 ? 200 : 100;
   let g = "";
-  for (let i = 0; i <= 4; i++) {
-    const t = best + (cap - best) * i / 4;
-    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 4}" text-anchor="end">${lapTime(t)}</text>`;
-  }
-  const step = Math.max(1, Math.ceil(maxLap / Math.floor(iw / 50)));
-  for (let n = 1; n <= maxLap; n += step) g += `<text x="${x(n)}" y="${H - 6}" text-anchor="middle">${n}</text>`;
-  // Draw the leader and other Corvettes first, the selected car on top.
-  const order = cars.slice().sort((a, b) => (a === d.tracked[0]) - (b === d.tracked[0]));
-  let lines = "", marks = "";
-  const ends = [];
-  for (const c of order) {
-    const st = styleOf[c], L = cls[c].laps;
-    lines += `<polyline fill="none" stroke="${st.color}" stroke-width="${st.width}" stroke-dasharray="${st.dash}" stroke-linejoin="round" stroke-linecap="round" points="${L.map(([n, t]) => `${x(n)},${y(t)}`).join(" ")}"/>`;
-    const every = Math.max(1, Math.ceil(L.length / 30));     // markers on every lap early, thinned out later
-    L.forEach(([n, t], i) => { if (i % every === 0 || i === L.length - 1) marks += marker(st.marker, x(n), y(t), st.color); });
-    for (const s of cls[c].stops) lines += `<line x1="${x(s)}" x2="${x(s)}" y1="${m.t + ih}" y2="${m.t + ih - 7}" stroke="${st.color}" stroke-width="2"/>`;
-    const last = L.at(-1);
-    ends.push({ x: x(last[0]) + 8, y: y(last[1]) + 4, t: `#${c}` });
-  }
-  ends.sort((a, b) => a.y - b.y).forEach((l, i, a) => { if (i && l.y - a[i - 1].y < 13) l.y = a[i - 1].y + 13; });
-  const labels = ends.map(l => `<text class="lbl" x="${Math.min(l.x, W - 4)}" y="${l.y}" text-anchor="${l.x > W - 30 ? "end" : "start"}">${esc(l.t)}</text>`).join("");
-  el.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Lap times by lap">${g}${lines}${marks}${labels}<rect id="laphit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`);
-  $("lap-legend").innerHTML = cars.map(c => `<span class="sw">${swatch(styleOf[c])}#${esc(c)}${c === d.tracked[0] ? " (selected)" : c === leader ? " (class leader)" : ""}</span>`).join("")
-    + `<span class="sw" style="color:var(--text-3)">Ticks on the axis: pit stops · laps over 107% of the best are pinned to the top</span>`;
-  const svg = el.querySelector("svg"), tip = $("laptip");
-  svg.querySelector("#laphit").addEventListener("pointermove", ev => {
-    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * (W / r.width);
-    const n = Math.max(1, Math.min(maxLap, Math.round(1 + (px - m.l) / iw * (maxLap - 1))));
-    tip.innerHTML = `<b>Lap ${n}</b>` + cars.map(c => { const l = cls[c].laps.find(l => l[0] === n);
-      return `<div><span>${swatch(styleOf[c])}#${esc(c)}</span><span>${l ? lapTime(l[1]) : "–"}</span></div>`; }).join("");
-    tip.style.display = "block";
-    tip.style.left = Math.min(x(n) / W * r.width + 12, r.width - tip.offsetWidth) + "px";
-    tip.style.top = "8px";
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step)
+    g += `<line x1="${x(v)}" x2="${x(v)}" y1="${m.t - 4}" y2="${H - m.b}" stroke="var(--grid)"/><text x="${x(v)}" y="${H - 6}" text-anchor="middle">${fmt(v)}</text>`;
+  const leaderPts = contenders[0].points;
+  g += `<line x1="${x(leaderPts)}" x2="${x(leaderPts)}" y1="${m.t - 8}" y2="${H - m.b}" stroke="var(--text-3)" stroke-dasharray="2 3"/>`
+    + `<text x="${x(leaderPts)}" y="${m.t - 12}" text-anchor="middle">leader now</text>`;
+  contenders.forEach((s, i) => {
+    const y = m.t + i * rowH + rowH / 2, c = colorOf(s.car), mine = s.car === car;
+    g += `<text class="lbl" x="${m.l - 8}" y="${y + 4}" text-anchor="end">#${esc(s.car)}</text>`
+      + `<rect x="${m.l}" y="${y - 5}" width="${Math.max(2, x(s.points) - m.l)}" height="10" rx="3" fill="${c}"/>`
+      + `<line x1="${x(s.points)}" x2="${x(s.points + left)}" y1="${y}" y2="${y}" stroke="${c}" stroke-width="2" stroke-dasharray="3 3"/>`
+      + `<line x1="${x(s.points + left)}" x2="${x(s.points + left)}" y1="${y - 6}" y2="${y + 6}" stroke="${c}" stroke-width="2"/>`;
+    const p = proj[s.car], r = running[s.car];
+    if (p) g += `<path d="M${x(p.projected)} ${y - 8}L${x(p.projected) + 6} ${y}L${x(p.projected)} ${y + 8}L${x(p.projected) - 6} ${y}Z" fill="var(--text)" stroke="var(--surface)" stroke-width="1.5"/>`;
+    const note = r ? `running P${r.class_pos}${r.in_pit ? " (pit)" : ""} · ${fmt(p?.projected ?? s.points)}` : `P${s.pos} · ${fmt(s.points)} pts${s.alive ? "" : " · out"}`;
+    g += `<text x="${W - m.r + 8}" y="${y + 4}"${mine ? ' class="lbl"' : ""}>${note}</text>`;
   });
-  svg.querySelector("#laphit").addEventListener("pointerleave", () => { tip.style.display = "none"; });
+  el.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cars still in contention for the ${esc(cls)} title">${g}</svg>`);
+  $("fight-legend").innerHTML = `<span style="--c:var(--text-2)">bar: points now</span><span style="--c:var(--text-3)">dashed: the most it can still reach (${fmt(left)} available)</span>`
+    + (lc ? `<span class="sw">◆ points if the race ended now</span>` : "");
+  const alive = contenders.filter(s => s.alive).length;
+  $("fight-title").textContent = `Still in contention · ${cls}`;
+  $("fight-sub").innerHTML = `${alive} car${alive === 1 ? " is" : "s are"} still mathematically in the title fight with ${fmt(left)} points left`
+    + (d.rounds_remaining === 1 ? " (one race: up to 350 for the win plus up to 35 for qualifying)." : ` over ${d.rounds_remaining} rounds.`)
+    + (lc ? ` Live from the race, ${esc((live.remaining || "").replace(/^00:/, ""))} to go.` : "");
+
+  // What the selected car needs.
+  $("needs-title").textContent = me.alive ? `What #${car} needs` : `#${car}: best possible finish`;
+  const myQ = q(car), qKnown = qmap != null;
+  const myTot = p => me.points + (myQ ?? 0) + racePts(p);
+  if (!me.alive) {
+    const myMax = me.points + left;
+    const best = 1 + st.filter(s => s.car !== car && s.points > myMax).length;
+    const toBeat = st.filter(s => s.car !== car && s.points <= myMax && s.pos < me.pos);
+    $("needs-sub").innerHTML = `<b>#${esc(car)} is mathematically out of the title fight</b>: ${fmt(me.gap)} points behind with only ${fmt(left)} left. `
+      + `The highest it can still finish the championship is <b>${ord(best)}</b>${best < me.pos ? ` (it's ${ord(me.pos)} now)` : ""}`
+      + (best < me.pos ? `, by scoring the maximum (${d.rounds_remaining === 1 ? "pole and the win" : "maximum points"}) while the cars just ahead score less than:` : ".");
+    $("needs").innerHTML = best < me.pos && toBeat.length ? `<thead><tr><th>Car</th><th class="l">Team</th><th>Points now</th><th>Must score fewer than</th><th>Roughly</th></tr></thead><tbody>`
+      + toBeat.map(s => { const room = myMax - s.points; const worst = RACE_POINTS.findIndex(v => v < room) + 1;
+        return `<tr style="--c:${colorOf(s.car)}"><td>#${esc(s.car)}</td><td class="l team">${esc(s.team)}</td><td>${fmt(s.points)}</td><td>${fmt(room)} pts</td><td>${worst ? `finishing P${worst} or lower` : "scoring nothing"}</td></tr>`; }).join("") + `</tbody>` : "";
+    $("needs-note").textContent = "\"Roughly\" ignores the few qualifying points those cars may also pick up.";
+    return;
+  }
+  const second = st.find(s => s.car !== car);
+  if (me.pos === 1 && me.points - (second?.points ?? 0) > left) {
+    $("needs-sub").innerHTML = `<b>#${esc(car)} has clinched the title.</b>`;
+    $("needs").innerHTML = ""; $("needs-note").textContent = "";
+    return;
+  }
+  const rivals = contenders.filter(s => s.car !== car && s.alive).slice(0, 6);
+  // Field size: live cars, else this weekend's entries in the class, else the standings.
+  const field = lc ? lc.cars.length : Object.values(entries?.cars || {}).filter(e => e.class === d.class).length || st.length;
+  const maxFinish = Math.max(2, field);
+  // Guaranteed: beats every rival's best case (the rival wins; qualifying points known, or the maximum).
+  let guaranteed = null;
+  for (let p = 1; p <= maxFinish; p++) {
+    const ok = rivals.every(r => myTot(p) - (r.points + (q(r.car) ?? 35) + racePts(p === 1 ? 2 : 1)) > after);
+    if (ok) guaranteed = p; else break;
+  }
+  const liveNeed = lc?.worst_winning_finish?.[car];
+  let sub = "";
+  if (lc && liveNeed !== undefined) {
+    const now = running[car];
+    sub += `<b>Right now</b> #${esc(car)} is running P${now?.class_pos ?? "–"}: `
+      + (liveNeed ? `it needs <b>P${liveNeed} or better</b> to ${after ? "lead" : "win the title"} if everyone else holds position.` : `as things stand it can't win the title unless cars ahead drop back.`) + "<br>";
+  }
+  sub += guaranteed === 1 ? `<b>Winning the race</b> ${after ? "keeps the lead" : "wins the title"}, whatever anyone else does.`
+    : guaranteed ? `<b>Whatever anyone else does</b>, finishing <b>P${guaranteed} or better</b> ${after ? "keeps the lead" : "wins the title"}.`
+    : `No finish guarantees it on its own: it depends on where the rivals finish (table below).`;
+  $("needs-sub").innerHTML = sub;
+  // Matrix: the rival's finish across the top; each cell is the lowest finish the selected car can afford.
+  const cols = Array.from({ length: Math.min(10, maxFinish) }, (_, i) => i + 1);
+  const need = (r, rf) => {
+    let worst = null;
+    for (let p = 1; p <= maxFinish; p++) {
+      if (p === rf) continue;
+      if (myTot(p) - (r.points + (q(r.car) ?? 0) + racePts(rf)) > after) worst = p; else if (p > rf) break;
+    }
+    return worst;
+  };
+  $("needs").innerHTML = `<thead><tr><th class="l">If this rival finishes →</th>${cols.map(c => `<th>P${c}</th>`).join("")}</tr></thead><tbody>`
+    + rivals.map(r => `<tr style="--c:${colorOf(r.car)}"><td class="l">#${esc(r.car)} <span class="dim">${fmt(r.points)} pts${running[r.car] ? ` · running P${running[r.car].class_pos}` : ""}</span></td>`
+      + cols.map(c => { const w = need(r, c), now = running[r.car]?.class_pos === c;
+        return `<td class="${now ? "nowcol" : ""}">${w == null ? "✕" : w >= maxFinish ? "any" : `P${w}`}</td>`; }).join("") + `</tr>`).join("")
+    + `</tbody>`;
+  $("needs-note").textContent = `Each cell is the lowest class finish #${car} can afford to stay ahead of that rival if the rival finishes there (✕ = not even a win is enough; "any" = even last of the ${maxFinish} entries is enough). `
+    + (qKnown ? "This weekend's qualifying points are included. " : "Qualifying points aren't known yet, so the table leaves them out; the guaranteed finish assumes each rival takes the maximum 35. ")
+    + (lc ? "Highlighted: where each rival is running now. " : "") + "Ties and penalties aren't modelled.";
+}
+
+// Live championship projection during the race.
+function renderProjection(d) {
+  const c = raceLive(d.class), el = $("proj-card");
+  el.hidden = !c;
+  if (!c) return;
+  const car = d.tracked[0], colorOf = colorFor(d), cls = CLASS_NAMES[d.class] || d.class;
+  const fc = c.focus?.[car] || {}, proj = c.standings, me = proj.find(r => r.car === car);
+  const flagKey = Object.keys(FLAG_COLORS).find(k => (live.flag || "").toLowerCase().includes(k));
+  const final = c.max_points_after === 0, worst = c.worst_winning_finish?.[car];
+  const net = fc.basis === "net";
+  let verdict;
+  if (me && fc.champ_pos) {
+    verdict = fc.champ_pos === 1
+      ? `#${esc(car)} <em>${final ? "champion" : "championship leader"}</em> by ${fmt(Math.abs((net ? fc.net_margin_behind : fc.margin_behind) ?? 0))} if it ends like this`
+      : `#${esc(proj[0].car)} ${final ? "takes the title" : "leads"} · #${esc(car)} ${ord(fc.champ_pos)}, ${fmt(Math.abs((net ? fc.net_margin_ahead : fc.margin_ahead) ?? 0))} behind #${esc(fc.champ_ahead)}`;
+  } else verdict = `#${esc(car)} isn't in this race`;
+  const ev = fc.events?.at(-1);
+  const mg = n => n == null ? "–" : `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;
+  const k = (a, b, s) => `<div class="kpi"><div class="k">${a}</div><div class="v">${b}</div><div class="s">${s}</div></div>`;
+  const tiles = fc.champ_pos ? [
+    k("Title position", `P${fc.champ_pos}`, net ? "after pit stops" : "running order"),
+    fc.champ_behind ? k(`Ahead of #${esc(fc.champ_behind)}`, `${mg(net ? fc.net_margin_behind : fc.margin_behind)}<small>pts</small>`, fc.we_hold_vs_behind ? `stays ahead finishing P${fc.we_hold_vs_behind}+` : "would lose it as it stands") : "",
+    fc.champ_ahead ? k(`Behind #${esc(fc.champ_ahead)}`, `${mg(net ? fc.net_margin_ahead : fc.margin_ahead)}<small>pts</small>`, fc.we_need_vs_ahead ? `gets ahead finishing P${fc.we_need_vs_ahead}+` : "can't get ahead alone") : "",
+    k("A place is worth", `+${fc.place_gain}<small>/ −${fc.place_lose}</small>`, "up one / down one"),
+    fc.champ_behind ? k(`#${esc(fc.champ_behind)} needs`, fc.rival_needs ? `P${fc.rival_needs}` : "–", fc.rival_needs ? `or better to pass #${esc(car)}` : `can't pass #${esc(car)} alone`) : "",
+  ].join("") : "";
+  const table = `<div class="scroll"><table><thead><tr><th>Pos</th><th>Car</th><th class="l">Team</th><th>Running</th><th>This race</th><th>Total</th><th>Gap</th></tr></thead><tbody>`
+    + proj.filter((r, i) => i < 6 || d.tracked.includes(r.car)).map(r => {
+      const run = c.cars.find(x => x.car === r.car);
+      return `<tr class="${d.tracked.includes(r.car) ? "tracked" : ""}" style="--c:${colorOf(r.car)}"><td>${r.proj_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.team || run?.vehicle)}</td>
+        <td>${run ? "P" + run.class_pos + (run.in_pit ? " · pit" : "") : "–"}</td><td class="dim">+${fmt(r.race_pts + r.quali_pts)}</td><td class="total">${fmt(r.projected)}</td><td class="dim">${r.proj_gap ? "−" + fmt(r.proj_gap) : "—"}</td></tr>`;
+    }).join("") + `</tbody></table></div>`;
+  el.classList.toggle("done", !!live.finished);
+  el.innerHTML = `<div class="live-head"><span class="pulse">${live.finished ? "FINISHED" : "LIVE"}</span><b>${esc(live.event)}</b> · race · ${esc(cls)}
+      <span class="flag" style="--f:${FLAG_COLORS[flagKey] || "var(--text-2)"}">${esc(live.flag)}</span>${live.finished ? "" : `<span class="ttg">${esc((live.remaining || "").replace(/^00:/, ""))} to go</span>`}</div>
+    <div class="live-verdict">${verdict}</div>
+    <p class="live-sub">${worst ? `Can finish as low as <strong>P${worst}</strong> in class and still ${final ? "win the title" : "lead"}, if everyone else holds position.` : ""}</p>
+    ${ev && ev.to ? `<p class="event">Closest title rival ${ev.role === "champ_behind" ? "behind" : "ahead"} is now <b>#${esc(ev.to)}</b>${ev.from ? ` (was #${esc(ev.from)})` : ""}, since lap ${ev.lap}.</p>` : ""}
+    <div class="kpis">${tiles}</div>
+    <h2 style="margin-top:16px">Championship if it finished now${net ? " (after pit stops)" : ""}</h2>${table}
+    <h2 style="margin-top:16px">Title margin by lap</h2><div class="legend" id="lg-margin"></div><div class="chart" id="ch-margin"><div class="tip"></div></div>
+    <p class="note">${live.finished ? "Provisional until IMSA publishes the official points. " : ""}From IMSA live timing, updated ${new Date(live.updated).toLocaleTimeString()}. `
+      + `${c.quali_counted ? "Includes qualifying points. " : "Qualifying points not included. "}"After pit stops" moves back cars that still owe a stop in this pit cycle. Ties and penalties aren't modelled. Lap times and pit strategy are on the Race tab.</p>`;
+  // Title margin by lap (after pit stops solid, running order dotted) against the closest rivals.
+  const ml = laps?.classes?.[d.class]?.[car]?.margins || [], series = [];
+  const addM = (iRaw, iNet, iCar, color, rival, word) => {
+    if (!rival) return "";
+    const mine = ml.filter(r => r[iCar] === rival);
+    const netPts = mine.filter(r => r[iNet] != null).map(r => [r[0], r[iNet]]), rawPts = mine.filter(r => r[iRaw] != null).map(r => [r[0], r[iRaw]]);
+    if (!rawPts.length) return "";
+    series.push({ name: `vs #${rival} (after stops)`, pts: netPts, color, end: netPts.length ? `#${rival}` : null });
+    series.push({ name: `vs #${rival} (running)`, pts: rawPts, color, dash: "1 4", width: 1.5, end: netPts.length ? null : `#${rival}` });
+    return `<span style="--c:${color}">points ${word} #${esc(rival)}</span>`;
+  };
+  const lgB = addM(1, 2, 5, "var(--s4)", fc.champ_behind, "ahead of"), lgA = addM(3, 4, 6, "var(--s2)", fc.champ_ahead, "behind");
+  lineChart("ch-margin", { series, zeroLine: true, robust: true, yFmt: v => (v > 0 ? "+" : "") + v.toFixed(0), empty: "Builds up lap by lap during the race." });
+  $("lg-margin").innerHTML = lgB + lgA + `<span style="--c:var(--text-3)">solid: after pit stops · dotted: running order · above zero = ahead</span>`;
+}
+
+// Small line chart (one y axis) with a crosshair tooltip.
+function lineChart(id, { series, yFmt = v => v.toFixed(1), zeroLine = false, robust = false, empty = "No data yet." }) {
+  const el = $(id), tip = el.querySelector(".tip");
+  el.querySelector("svg")?.remove(); el.querySelector(".empty")?.remove();
+  const pts = series.flatMap(s => s.pts);
+  if (pts.length < 2) { el.insertAdjacentHTML("afterbegin", `<p class="empty">${empty}</p>`); return; }
+  const W = Math.max(300, el.clientWidth), H = 200, m = { t: 10, r: 54, b: 24, l: 50 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const xs = pts.map(p => p[0]), x0 = Math.min(...xs), x1 = Math.max(...xs, x0 + 1);
+  const ys = pts.map(p => p[1]).sort((a, b) => a - b), qn = f => ys[Math.round(f * (ys.length - 1))];
+  let [y0, y1] = robust ? [qn(0.02), qn(0.98)] : [ys[0], ys.at(-1)];
+  if (y1 - y0 < 1e-6) { y0 -= 1; y1 += 1; }
+  const pad = (y1 - y0) * 0.08; y0 -= pad; y1 += pad;
+  const x = v => m.l + (v - x0) / (x1 - x0) * iw, y = v => m.t + ih - (Math.max(y0, Math.min(y1, v)) - y0) / (y1 - y0) * ih;
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const v = y0 + (y1 - y0) * i / 4; g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${yFmt(v)}</text>`; }
+  if (zeroLine && y0 < 0 && y1 > 0) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--text-3)" stroke-dasharray="2 3"/>`;
+  const stepX = Math.max(1, Math.ceil((x1 - x0) / Math.floor(iw / 48)));
+  for (let v = Math.ceil(x0); v <= x1; v += stepX) g += `<text x="${x(v)}" y="${H - 6}" text-anchor="middle">${v}</text>`;
+  let lines = "", labels = "";
+  for (const s of series) {
+    if (!s.pts.length) continue;
+    lines += `<polyline fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" ${s.dash ? `stroke-dasharray="${s.dash}"` : ""} stroke-linejoin="round" points="${s.pts.map(p => `${x(p[0])},${y(p[1])}`).join(" ")}"/>`;
+    if (s.end) { const p = s.pts.at(-1); labels += `<text class="lbl" x="${x(p[0]) + 6}" y="${y(p[1]) + 4}">${esc(s.end)}</text>`; }
+  }
+  el.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 ${W} ${H}" role="img">${g}${lines}${labels}<rect class="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`);
+  const svg = el.querySelector("svg"), named = series.filter(s => s.name);
+  svg.querySelector(".hit").addEventListener("pointermove", ev => {
+    const r = svg.getBoundingClientRect(), v = Math.round(x0 + ((ev.clientX - r.left) * W / r.width - m.l) / iw * (x1 - x0));
+    tip.innerHTML = `<b>Lap ${v}</b>` + named.map(s => { const p = s.pts.find(q => q[0] === v); return `<div><span><i style="--c:${s.color}"></i>${esc(s.name)}</span><span>${p ? yFmt(p[1]) : "–"}</span></div>`; }).join("");
+    tip.style.display = "block"; tip.style.left = Math.min(x(v) / W * r.width + 12, r.width - tip.offsetWidth) + "px"; tip.style.top = "8px";
+  });
+  svg.querySelector(".hit").addEventListener("pointerleave", () => { tip.style.display = "none"; });
 }
 
 function drawChart(series, done, colorOf) {

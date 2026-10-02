@@ -28,8 +28,13 @@ of the page, or link straight to one with `#13`).
   next stop lap, the next fill time (from the class's observed fill rate) and, in the race, the stops
   still needed to reach the flag. Unofficial: if it stops working the pages fall back to lap-count
   estimates.
-- `web/strategy.html`: per-car strategy page (same car picker) with those numbers as tiles, lap time,
-  gap and energy charts with trend lines, and a strategy board for the whole class.
+- `web/index.html` (Championship tab): standings, the cars still in contention (points now, most
+  they can reach, and in the race where they're running and their points if it ended now), what the
+  selected car needs (guaranteed finish plus a finish-by-rival table, or for an eliminated car the
+  highest championship position it can still reach), the live championship projection and history.
+- `web/strategy.html` (Race tab): per-car race page (same car picker) with class timing and a lap
+  chart, pit strategy tiles, gap and energy charts with trend lines, pace, sectors and a strategy
+  board for the whole class.
 - After each race it reads Al Kamel's race reports (results, grid, lap and pit stop time cards) for
   every round this season and writes `history.json`: class finish, grid, best lap and its class rank,
   stops and their times, stint lengths and laps per driver. Each race is fetched once Provisional results are out (again for Official) and cached in
@@ -113,7 +118,7 @@ WeatherTech session at the current event (published at the end of each session a
 during endurance races), checked every 5 minutes during session windows and every 30 minutes otherwise,
 and re-downloaded only when the file changes. Per car: best time in each of IMSA's three sectors, the
 ideal lap, and a typical time per sector (median of clean laps). Shown as the Sectors table on the
-Strategy page.
+Race page.
 
 ## Balance of Performance (BoP)
 
@@ -122,5 +127,5 @@ imsa.com/competitors/<year>-technical-bulletins/; only checked around a race wee
 the first scheduled session to the last session's end, at most every 12 hours) and parses the GTD /
 GTD PRO table: maximum stint energy (MJ) and energy replenishment rate (MJ/s) per make. GTD cars use a
 virtual energy tank refilled at that fixed rate, so a refill takes exactly (energy to add / rate);
-for 2026 that is 40 s for a full tank for every make. The strategy page uses it for the next fill time
+for 2026 that is 40 s for a full tank for every make. The Race page uses it for the next fill time
 and shows each car's energy use in MJ per lap. Feed vehicle names are matched to BoP rows by model.

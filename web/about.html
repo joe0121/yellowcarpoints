@@ -33,7 +33,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub">About this site</p>
-      <div class="navrow"><nav class="tabs"><a href="./">Standings</a><a href="strategy.html">Strategy</a><a href="about.html" aria-current="page">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a href="./">Championship</a><a href="strategy.html">Race</a><a href="about.html" aria-current="page">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
   </header>
 
@@ -45,22 +45,24 @@ dl.terms dd { margin: 0; color: var(--text-2); }
     <section class="card" id="what">
       <h2>What it is</h2>
       <p>Yellow Car Points follows the Corvettes in the <strong>IMSA WeatherTech SportsCar Championship</strong>: where they stand in the championship, how each race went, and what's happening live during a session, with a focus on the championship fight.</p>
-      <p>It covers the Corvettes in two classes: <strong>GTD PRO</strong> (#4, #3, #74) and <strong>GTD</strong> (#13, #36, #81). Pick a car with the buttons at the top of the Standings or Strategy page. The site remembers your choice, and you can share a link to a specific car, like <a href="./#13">yellowcarpoints.win/#13</a>.</p>
+      <p>It covers the Corvettes in two classes: <strong>GTD PRO</strong> (#4, #3, #74) and <strong>GTD</strong> (#13, #36, #81). Pick a car with the buttons at the top of the Championship or Race page. The site remembers your choice, and you can share a link to a specific car, like <a href="./#13">yellowcarpoints.win/#13</a>.</p>
       <p>It's an unofficial fan project, not affiliated with IMSA, GM, Chevrolet or Corvette Racing.</p>
     </section>
 
     <section class="card" id="use">
       <h2>How to use it</h2>
 
-      <h3>Standings</h3>
+      <h3>Championship</h3>
       <ul>
         <li><strong>Car card:</strong> the selected car's championship position, points, gap to the cars around it, and whether it can still win the title with the points left. Also its drivers this weekend.</li>
         <li><strong>Points behind the leader:</strong> a chart of each car's gap to the championship leader after every round. The selected car is yellow, the other Corvettes in its class blue. Hover to see the order after any round.</li>
+        <li><strong>Still in contention:</strong> every car that can still mathematically win the title, with points now and the most it can still reach; during the race, where each is running and its points if the race ended now.</li>
+        <li><strong>What it needs:</strong> the finish that guarantees the title whatever anyone else does, and a table of the finish needed against each rival's result. If the car is out of the title fight, the highest championship position it can still reach and what that would take.</li>
         <li><strong>Team standings:</strong> the full class table with points from every round.</li>
         <li><strong>Race by race:</strong> the selected car's season: finishing and starting position, best lap and how it ranked, pit stops and average stop time, every stint length, and laps per driver.</li>
       </ul>
 
-      <h3>Strategy</h3>
+      <h3>Race</h3>
       <p>For the selected car during a session (it shows the last session between events):</p>
       <ul>
         <li><strong>Tiles:</strong> energy left and energy used per lap, laps left on this tank, the next pit stop (lap and minutes away), estimated refuel time, stops made plus stops still needed to the finish, and recent pace.</li>
@@ -72,7 +74,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
 
     <section class="card" id="race">
       <h2>On race day</h2>
-      <p>During a WeatherTech session a <strong>LIVE</strong> card appears at the top of the Standings page and the Strategy page fills in. Both refresh every 30 seconds by themselves; no need to reload.</p>
+      <p>During a WeatherTech session the Race page fills in with timing, pit strategy and pace, and in the race the Championship page adds a live <strong>championship if it finished now</strong> card. Both refresh every 30 seconds by themselves; no need to reload.</p>
       <ul>
         <li>In the race, the headline tells you where the title stands if the race ended now, for example "#4 champion by 23 if it ends like this", and the lowest finish the car can afford.</li>
         <li>The site works out which rivals matter <em>right now</em>. If a different car becomes the closest title rival mid-race, a banner says so.</li>
@@ -86,7 +88,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
       <dl class="terms">
         <dt>If it finished now</dt><dd>Championship points as if the race ended at this moment, using IMSA's points for finishing position (350 for a class win, 320 for 2nd, 300 for 3rd…) plus qualifying points (a tenth of that).</dd>
         <dt>Net order</dt><dd>During a round of pit stops the running order is misleading: a car that has just stopped looks a long way back. The net order moves back the cars that still owe a stop by the time a stop costs, so it shows the order once everyone has pitted. It's switched off under yellow flags.</dd>
-        <dt>Cars to watch</dt><dd>On the Strategy page, the cars compared with the one you picked: the class leader (or the car behind when yours leads), and in the race the closest title rival, just behind (or ahead) in the championship-if-it-finished-now. They update as the race changes, and you can add others.</dd>
+        <dt>Cars to watch</dt><dd>On the Race page, the cars compared with the one you picked: the class leader (or the car behind when yours leads), and in the race the closest title rival, just behind (or ahead) in the championship-if-it-finished-now. They update as the race changes, and you can add others.</dd>
         <dt>A place is worth</dt><dd>Points gained by moving up one class position, and lost by dropping one.</dd>
         <dt>Needs P5</dt><dd>The lowest class finish that's still enough, assuming everyone else holds position.</dd>
         <dt>Energy</dt><dd>IMSA meters fuel as "energy" in percent. The site tracks how much each car uses per lap to estimate how far its tank will go.</dd>
@@ -131,7 +133,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
     const fmt = d => new Date(d).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" });
     const el = document.getElementById("next");
     el.innerHTML = `<h2>${live ? "On track now" : "Next live session"}</h2><p><strong>${s.name.replace(/ - WeatherTech Championship$/, "")}</strong> · ${fmt(s.start)} to ${new Date(s.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} (your time). `
-      + `${live ? 'Open <a href="./">Standings</a> or <a href="strategy.html">Strategy</a> to follow it live.' : "The live card and strategy page come alive then."}</p>`;
+      + `${live ? 'Open the <a href="strategy.html">Race</a> tab to follow it live.' : "The Race tab comes alive then."}</p>`;
     el.hidden = false;
   } catch (e) { /* schedule unavailable: leave the card hidden */ }
 })();

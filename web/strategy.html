@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Race Strategy</title>
+<title>Current Race</title>
 <meta name="description" content="Live IMSA race strategy for the Corvettes: energy, stops, fill times, lap time and gap trends.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23eda100'/><text x='16' y='23' font-size='18' font-family='Arial' font-weight='700' text-anchor='middle' fill='%23111'>4</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +16,7 @@
     <div>
       <h1>Yellow Car <span>Points</span></h1>
       <p class="sub" id="sub">Race strategy</p>
-      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Standings</a><a href="strategy.html" aria-current="page">Strategy</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+      <div class="navrow"><nav class="tabs"><a id="to-standings" href="./">Championship</a><a href="strategy.html" aria-current="page">Race</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -36,14 +36,11 @@
     <p class="note" id="kpi-note"></p>
   </section>
 
-  <section class="card" id="champ-card" hidden style="margin-bottom:16px">
-    <h2 id="champ-title">Championship if it finished now</h2>
-    <div class="live-sub" id="champ-sub"></div>
-    <div id="champ-event"></div>
-    <div class="kpis" id="champ-kpis"></div>
-    <h2 style="margin-top:16px">Title margin by lap</h2>
-    <div class="legend" id="lg-margin"></div>
-    <div class="chart" id="ch-margin"><div class="tip"></div></div>
+  <section class="card" id="timing-card" style="margin-bottom:16px">
+    <div class="pace-head"><h2 id="timing-title">Timing</h2><span class="dim" id="champ-link"></span></div>
+    <div class="legend" id="lg-laps2"></div>
+    <div class="chart" id="ch-laps2"><div class="tip"></div></div>
+    <div class="scroll" style="margin-top:12px"><table id="timing" class="timing"></table></div>
   </section>
 
   <section class="card" id="pace-card" style="margin-bottom:16px">
@@ -162,8 +159,8 @@ function render() {
     + cars.map(c => `<a href="#${esc(c)}"${c === sel.car ? ' aria-current="true"' : ""}>#${esc(c)}</a>`).join("") + `</div>`).join("");
   $("to-standings").href = "./#" + sel.car;
   const clsName = CLASS_NAMES[sel.class] || sel.class;
-  document.title = `Race Strategy · #${sel.car}`;
-  $("sub").textContent = `Race strategy · #${sel.car} ${entries?.cars?.[sel.car]?.team || ""} · ${clsName}`;
+  document.title = `Race · #${sel.car}`;
+  $("sub").textContent = `Current race · #${sel.car} ${entries?.cars?.[sel.car]?.team || ""} · ${clsName}`;
 
   renderSectors(sel, clsName);
   const lc = live?.classes?.[sel.class];
@@ -181,6 +178,7 @@ function render() {
     ["laps", "gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
     $("board").innerHTML = "";
     $("pace-card").hidden = true;
+    $("timing").innerHTML = ""; $("lg-laps2").innerHTML = ""; $("ch-laps2").querySelector("svg")?.remove();
     return;
   }
 
@@ -216,7 +214,7 @@ function render() {
   drawGapChart(me && lapsCls[me.car], ahead, ref, fc.ref_role, lapsCls);
   drawEnergyChart(S.slice(0, 2), me);
   drawLeaderChart(S);
-  renderChampionship(lc, fc, sel, lapsCls[sel.car], lapsCls);
+  renderTiming(lc, sel, rows, strat, lapsCls, cmpCars, clsName);
   $("pace-card").hidden = false;
   renderPace(lc, sel, rows, lapsCls, fc, clsName, cmpCars);
   renderBoard(rows, strat, sel, lapsCls, clsName, fc);
@@ -436,51 +434,6 @@ function renderBoard(rows, strat, sel, lapsCls, clsName, fc) {
     + `</tbody>`;
 }
 
-function renderChampionship(lc, fc, sel, myLaps, lapsCls) {
-  const show = live.is_race && fc.champ_pos;
-  $("champ-card").hidden = !show;
-  if (!show) return;
-  const net = fc.basis === "net";
-  const mg = (n, r) => n == null ? "–" : `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;
-  $("champ-title").textContent = `Championship if it finished now${net ? " (after pit stops)" : ""}`;
-  $("champ-sub").innerHTML = net
-    ? "Using the <b>net</b> order: cars that still owe a stop in this pit cycle are moved back by the pit loss. Raw order in brackets."
-    : "Using the running order (the net order needs a pit-loss figure and green-flag running).";
-  const ev = fc.events?.at(-1);
-  $("champ-event").innerHTML = ev && ev.to ? `<p class="event">Closest title rival ${ev.role === "champ_behind" ? "behind" : "ahead"} is now <b>#${esc(ev.to)}</b>${ev.from ? ` (was #${esc(ev.from)})` : ""}, since lap ${ev.lap}.</p>` : "";
-  const k = (a, b, c) => `<div class="kpi"><div class="k">${a}</div><div class="v">${b}</div><div class="s">${c}</div></div>`;
-  const tiles = [k("Title position", `P${fc.champ_pos}`, `${net ? "net" : "raw"} projection`)];
-  if (fc.champ_behind) tiles.push(k(`Ahead of #${esc(fc.champ_behind)}`, `${mg(net ? fc.net_margin_behind : fc.margin_behind)}<small>pts</small>`,
-    `raw ${mg(fc.margin_behind)} · ${fc.we_hold_vs_behind ? `stays ahead finishing P${fc.we_hold_vs_behind} or better` : "would lose it as things stand"}`));
-  if (fc.champ_ahead) tiles.push(k(`Behind #${esc(fc.champ_ahead)}`, `${mg(net ? fc.net_margin_ahead : fc.margin_ahead)}<small>pts</small>`,
-    `raw ${mg(fc.margin_ahead)} · ${fc.we_need_vs_ahead ? `gets ahead finishing P${fc.we_need_vs_ahead} or better` : "can't get ahead unless it drops back"}`));
-  tiles.push(k("A place is worth", `+${fc.place_gain}<small>/ −${fc.place_lose}</small>`, "gaining one class position / losing one"));
-  if (fc.champ_behind) tiles.push(k(`#${esc(fc.champ_behind)} needs`, fc.rival_needs ? `P${fc.rival_needs}` : "–",
-    fc.rival_needs ? `or better to pass #${esc(sel.car)}, everyone else holding` : `can't pass #${esc(sel.car)} unless #${esc(sel.car)} drops back`));
-  $("champ-kpis").innerHTML = tiles.join("");
-
-  // Title margin by lap: net solid, raw dotted, one colour per rival role.
-  const m = myLaps?.margins || [], series = [];
-  // Only the laps where this car was the rival in that role (switches are in the banner above).
-  const add = (iRaw, iNet, iCar, color, role) => {
-    const car = role === "behind" ? fc.champ_behind : fc.champ_ahead;
-    if (!car) return null;
-    // Leave out laps around either car's stops: positions are mid-stop there, not real changes.
-    const skip = new Set([...pitLaps(myLaps || {}), ...pitLaps(lapsCls[car] || {})]);
-    const mine = m.filter(r => r[iCar] === car && !skip.has(r[0]));
-    const netPts = mine.filter(r => r[iNet] != null).map(r => [r[0], r[iNet]]);
-    const rawPts = mine.filter(r => r[iRaw] != null).map(r => [r[0], r[iRaw]]);
-    if (!rawPts.length) return null;
-    series.push({ name: `vs #${car} ${role} (net)`, pts: netPts, color, end: netPts.length ? `#${car}` : null });
-    series.push({ name: `vs #${car} ${role} (raw)`, pts: rawPts, color, dash: "1 4", width: 1.5, end: netPts.length ? null : `#${car}` });
-    return car;
-  };
-  const tb = add(1, 2, 5, C.threat, "behind"), ta = add(3, 4, 6, C.target, "ahead");
-  lineChart("ch-margin", { series, zeroLine: true, robust: true, yFmt: v => (v > 0 ? "+" : "") + v.toFixed(0), empty: "Builds up lap by lap during the race." });
-  $("lg-margin").innerHTML = (tb ? `<span style="--c:${C.threat}">points ahead of #${esc(tb)} (title rival behind)</span>` : "")
-    + (ta ? `<span style="--c:${C.target}">points behind #${esc(ta)} (title rival ahead)</span>` : "")
-    + `<span style="--c:var(--text-3)">solid: net order · dotted: raw running order · above zero = ahead</span>`;
-}
 
 // --- pace: trimmed race pace, pace through a stint, and a projected matchup ----------
 // Laps since the car's last stop stand in for tyre age (teams sometimes double-stint tyres),
@@ -705,6 +658,37 @@ function renderSectors(sel, clsName) {
   $("sector-note").textContent = `★ = fastest in ${clsName} for that sector. Sectors are IMSA's three timing sectors (S1 is the short run from the start/finish line). `
     + `"Typical" is the median of clean laps (no first lap, pit laps, invalidated laps or laps over 105% of the car's best), so one lucky lap doesn't decide it. `
     + `Hover a time for the gap to #${sel.car}. IMSA's live feed doesn't carry sectors, so this updates when each timing report is published.`;
+}
+
+// Timing: lap-time chart for the cars to watch and the whole class's timing table.
+function renderTiming(lc, sel, rows, strat, lapsCls, cars, clsName) {
+  $("timing-title").textContent = `Timing · ${clsName}`;
+  $("champ-link").innerHTML = live.is_race ? `Title picture: <a href="./#${esc(sel.car)}">Championship tab</a>` : "";
+  const series = [];
+  for (const c of cars) {
+    const d = lapsCls[c.car];
+    if (!d?.laps?.length) continue;
+    const pit = new Set((d.stops || []).flatMap(n => [n, n + 1]));
+    const pts = d.laps.filter(([n]) => n > 1 && !pit.has(n));
+    const best = Math.min(...pts.map(p => p[1]));
+    series.push({ name: `#${c.car}`, pts: pts.filter(p => p[1] <= best * 1.07), color: c.style.color, width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}` });
+  }
+  lineChart("ch-laps2", { series, yFmt: lapTime, empty: "Lap times appear after a few laps." });
+  $("lg-laps2").innerHTML = cars.map(c => `<span class="sw">${swatchOf(c.style)}#${esc(c.car)} <span class="dim">${esc(c.role)}</span></span>`).join("")
+    + `<span class="sw dim">laps over 107% of the car's best, in- and out-laps left out</span>`;
+  // Class timing (practice/qualifying: gap to the class's fastest lap, since IMSA's gap column is a laps difference there).
+  const toSecs = t => { if (!t || /^[0:.\s-]*$/.test(String(t))) return null; let v = 0; for (const p of String(t).split(":")) v = v * 60 + parseFloat(p); return isNaN(v) ? null : v; };
+  const lapStr = t => toSecs(t) == null ? "–" : esc(t);
+  const classBest = Math.min(...rows.map(r => toSecs(r.best_lap) ?? Infinity));
+  const gapOf = r => live.is_race ? (r.class_pos === 1 ? "—" : esc(r.gap)) : (toSecs(r.best_lap) == null ? "–" : toSecs(r.best_lap) === classBest ? "Fastest" : `+${(toSecs(r.best_lap) - classBest).toFixed(3)}`);
+  const watched = new Map(cars.map(c => [c.car, c]));
+  $("timing").innerHTML = `<thead><tr><th>Pos</th><th>Car</th><th class="l">Driver</th><th>Laps</th><th>${live.is_race ? "Gap" : "To fastest"}</th><th>Last</th><th>Best</th><th>Pace</th><th title="Last 5 clean laps against the 5 before">Pace change</th><th>Stops</th></tr></thead><tbody>`
+    + rows.map(r => { const x = strat[r.car] || {}, w = watched.get(r.car);
+      return `<tr class="${w ? "tracked" : ""}" style="--c:${w ? w.style.color : "var(--context)"}">
+        <td>${r.class_pos}</td><td>#${esc(r.car)}</td><td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}<div>${esc(r.vehicle)}</div></td>
+        <td>${r.laps ?? "–"}</td><td class="dim">${gapOf(r)}</td><td>${lapStr(r.last_lap)}</td><td>${lapStr(r.best_lap)}</td>
+        <td>${lapTime(x.pace)}</td><td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td><td class="dim">${r.pit_stops ?? "–"}</td></tr>`; }).join("")
+    + `</tbody>`;
 }
 
 let width = innerWidth;
