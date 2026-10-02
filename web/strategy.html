@@ -61,6 +61,10 @@
   </section>
     </div>
     <div class="col col-b">
+  <section class="card" id="watch-card" style="margin-bottom:16px">
+    <div class="pace-head"><h2 id="watch-title">Watch</h2><button type="button" class="chip" id="watch-toggle"></button></div>
+    <div id="watch-body"></div>
+  </section>
   <section class="card" id="timing-card" style="margin-bottom:16px">
     <h2 id="timing-title">Timing</h2>
     <div class="legend" id="lg-laps2"></div>
@@ -143,18 +147,18 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
 
-let standings, live, laps, schedule, entries, sectorData, config;
+let standings, live, laps, schedule, entries, sectorData, config, watchData;
 
 // Live timing every 10 s, lap history every 30 s, everything else every 5 minutes; the page
 // only redraws when something changed (unchanged files come back as cheap 304s).
 const loadedAt = { laps: 0, slow: 0 };
 async function load() {
   const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
-  const names = ["live", ...(wantLaps ? ["laps"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
+  const names = ["live", ...(wantLaps ? ["laps", "watch"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
   live = got.live;
-  if (wantLaps) { laps = got.laps; loadedAt.laps = now; }
+  if (wantLaps) { laps = got.laps; watchData = got.watch; loadedAt.laps = now; }
   if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config } = got); loadedAt.slow = now; }
   if (changed) render();
 }
@@ -208,6 +212,7 @@ function render() {
   $("sub").textContent = `Current race · #${sel.car} ${entries?.cars?.[sel.car]?.team || ""} · ${clsName}`;
 
   renderSectors(sel, clsName);
+  renderWatchCard(sel);
   const lc = live?.classes?.[sel.class];
   const age = live ? (Date.now() - new Date(live.updated)) / 60e3 : Infinity;
   const running = lc && age < 30;
@@ -875,6 +880,39 @@ function renderDrivers(sel, cars, rows) {
   $("drivers-note").innerHTML = !live.is_race ? "Drive time is counted during the race."
     : rules ? `Drive time counted from IMSA live timing, every 10 seconds (approximate). This race: ${cr.min ? `minimum ${hm(cr.min)} per driver (Art. 12.13)` : ""}${cr.am_min ? `, Bronze driver ${hm(cr.am_min)} (Trueman/Akin, Art. 12.15)` : ""}, maximum ${hm(rules.max)} per driver and no more than ${hm(rules.max_in_6h)} in any 6 hours (Art. 12.14).`
     : "Drive time counted from IMSA live timing (approximate). Drive-time rules for this event aren't loaded.";
+}
+
+// --- Watch: IMSA's own YouTube stream for the session, embedded with YouTube's player (nothing is
+// re-hosted), plus a link to IMSA.tv when IMSA lists an in-car camera for the selected car. Viewers
+// can switch the video off; that's remembered and nothing loads while it's off.
+const sessionKind = t => /qualif/i.test(t) ? "qualifying" : /practice/i.test(t) ? "practice" : /warm/i.test(t) ? "warm-up" : "race";
+function renderWatchCard(sel) {
+  const off = store.get("watch") === "off", w = watchData;
+  const running = live && !live.finished && Date.now() - new Date(live.updated) < 30 * 60e3;
+  const kind = live ? sessionKind(live.session || "") : null;
+  const recent = v => Date.now() - new Date(v.published) < 36 * 3600e3;
+  const match = w?.videos?.find(v => running && sessionKind(v.title) === kind && recent(v));
+  const latest = w?.videos?.[0];
+  let src = null, label = "";
+  if (running) { src = match ? `https://www.youtube-nocookie.com/embed/${match.id}?autoplay=0&rel=0` : w ? `https://www.youtube.com/embed/live_stream?channel=${w.channel}` : null; label = match ? match.title : "IMSA's live stream on YouTube"; }
+  else if (latest) { src = `https://www.youtube-nocookie.com/embed/${latest.id}?rel=0`; label = `Latest: ${latest.title}`; }
+  $("watch-title").textContent = running ? `Watch live · ${kind}` : "Watch";
+  $("watch-toggle").textContent = off ? "Turn video on" : "Turn video off";
+  $("watch-toggle").onclick = () => { store.set("watch", off ? "" : "off"); renderWatchCard(sel); };
+  const incar = w?.incar?.includes(sel.car) ? `<a class="golink" href="${esc(w.incar_url)}" target="_blank" rel="noopener">Watch #${esc(sel.car)}'s in-car on IMSA.tv ↗</a>` : "";
+  const note = `<p class="note">${running && kind === "race" ? `In the US the race is on <a href="https://www.peacocktv.com/" target="_blank" rel="noopener">Peacock</a> and NBC; IMSA's YouTube stream is for viewers outside the US. ` : ""}`
+    + `Video from IMSA's YouTube channel, played by YouTube. ${incar ? "" : "IMSA.tv has in-car cameras for a few cars each race; a link appears here when the selected car has one."}</p>`;
+  const body = $("watch-body");
+  if (off) { body.innerHTML = `<p class="dim" style="margin:4px 0 0">Video is off on this device.${incar ? " " + incar : ""}</p>`; body.dataset.src = ""; return; }
+  if (!src) { body.innerHTML = `<p class="empty">No IMSA stream found yet.</p>${incar}${note}`; body.dataset.src = ""; return; }
+  // Only rebuild the player when the video changes, so the 10-second refresh doesn't restart it.
+  if (body.dataset.src !== src) {
+    body.dataset.src = src;
+    body.innerHTML = `<div class="video"><iframe src="${src}" title="${esc(label)}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+      <p class="live-sub wlabel">${esc(label)}</p><div class="wlinks">${incar}</div>${note}`;
+  } else {
+    body.querySelector(".wlinks").innerHTML = incar;
+  }
 }
 
 // Yellow / red flag periods for a class as [fromLap, toLap, kind], from the scraper's flag log.

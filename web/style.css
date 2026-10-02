@@ -334,8 +334,11 @@ details.deep[open] > .charts { margin-top: 16px; }
 /* ---- Race tab layout: one column on phones and laptops, two on wide screens ---- */
 .race-grid { display: flex; flex-direction: column; }
 .race-grid .col { display: contents; }
-#ours-card { order: 1; } #feed-card { order: 2; } #timing-card { order: 3; } #drivers-card { order: 4; }
-#cars-card { order: 5; } #builder-card { order: 6; } #pace-card { order: 7; }
+#ours-card { order: 1; } #watch-card { order: 2; } #feed-card { order: 3; } #timing-card { order: 4; } #drivers-card { order: 5; }
+#cars-card { order: 6; } #builder-card { order: 7; } #pace-card { order: 8; }
+.video { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #000; margin-top: 8px; }
+.video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.wlabel { margin-top: 6px; }
 @media (min-width: 1280px) {
   body.race main { max-width: min(1760px, 96vw); }
   .race-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; align-items: start; }

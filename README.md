@@ -79,6 +79,10 @@ Set `CARS` in `.env` as `CLASS:NUMBER` pairs, e.g. `CARS=GTDPRO:4,GTD:13`, then 
 Each car's log of stops, driver changes and position changes (`ev` in `laps.json`) and per-driver drive
 time (`drivers` in `live.json`, with ratings from the entry list and the event's drive-time rules in
 `DRIVE_RULES`) are kept in `race_state.json`, so restarts and page reloads lose nothing.
+`app/watch.py` reads YouTube's public RSS feed for IMSA's channel (no API key) to find WeatherTech
+session streams for the Race page's Watch card (embedded with YouTube's player, nothing re-hosted), and
+notes which cars IMSA.tv lists with an in-car camera (linked, never embedded: IMSA.tv uses its own
+tokenised player). Checked every 3 minutes in a session window, hourly otherwise (`watch.json`).
 `RACE_CARS` (default `LMP2:73`, Pratt Miller's LMP2 ORECA) adds cars that are followed in live timing
 only: their class is tracked live and they get their own tab on the Race page, with no championship maths.
 The pages poll `live.json` every 10 s, `laps.json` every 30 s (Championship: 60 s) and the rest every 5 minutes.

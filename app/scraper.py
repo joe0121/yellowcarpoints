@@ -23,6 +23,7 @@ from urllib.parse import quote, unquote
 import pdfplumber
 
 import bop
+import watch
 import history
 import live
 import sectors
@@ -330,7 +331,7 @@ def main():
     status.start()
     # For the web pages: which cars are followed for the race only (their own tab).
     write("config.json", {"race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()]})
-    last, next_pdf, failures, next_sectors = None, 0.0, 0, 0.0
+    last, next_pdf, failures, next_sectors, next_watch = None, 0.0, 0, 0.0, 0.0
     while True:
         if time.monotonic() >= next_pdf:
             next_pdf = time.monotonic() + INTERVAL
@@ -355,6 +356,12 @@ def main():
                 refresh_sectors()
             except Exception:
                 log.exception("sectors failed")
+        if time.monotonic() >= next_watch:
+            next_watch = time.monotonic() + (180 if live.in_window() else 3600)
+            try:
+                watch.refresh()
+            except Exception:
+                log.exception("watch feeds failed")
         try:
             wait = live.step()
             failures = 0
