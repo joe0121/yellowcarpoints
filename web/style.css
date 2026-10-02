@@ -332,8 +332,9 @@ details.deep[open] > .charts { margin-top: 16px; }
 /* ---- Race tab layout: one column on phones and laptops, two on wide screens ---- */
 .race-grid { display: flex; flex-direction: column; }
 .race-grid .col { display: contents; }
-#ours-card { order: 1; } #watch-card { order: 2; } #feed-card { order: 3; } #timing-card { order: 4; } #drivers-card { order: 5; }
-#cars-card { order: 6; } #builder-card { order: 7; } #pace-card { order: 8; }
+/* Phone (one column): the default order, by time horizon. A saved Arrange layout overrides it. */
+#ours-card { order: 1; } #feed-card { order: 2; } #pn-card { order: 3; } #cars-card { order: 4; } #fin-card { order: 5; } #drivers-card { order: 6; } #rc-card { order: 7; }
+#wx-card { order: 8; } #timing-card { order: 9; } #builder-card { order: 10; } #pa-card { order: 11; } #sector-card { order: 12; } #map-card { order: 13; } #watch-card { order: 14; }
 .video { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #000; margin-top: 8px; }
 .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .wlabel { margin-top: 6px; }
@@ -428,7 +429,6 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .sessionbar .ttg::before { content: "· "; color: var(--text-3); }
 .dev-badge { position: fixed; top: 10px; left: 10px; z-index: 50; font: 700 12px Inter, sans-serif; letter-spacing: .08em; padding: 3px 10px; border-radius: 6px; background: #d03b3b; color: #fff; }
 /* race control */
-#rc-card { order: 3; } #feed-card { order: 3; }
 .rclist { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; max-height: 520px; overflow-y: auto; }
 .rclist li { display: grid; grid-template-columns: 62px 92px 1fr; gap: 8px; align-items: baseline; padding: 5px 0 5px 6px; border-top: 1px solid var(--line); border-left: 3px solid transparent; }
 .rclist li:first-child { border-top: 0; }
@@ -453,7 +453,6 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 :root[data-theme="dark"] .track-bg { opacity: .10; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .track-bg { opacity: .10; } }
 /* track map */
-#map-card { order: 2; }
 .trackmap { display: block; width: 100%; max-height: 520px; margin-top: 6px; }
 .trackmap .map-track { fill: none; stroke: var(--line); stroke-width: 26; stroke-linejoin: round; }
 .trackmap .sf { fill: var(--text-3); }
@@ -478,7 +477,6 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 .qnote { margin-top: 6px; font-size: 13px; color: var(--text-2); }
 .qnote b { color: var(--flag-yellow); }
 /* weather */
-#wx-card { order: 2; }
 .wxstrip { display: flex; gap: 4px; overflow-x: auto; padding: 6px 0 4px; scrollbar-width: thin; }
 .wxh { flex: 0 0 auto; min-width: 54px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 8px; border: 1px solid var(--line); font-size: 12px; }
 .wxh.race { border-color: var(--accent); }
@@ -506,7 +504,6 @@ body.arranging .card.dragging { opacity: .45; }
 .arrange-bar .copied { color: var(--good); font-weight: 600; }
 .champ-cards { display: flex; flex-direction: column; }
 /* pace analysis */
-#pa-card { order: 8; }
 #pa-drivers svg { display: block; width: 100%; height: auto; }
 #pa-drivers text { font: 11px Inter, sans-serif; fill: var(--text-3); }
 #pa-drivers text.lbl { font-weight: 600; fill: var(--text); }
@@ -558,3 +555,33 @@ table.cauheat tr.often th { color: var(--text); }
 table.cauheat tr.often td { height: 18px; }
 .cauhours div > span { display: block; }
 .cauhours .h { margin-top: 3px; }
+
+/* Pit wall strip: the selected car at a glance (Race tab, above the cards) */
+.pitwall { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; }
+.pwgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px 14px; }
+.pwt { display: flex; flex-direction: column; min-width: 0; }
+.pwt .k { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.pwt b { font-family: Oswald, sans-serif; font-weight: 500; font-size: 22px; line-height: 1.15; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pwt.big b { font-size: 30px; color: var(--accent-ink); }
+.pwt .s { font-size: 12px; color: var(--text-2); }
+.pwt.warn b, .pwt.warn .s { color: var(--critical); }
+.pwline { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 14px; color: var(--text); }
+@media (max-width: 1100px) { .pwgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .pwgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pwt.big { grid-column: span 2; } }
+
+/* If we pit now */
+.pnrow { padding: 8px 0; border-top: 1px solid var(--line); }
+.pnrow:first-child { border-top: 0; }
+.pnhead { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 13px; }
+.pnpos { font-family: Oswald, sans-serif; font-size: 20px; color: var(--accent-ink); }
+.pnaround { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 13px; align-items: baseline; }
+.pncar { font-weight: 600; }
+.pnme { font-weight: 700; color: var(--on-accent); background: var(--accent); border-radius: 6px; padding: 1px 8px; }
+.pncaution { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; }
+
+/* To the flag; drive-time risk */
+.tag.est { font-size: 10px; font-weight: 600; color: var(--text-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.dwarn { color: var(--critical); font-weight: 600; }
+.dbar.risk-plan i { background: var(--flag-yellow); }
+.dbar.risk-urgent i, .dbar.risk-impossible i { background: var(--critical); }
+.dlist .d6 { flex-basis: 100%; font-size: 11px; }

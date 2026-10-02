@@ -32,6 +32,7 @@
     <div class="titleline" id="titleline"></div>
     <div class="qnote" id="qnote" hidden></div>
   </section>
+  <section class="pitwall" id="pw" hidden aria-label="Pit wall: the selected car at a glance" aria-live="polite"></section>
 
 
 
@@ -53,34 +54,34 @@
     <h2>What just happened</h2>
     <ul class="feed" id="feed"></ul>
   </section>
-  <section class="card" id="rc-card" hidden style="margin-bottom:16px">
-    <div class="pace-head"><h2 id="rc-title">Race control</h2><a class="golink rc-live" href="https://livetiming.alkamelsystems.com/IMSA" target="_blank" rel="noopener" title="Al Kamel's official live timing, RC tab">Live on Al Kamel ↗</a><span class="bseg" id="rc-filter" role="group" aria-label="Which messages"></span></div>
-    <p class="live-sub" id="rc-note" hidden></p>
-    <ul class="rclist" id="rc-list"></ul>
-    <button class="linkbtn" id="rc-more" type="button" hidden></button>
-    <p class="note" id="rc-foot"></p>
-  </section>
-  <section class="card" id="drivers-card" hidden style="margin-bottom:16px">
-    <h2>Drivers</h2>
-    <div class="dgrid" id="drivers"></div>
-    <p class="note" id="drivers-note"></p>
+  <section class="card" id="pn-card" hidden style="margin-bottom:16px">
+    <div class="pace-head"><h2 id="pn-title">If we pit now</h2><span class="bseg" id="pn-types" role="group" aria-label="Stop type"></span></div>
+    <div id="pn-body"></div>
+    <p class="note" id="pn-note"></p>
   </section>
   <section class="card" id="cars-card" style="margin-bottom:16px">
     <h2 id="title">Pit strategy</h2>
     <div id="kpis"></div>
     <p class="note" id="kpi-note"></p>
   </section>
+  <section class="card" id="fin-card" hidden style="margin-bottom:16px">
+    <h2 id="fin-title">To the flag</h2>
+    <div class="scroll"><table class="predtab fintab" id="fin-table"></table></div>
+    <p class="note" id="fin-note"></p>
+  </section>
+  <section class="card" id="drivers-card" hidden style="margin-bottom:16px">
+    <h2>Drivers</h2>
+    <div class="dgrid" id="drivers"></div>
+    <p class="note" id="drivers-note"></p>
+  </section>
     </div>
     <div class="col col-b" data-layout="race" data-slot="b">
-  <section class="card" id="watch-card" style="margin-bottom:16px">
-    <div class="pace-head"><h2 id="watch-title">Watch</h2><button type="button" class="chip" id="watch-toggle"></button></div>
-    <div id="watch-body"></div>
-  </section>
-  <section class="card" id="map-card" hidden style="margin-bottom:16px">
-    <h2 id="map-title">Track map</h2>
-    <svg id="map-svg" class="trackmap" role="img" aria-label="Estimated car positions on track"></svg>
-    <p class="live-sub" id="map-pit"></p>
-    <p class="note" id="map-note"></p>
+  <section class="card" id="rc-card" hidden style="margin-bottom:16px">
+    <div class="pace-head"><h2 id="rc-title">Race control</h2><a class="golink rc-live" href="https://livetiming.alkamelsystems.com/IMSA" target="_blank" rel="noopener" title="Al Kamel's official live timing, RC tab">Live on Al Kamel ↗</a><span class="bseg" id="rc-filter" role="group" aria-label="Which messages"></span></div>
+    <p class="live-sub" id="rc-note" hidden></p>
+    <ul class="rclist" id="rc-list"></ul>
+    <button class="linkbtn" id="rc-more" type="button" hidden></button>
+    <p class="note" id="rc-foot"></p>
   </section>
   <section class="card" id="wx-card" hidden style="margin-bottom:16px">
     <h2 id="wx-title">Weather</h2>
@@ -117,17 +118,27 @@
     <h3 class="wxh3">Class pace map</h3>
     <div class="scroll" id="pa-map"></div>
   </section>
-    </div>
-  </div>
-
-  <details class="card fold deep" id="deep">
-    <summary><h2>More detail</h2><span class="dim">sectors, gap and energy charts, class strategy board</span></summary>
   <section class="card" id="sector-card" hidden style="margin-bottom:16px">
     <h2>Sectors</h2>
     <p class="live-sub" id="sector-sub"></p>
     <div class="scroll"><table id="sector-table"></table></div>
     <p class="note" id="sector-note"></p>
   </section>
+  <section class="card" id="map-card" hidden style="margin-bottom:16px">
+    <h2 id="map-title">Track map</h2>
+    <svg id="map-svg" class="trackmap" role="img" aria-label="Estimated car positions on track"></svg>
+    <p class="live-sub" id="map-pit"></p>
+    <p class="note" id="map-note"></p>
+  </section>
+  <section class="card" id="watch-card" style="margin-bottom:16px">
+    <div class="pace-head"><h2 id="watch-title">Watch</h2><button type="button" class="chip" id="watch-toggle"></button></div>
+    <div id="watch-body"></div>
+  </section>
+    </div>
+  </div>
+
+  <details class="card fold deep" id="deep">
+    <summary><h2>More detail</h2><span class="dim">sectors, gap and energy charts, class strategy board</span></summary>
 
     <div class="charts">
       <section class="card">
@@ -161,6 +172,7 @@
 <script src="cards.js"></script>
 <script src="links.js"></script>
 <script src="picker.js"></script>
+<script src="pitwall.js"></script>
 <script>
 addEventListener("cardtoggle", () => standings && render());
 const CLASS_NAMES = { GTDPRO: "GTD PRO", GTD: "GTD", GTP: "GTP", LMP2: "LMP2" };
@@ -252,7 +264,7 @@ function render() {
     $("kpis").innerHTML = `<p class="empty">No WeatherTech session recorded yet.</p>`;
     $("kpi-note").textContent = "Strategy data is collected during WeatherTech sessions. It will appear here once the next one starts.";
     ["gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
-    ["ours-card", "feed-card", "timing-card", "drivers-card", "builder-card"].forEach(id => $(id).hidden = true);
+    ["ours-card", "feed-card", "timing-card", "drivers-card", "builder-card", "pn-card", "fin-card", "pw"].forEach(id => $(id).hidden = true);
     $("titleline").innerHTML = "";
     $("board").innerHTML = "";
     $("timing").innerHTML = ""; $("lg-laps2").innerHTML = ""; $("ch-laps2").querySelector("svg")?.remove();
@@ -302,6 +314,9 @@ function render() {
   renderWeather(sel, rows, lc, lapsCls, cmpCars);
   if (!$("pa-card").classList.contains("collapsed")) renderPaceAnalysis(sel, rows, lapsCls, cmpCars, clsName);
   renderDrivers(sel, cmpCars, rows);
+  renderPitWall(sel, lc, lapsCls);
+  renderPitNow(sel, lc, lapsCls, clsName);
+  renderFinish(sel, lc, lapsCls, cmpCars, clsName);
   $("title").textContent = `Pit strategy · ${clsName}`;
   renderWatch(sel, cmpCars, rows, live.is_race, !raceOnly);
   if (!me) $("kpis").innerHTML = `<p class="empty">#${esc(sel.car)} isn't in this session.</p>`;
@@ -815,27 +830,32 @@ function renderFeed(sel, cars, rows, lapsCls, fc) {
 const hm = s => s == null ? "–" : `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}`;
 const RATING = { Platinum: ["Pro", "Platinum"], Gold: ["Pro", "Gold"], Silver: ["Silver", "Silver"], Bronze: ["Am", "Bronze"] };
 function renderDrivers(sel, cars, rows) {
-  const rules = live.drive_rules, cr = rules?.classes?.[sel.class] || {};
+  const rules = live.drive_rules, cr = rules?.classes?.[sel.class] || {}, remaining = hmsSecs(live.remaining);
+  const lapsCls = laps?.classes?.[sel.class] || {};
+  const RISK = { impossible: "can't reach it in the time left", urgent: "urgent", plan: "plan it", ok: "" };
   const blocks = cars.map(c => {
     const r = rows.find(x => x.car === c.car), d = r?.drivers;
     if (!d?.list?.length) return "";
+    const dv = live.is_race ? pwDrive(r, lapsCls[c.car], rules, sel.class, remaining) : null;
     const lines = d.list.map(x => {
       const [kind, full] = RATING[x.rating] || ["", x.rating || "unrated"];
-      const am = x.rating === "Bronze" && cr.am_min, inCar = x.name === d.now;
-      const need = am ? Math.max(0, cr.am_min - x.secs) : null;
-      const bar = am ? `<span class="dbar" title="${hm(x.secs)} of the ${hm(cr.am_min)} minimum"><i style="width:${Math.min(100, x.secs / cr.am_min * 100)}%"></i></span>
-          <span class="${need ? "dim" : "up"}">${need ? `needs ${hm(need)} more` : "minimum done ✓"}</span>` : "";
+      const p = dv?.people.find(q => q.name === x.name), inCar = x.name === d.now;
+      const need = p?.need || 0;
+      const bar = live.is_race && need ? `<span class="dbar ${p.risk && p.risk !== "ok" ? "risk-" + p.risk : ""}" title="${hm(x.secs)} of the ${hm(need)} minimum${x.rating === "Bronze" && cr.am_min ? " (Bronze)" : ""}"><i style="width:${Math.min(100, x.secs / need * 100)}%"></i></span>
+          <span class="${p.short ? (p.risk && p.risk !== "ok" ? "dwarn" : "dim") : "up"}">${p.short ? `needs ${hm(p.short)} more${p.latest != null && p.latest >= 0 ? ` · in by ~${pwClock(p.latest)} ET` : ""}${RISK[p.risk] ? ` · ${RISK[p.risk]}` : ""}` : "minimum done ✓"}</span>` : "";
+      const six = p && inCar && rules ? `<span class="dim d6" title="Approximate: lap times between driver changes">${hm(Math.max(0, p.used6))} of ${hm(rules.max_in_6h)} in the last 6 h${p.sixLeft < 45 * 60 ? ` · <b class="dwarn">${hm(Math.max(0, p.sixLeft))} left</b>` : ""}</span>` : "";
       return `<li class="${inCar ? "incar" : ""}"><span class="dname">${esc(x.name)}</span>
         <span class="rating r-${esc(kind.toLowerCase() || "x")}" title="${esc(full)}-rated">${esc(kind || "?")}${full && full !== kind ? `<small>${esc(full)}</small>` : ""}</span>
         <span class="dtime">${live.is_race ? hm(x.secs) : ""}</span>
-        ${inCar ? `<span class="badge">in the car${live.is_race && d.stint_secs != null ? ` · ${hm(d.stint_secs)}` : ""}</span>` : ""}${bar}</li>`;
+        ${inCar ? `<span class="badge">in the car${live.is_race && d.stint_secs != null ? ` · ${hm(d.stint_secs)}` : ""}</span>` : ""}${bar}${six}</li>`;
     }).join("");
-    return `<div class="dcar" style="--c:${c.style.color}"><div class="who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> <small class="dim">${esc(c.role)}</small></div><ul class="dlist">${lines}</ul></div>`;
+    const head = dv && dv.owed ? `<div class="sub ${dv.overbooked ? "dwarn" : "dim"}">${dv.overbooked ? "⚠ " : ""}Still owed to reach the minimums: ${hm(dv.owed)}, with ${hm(remaining || 0)} left${dv.overbooked ? ": not everyone can make it" : ""}</div>` : "";
+    return `<div class="dcar" style="--c:${c.style.color}"><div class="who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> <small class="dim">${esc(c.role)}</small></div>${head}<ul class="dlist">${lines}</ul></div>`;
   }).join("");
   $("drivers-card").hidden = !blocks;
   $("drivers").innerHTML = blocks;
   $("drivers-note").innerHTML = !live.is_race ? "Drive time is counted during the race."
-    : rules ? `Drive time counted from IMSA live timing, every 10 seconds (approximate). This race: ${cr.min ? `minimum ${hm(cr.min)} per driver (Art. 12.13)` : ""}${cr.am_min ? `, Bronze driver ${hm(cr.am_min)} (Trueman/Akin, Art. 12.15)` : ""}, maximum ${hm(rules.max)} per driver and no more than ${hm(rules.max_in_6h)} in any 6 hours (Art. 12.14).`
+    : rules ? `Drive time counted from IMSA live timing, every 10 seconds (approximate). This race: ${cr.min ? `minimum ${hm(cr.min)} per driver to score points (Art. 12.13)` : ""}${cr.am_min ? `, Bronze driver ${hm(cr.am_min)} (Art. 12.15)` : ""}, maximum ${hm(rules.max)} per driver and no more than ${hm(rules.max_in_6h)} in any 6 hours (Art. 12.14). "In by" is the latest a driver can get in and still reach the minimum, leaving time for the others who need it and a few minutes per stop; the 6-hour figure is estimated from lap times between driver changes.`
     : "Drive time counted from IMSA live timing (approximate). Drive-time rules for this event aren't loaded.";
 }
 
