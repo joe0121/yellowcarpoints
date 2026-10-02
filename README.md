@@ -161,9 +161,19 @@ To try changes first, use the dev site (`compose.dev.yaml`, separate from produc
                              # production's live data read-only, its own test API database
     ./dev.sh replay [dir]    # run the scraper code in ./app over a recording (default: newest,
                              # works mid-race) into dev data; no IMSA traffic
-    ./dev.sh scraper         # run the dev scraper live against IMSA (30 s polling) into dev data
+    ./dev.sh scraper         # dev scraper live against IMSA (30 s polling) into dev data: a second
+                             # recorder that keeps going while production restarts
+    ./dev.sh update-scraper  # update production's scraper, then fill its gap from the dev recorder
+    ./dev.sh fill-gap        # just the gap fill
     ./dev.sh prod-data       # back to production's live data
     ./dev.sh down
+
+Gap fill: with the dev recorder running, `./dev.sh update-scraper` restarts production on the new image
+and hands it the dev recorder's `race_state.json` / `telemetry_state.json` as `merge_race.json` /
+`merge_telemetry.json`. On its next poll production merges them (`app/merge.py`: same session only;
+adds missing laps, gaps, stops, driver and position changes, flags, energy and refuels; drive time
+takes the larger of the two) and deletes the files. Tested by cutting 6 minutes out of a recording:
+the merge restored all 142 missing laps and every stop and driver change.
 
 When it looks right: commit and push (GitHub builds the images), then update production one service
 at a time, web first: `docker compose pull web && docker compose up -d --no-deps web`; the scraper

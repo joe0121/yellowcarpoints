@@ -52,4 +52,6 @@ volumes:
   api-db-dev:
   dev-data:
     name: ycp-dev_dev-data
+  replay-data:
+    name: ycp-dev_replay-data
   dev-status:

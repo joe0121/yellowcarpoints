@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import bop
+import merge
 import history
 import telemetry
 import status
@@ -569,6 +570,7 @@ def step():
         _s["state"] = saved if saved and saved.get("key") == key else {"key": key, "cars": {}}
         _s["strategy"], _s["strategy_at"] = {}, 0.0
     state = _s["state"]
+    merge.pending(state, TELEMETRY)   # gap fill from the dev recorder after a restart (./dev.sh fill-gap)
     flag_now = info.get("F", "")
     track(state, feed, now, running=is_race and not re.search(r"check|finish|red", flag_now, re.I))
 
