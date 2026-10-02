@@ -421,3 +421,8 @@ dialog.acct form[method="dialog"] { text-align: right; margin-top: 4px; }
 /* live position on the picker buttons (Race tab) */
 .picker a .ppos { font: 500 12px Inter, sans-serif; margin-left: 5px; opacity: .8; }
 .picker a .pit { margin-left: 5px; font: 700 10px Inter, sans-serif; letter-spacing: .02em; padding: 1px 5px; line-height: 1.4; vertical-align: 2px; color: #111; }
+/* session bar: centred like the header */
+.sessionbar { text-align: center; }
+.sessionbar .live-head { justify-content: center; }
+.sessionbar .ttg { margin-left: 0; }
+.sessionbar .ttg::before { content: "· "; color: var(--text-3); }
