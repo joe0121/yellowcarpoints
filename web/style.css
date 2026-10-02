@@ -218,7 +218,7 @@ td.nowcol { background: var(--row-hl); font-weight: 700; color: var(--text); }
 .needs-lines { list-style: none; margin: 10px 0 0; padding: 0; font-size: 14px; color: var(--text-2); }
 .needs-lines li { padding: 5px 0 5px 10px; border-left: 4px solid var(--c, var(--line)); margin-top: 4px; }
 .needs-lines b { color: var(--text); }
-a.golink { white-space: nowrap; font-weight: 600; }
+a.golink { white-space: nowrap; font-weight: 600; color: var(--accent-ink); }
 details.more { margin-top: 10px; }
 details.more > summary, details.fold > summary, details.deep > summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 details.fold > summary { list-style: none; display: flex; align-items: center; gap: 8px; }
@@ -246,3 +246,8 @@ table.ours td.total { font: 600 17px Oswald, sans-serif; }
 details.deep > summary { gap: 12px; }
 details.deep .card { margin-bottom: 0; }
 details.deep[open] > .charts { margin-top: 16px; }
+/* theme picker */
+.theme { display: inline-flex; margin-left: auto; border: 1px solid var(--line); border-radius: 99px; padding: 2px; background: var(--surface); }
+.theme button { font: 600 12px Inter, system-ui, sans-serif; color: var(--text-2); background: none; border: 0; border-radius: 99px; padding: 3px 10px; cursor: pointer; }
+.theme button[aria-checked="true"] { background: var(--text); color: var(--bg); }
+.theme button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
