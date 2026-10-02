@@ -575,6 +575,14 @@ def step():
     by_class = {}
     for c in sorted(feed, key=lambda c: c["PIC"]):
         by_class.setdefault(c["C"], []).append(c)
+    # Flag changes by class-leader lap, so charts can shade yellow and red periods.
+    kind = "red" if re.search(r"red", flag_now, re.I) else "yellow" if re.search(r"yellow|fcy|caution|safety", flag_now, re.I) \
+        else "green" if re.search(r"green", flag_now, re.I) else "other"
+    for cls, rows in by_class.items():
+        fl = state.setdefault("flags", {}).setdefault(cls, [])
+        lead_lap = max(int(r.get("L") or 0) for r in rows)
+        if not fl or fl[-1][1] != kind:
+            fl.append([lead_lap, kind])
     if is_quali:
         quali = read("quali.json") or {}
         if quali.get("event") != info.get("E"):
@@ -650,7 +658,7 @@ def step():
     }
     write("live.json", live_out)
     RECORDER.output("live.json", live_out)
-    laps_out = {"updated": now_iso(), "session": name, "classes": {
+    laps_out = {"updated": now_iso(), "session": name, "flags": state.get("flags", {}), "classes": {
         cls: {n: {"laps": st["laps"], "stops": st["stops"], "gaps": st.get("gaps", []),
                   "energy": tel["cars"].get(n, {}).get("lap_energy", []),
                   "margins": state.get("margins", {}).get(n, []), "ev": st.get("ev", [])}

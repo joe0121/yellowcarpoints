@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="style.css">
 <script src="theme.js"></script>
 </head>
-<body>
+<body class="race">
 <main>
   <header>
     <div>
@@ -29,6 +29,14 @@
     <nav class="vettes" id="vettes" hidden aria-label="Corvettes in this session"></nav>
   </section>
 
+
+
+
+
+
+
+  <div class="race-grid">
+    <div class="col col-a">
   <section class="card" id="ours-card" style="margin-bottom:16px">
     <div class="pace-head">
       <h2 id="ours-title">Our cars</h2>
@@ -37,18 +45,22 @@
     <div class="scroll"><table id="ours" class="ours"></table></div>
     <div class="watch" id="watch" hidden></div>
   </section>
-
   <section class="card" id="feed-card" style="margin-bottom:16px">
     <h2>What just happened</h2>
     <ul class="feed" id="feed"></ul>
   </section>
-
   <section class="card" id="drivers-card" hidden style="margin-bottom:16px">
     <h2>Drivers</h2>
     <div class="dgrid" id="drivers"></div>
     <p class="note" id="drivers-note"></p>
   </section>
-
+  <section class="card" id="cars-card" style="margin-bottom:16px">
+    <h2 id="title">Pit strategy</h2>
+    <div id="kpis"></div>
+    <p class="note" id="kpi-note"></p>
+  </section>
+    </div>
+    <div class="col col-b">
   <section class="card" id="timing-card" style="margin-bottom:16px">
     <h2 id="timing-title">Timing</h2>
     <div class="legend" id="lg-laps2"></div>
@@ -56,13 +68,11 @@
     <div class="scroll" style="margin-top:12px"><table id="timing" class="timing"></table></div>
     <button class="linkbtn" id="timing-more" type="button"></button>
   </section>
-
-  <section class="card" id="cars-card" style="margin-bottom:16px">
-    <h2 id="title">Pit strategy</h2>
-    <div id="kpis"></div>
-    <p class="note" id="kpi-note"></p>
+  <section class="card" id="builder-card" style="margin-bottom:16px">
+    <h2 id="builder-title">Build a chart</h2>
+    <p class="live-sub">Pick what to plot and which cars. Shaded bands are yellow flags, ▼ marks a pit stop. Your charts are remembered on this device.</p>
+    <div id="builder"></div>
   </section>
-
   <section class="card m-lite" id="pace-card" style="margin-bottom:16px">
     <div class="pace-head">
       <h2>Pace</h2>
@@ -85,6 +95,8 @@
     <div class="scroll"><table id="pace-table"></table></div>
     <p class="note" id="pace-note"></p>
   </section>
+    </div>
+  </div>
 
   <details class="card fold deep" id="deep">
     <summary><h2>More detail</h2><span class="dim">sectors, gap and energy charts, class strategy board</span></summary>
@@ -209,7 +221,7 @@ function render() {
     $("kpis").innerHTML = `<p class="empty">No WeatherTech session recorded yet.</p>`;
     $("kpi-note").textContent = "Strategy data is collected during WeatherTech sessions. It will appear here once the next one starts.";
     ["gaps", "energy", "lead"].forEach(k => { $("ch-" + k).querySelector("svg")?.remove(); });
-    ["ours-card", "feed-card", "timing-card", "drivers-card"].forEach(id => $(id).hidden = true);
+    ["ours-card", "feed-card", "timing-card", "drivers-card", "builder-card"].forEach(id => $(id).hidden = true);
     $("titleline").innerHTML = ""; $("vettes").hidden = true;
     $("board").innerHTML = "";
     $("pace-card").hidden = true;
@@ -223,6 +235,7 @@ function render() {
   const ahead = byCar(fc.ahead), ref = byCar(fc.ref);
   const strat = lc.strategy?.cars || {};
   const lapsCls = laps?.classes?.[sel.class] || {};
+  bandsNow = flagBands(sel.class);
 
   // --- status line
   const sess = live.session.replace(/^WeatherTech Championship( - )?/, "") || "Session";
@@ -257,6 +270,9 @@ function render() {
   drawLeaderChart(S);
   renderTiming(lc, sel, rows, strat, lapsCls, cmpCars, clsName);
   $("pace-card").hidden = false;
+  $("builder-card").hidden = false;
+  // Don't redraw the builder under someone's fingers (an open dropdown would close).
+  if (!$("builder").contains(document.activeElement)) renderBuilder(sel, rows, lapsCls, cmpCars, clsName);
   renderPace(lc, sel, rows, lapsCls, fc, clsName, cmpCars);
   renderBoard(rows, strat, sel, lapsCls, clsName, fc);
 
@@ -315,7 +331,8 @@ function kpiTiles(me, st, lc, myLaps) {
     const arrive = e.use_per_lap && e.laps_left != null ? Math.max(0, e.now - e.use_per_lap * Math.floor(e.laps_left)) : null;
     // Exact from IMSA's BoP when we have it (fixed refill rate); otherwise estimated from observed fills.
     const bopFill = e.fill_source === "bop" ? e.next_fill_secs : null;
-    const nextFill = bopFill ?? (fm && arrive != null ? Math.round(fm.perPct * (100 - arrive)) : null);
+    const est = bopFill ?? (fm && arrive != null ? Math.round(fm.perPct * (100 - arrive)) : null);
+    const nextFill = est > 0 ? est : null;   // a negative or zero estimate means the fill data is off; show nothing
     const fillTitle = bopFill != null ? `Refuelling only. IMSA BoP ${live.bop?.bulletin || ""}: a full tank takes ${e.full_fill_secs} s.` : "Estimated from this session's fills of 40%+.";
     out.push(kpi(bopFill != null ? "Next fill" : "Next fill (est.)", nextFill ? `${bopFill != null ? "" : "~"}${nextFill}<small>s</small>` : "–",
       (bopFill != null ? `refuel only · BoP ${e.full_fill_secs}s full` : fm ? `from ${fm.n} fills of 40%+` : "needs 2 fills of 40%+")
@@ -340,13 +357,13 @@ function kpiTiles(me, st, lc, myLaps) {
 }
 
 // --- generic line chart with crosshair tooltip (one y axis) ------------------------
-function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = false, empty = "Not enough laps yet.", zeroLine = false, robust = false, xName = "Lap" }) {
+function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = false, empty = "Not enough laps yet.", zeroLine = false, robust = false, xName = "Lap", bands = [], height = 220, step: stepped = false }) {
   const el = $(id), tip = el.querySelector(".tip");
   el.querySelector("svg")?.remove();
   el.querySelector(".empty")?.remove();
   const pts = series.flatMap(s => s.pts);
   if (pts.length < 2) { el.insertAdjacentHTML("afterbegin", `<p class="empty">${empty}</p>`); return; }
-  const W = Math.max(300, el.clientWidth), H = 220, m = { t: 10, r: 54, b: 24, l: 50 };
+  const W = Math.max(300, el.clientWidth), H = height, m = { t: 10, r: 54, b: 24, l: 50 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   const xs = pts.map(p => p[0]), x0 = Math.min(...xs), x1 = Math.max(...xs, x0 + 1);
   // Robust charts scale to the middle 96% of values; pit-cycle spikes run off the edge.
@@ -362,12 +379,21 @@ function lineChart(id, { series, yFmt = v => v.toFixed(1), yDomain, invert = fal
   if (zeroLine && y0 < 0 && y1 > 0) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--text-3)" stroke-dasharray="2 3"/>`;
   const step = Math.max(1, Math.ceil((x1 - x0) / Math.floor(iw / 48)));
   for (let v = Math.ceil(x0); v <= x1; v += step) g += `<text x="${x(v)}" y="${H - 6}" text-anchor="middle">${v}</text>`;
+  // Yellow / red flag periods behind everything; pit stops as small ticks along the top in each car's colour.
+  for (const [a, b, kind] of bands) {
+    const xa = Math.max(m.l, x(a)), xb = Math.min(W - m.r, x(b));
+    if (xb > xa) g += `<rect x="${xa}" y="${m.t}" width="${xb - xa}" height="${ih}" fill="${kind === "red" ? "var(--critical)" : "var(--flag-yellow)"}" fill-opacity=".13"><title>${kind === "red" ? "Red flag" : "Full-course yellow"}, laps ${a}–${b}</title></rect>`;
+  }
   let lines = "", labels = "";
   const ends = [];
+  series.filter(s => s.stops?.length).forEach((s, i) => {
+    for (const lap of s.stops) if (lap >= x0 && lap <= x1)
+      lines += `<path d="M${x(lap) - 4} ${m.t + 1 + i * 7}h8l-4 6z" fill="${s.color}"><title>${esc(s.name || "")} pit stop, lap ${lap}</title></path>`;
+  });
   for (const s of series) {
     if (!s.pts.length) continue;
     if (s.dots) lines += s.pts.map(p => `<circle cx="${x(p[0])}" cy="${y(Math.max(y0, Math.min(y1, p[1])))}" r="2.5" fill="${s.color}" fill-opacity=".55"/>`).join("");
-    else lines += `<polyline fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" ${s.dash ? `stroke-dasharray="${s.dash}"` : ""} stroke-linejoin="round" stroke-linecap="round" points="${s.pts.map(p => `${x(p[0])},${y(Math.max(y0, Math.min(y1, p[1])))}`).join(" ")}"/>`;
+    else lines += `<polyline fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" ${s.dash ? `stroke-dasharray="${s.dash}"` : ""} stroke-linejoin="round" stroke-linecap="round" points="${(stepped ? s.pts.flatMap((p, i) => i ? [[p[0], s.pts[i - 1][1]], p] : [p]) : s.pts).map(p => `${x(p[0])},${y(Math.max(y0, Math.min(y1, p[1])))}`).join(" ")}"/>`;
     if (s.marker && !s.dots) { const every = Math.max(1, Math.ceil(s.pts.length / 20));
       lines += s.pts.filter((p, i) => i % every === 0 || i === s.pts.length - 1).map(p => shape(s.marker, x(p[0]), y(Math.max(y0, Math.min(y1, p[1]))), s.color)).join(""); }
     if (s.end) { const p = s.pts.at(-1); ends.push({ x: x(p[0]) + 6, y: y(Math.max(y0, Math.min(y1, p[1]))) + 4, t: s.end }); }
@@ -420,7 +446,7 @@ function drawGapChart(me, ahead, ref, refRole, lapsCls) {
     series.push({ name: leading ? `ahead of #${ref.car}` : `behind #${ref.car}`, pts: p, color: C.ref }, ...trendSeries(p, C.ref, "s/lap"));
     lg.push(`<span style="--c:${C.ref}">seconds ${leading ? "ahead of" : "behind"} #${esc(ref.car)} (${esc(refRole)})</span>`);
   }
-  lineChart("ch-gaps", { series, robust: true, zeroLine: true, yFmt: v => v.toFixed(1) + "s", empty: "Gaps build up once the race is running." });
+  lineChart("ch-gaps", { series, bands: bandsNow, robust: true, zeroLine: true, yFmt: v => v.toFixed(1) + "s", empty: "Gaps build up once the race is running." });
   $("lg-gaps").innerHTML = lg.join("") + `<span style="--c:var(--text-3)">dashed: trend over the last 10 laps (falling = gap shrinking)</span>`;
 }
 
@@ -431,7 +457,7 @@ function drawEnergyChart(S, me) {
     const last = S[0].d.energy.at(-1);
     if (last) series.push({ pts: [last, [e.next_stop_lap, Math.max(0, last[1] - e.use_per_lap * (e.next_stop_lap - last[0]))]], color: C.me, dash: "5 4", width: 1.5, end: `stop ~L${e.next_stop_lap}` });
   }
-  lineChart("ch-energy", { series, yFmt: v => v.toFixed(0) + "%", yDomain: [0, 100], empty: "No telemetry recorded for this car yet." });
+  lineChart("ch-energy", { series, bands: bandsNow, yFmt: v => v.toFixed(0) + "%", yDomain: [0, 100], empty: "No telemetry recorded for this car yet." });
   $("lg-energy").innerHTML = S.map(s => `<span style="--c:${s.color}">#${esc(s.car)} ${s.role}</span>`).join("")
     + (e?.next_stop_lap ? `<span style="--c:var(--text-3)">dashed: projected to the next stop</span>` : "");
 }
@@ -440,7 +466,7 @@ function drawLeaderChart(S) {
   const series = [];
   for (const s of S) { const p = offPit(s.d.gaps || [], s.d); series.push({ name: `#${s.car}`, pts: p, color: s.color, width: s.role === "this car" ? 2 : 1.25 }); }
   const mine = S[0] ? trendSeries(offPit(S[0].d.gaps || [], S[0].d), S[0].color, "s/lap") : [];
-  lineChart("ch-lead", { series: [...series, ...mine], robust: true, yFmt: v => v.toFixed(0) + "s", empty: "Gaps build up once the race is running." });
+  lineChart("ch-lead", { series: [...series, ...mine], bands: bandsNow, robust: true, yFmt: v => v.toFixed(0) + "s", empty: "Gaps build up once the race is running." });
   $("lg-lead").innerHTML = S.map(s => `<span style="--c:${s.color}">#${esc(s.car)} ${s.role}</span>`).join("")
     + `<span style="--c:var(--text-3)">seconds behind the class leader; dashed: trend</span>`;
 }
@@ -699,9 +725,9 @@ function renderTiming(lc, sel, rows, strat, lapsCls, cars, clsName) {
     const pit = new Set((d.stops || []).flatMap(n => [n, n + 1]));
     const pts = d.laps.filter(([n]) => n > 1 && !pit.has(n));
     const best = Math.min(...pts.map(p => p[1]));
-    series.push({ name: `#${c.car}`, pts: pts.filter(p => p[1] <= best * 1.07), color: c.style.color, width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}` });
+    series.push({ name: `#${c.car}`, pts: pts.filter(p => p[1] <= best * 1.07), color: c.style.color, width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}`, stops: d.stops });
   }
-  lineChart("ch-laps2", { series, yFmt: lapTime, empty: "Lap times appear after a few laps." });
+  lineChart("ch-laps2", { series, bands: bandsNow, height: 260, yFmt: lapTime, empty: "Lap times appear after a few laps." });
   $("lg-laps2").innerHTML = cars.map(c => `<span class="sw">${swatchOf(c.style)}#${esc(c.car)} <span class="dim">${esc(c.role)}</span></span>`).join("")
     + `<span class="sw dim">laps over 107% of the car's best, in- and out-laps left out</span>`;
   // Class timing (practice/qualifying: gap to the class's fastest lap, since IMSA's gap column is a laps difference there).
@@ -851,7 +877,103 @@ function renderDrivers(sel, cars, rows) {
     : "Drive time counted from IMSA live timing (approximate). Drive-time rules for this event aren't loaded.";
 }
 
-let fullTiming = !!store.get("fullTiming");
+// Yellow / red flag periods for a class as [fromLap, toLap, kind], from the scraper's flag log.
+function flagBands(cls) {
+  const fl = laps?.flags?.[cls] || [], out = [];
+  const lastLap = Math.max(0, ...Object.values(laps?.classes?.[cls] || {}).flatMap(d => (d.laps || []).map(l => l[0])));
+  fl.forEach(([lap, kind], i) => { if (kind === "yellow" || kind === "red") out.push([lap, fl[i + 1]?.[0] ?? lastLap, kind]); });
+  return out;
+}
+
+// --- chart builder: pick what to plot and for which cars; charts are remembered in this browser ---
+const METRICS = {
+  gapSel:  { name: car => `Gap to #${car}`, unit: "s", help: car => `Seconds behind (+) or ahead (−) of #${car} at the end of each lap. The slope shows who's gaining.`, zero: true },
+  lap:     { name: () => "Lap time", unit: "s", help: () => "Lap time each lap. With 'clean laps only', in/out laps and slow laps (over 107% of the car's best) are left out.", lapFmt: true },
+  deltaSel:{ name: car => `Lap time vs #${car}`, unit: "s", help: car => `Each lap's time minus #${car}'s time on the same lap: below zero is quicker than #${car}.`, zero: true },
+  gapLead: { name: () => "Gap to class leader", unit: "s", help: () => "Seconds behind the class leader at the end of each lap.", invert: false },
+  pos:     { name: () => "Class position", unit: "", help: () => "Running class position, from position changes the site recorded.", invert: true, step: true, int: true },
+  energy:  { name: () => "Energy left", unit: "%", help: () => "Virtual energy tank left at the end of each lap (IMSA telemetry, GTD cars).", },
+  stint:   { name: () => "Laps into stint", unit: "laps", help: () => "Laps since the car's last pit stop: a stand-in for tyre and fuel age.", int: true },
+};
+const DEFAULT_CHARTS = [{ metric: "gapSel", cars: "watch", smooth: 0, clean: true }, { metric: "deltaSel", cars: "watch", smooth: 5, clean: true }];
+let charts = (() => { try { const c = JSON.parse(localStorage.getItem("charts")); return Array.isArray(c) && c.length ? c : null; } catch (e) { return null; } })() || DEFAULT_CHARTS.map(c => ({ ...c }));
+const saveCharts = () => { try { localStorage.setItem("charts", JSON.stringify(charts)); } catch (e) {} };
+const OTHER_DASH = ["4 3", "1 3", "8 3 2 3", "2 2", "6 2"];
+
+function carSeries(metric, car, d, ref, opts) {
+  if (!d) return [];
+  const pit = new Set((d.stops || []).flatMap(n => [n, n + 1]));
+  const cleanLaps = dd => { const l = (dd?.laps || []).filter(([n]) => n > 1 && !new Set((dd.stops || []).flatMap(n => [n, n + 1])).has(n));
+    const best = Math.min(...l.map(q => q[1])); return l.filter(q => q[1] <= best * 1.07); };
+  switch (metric) {
+    case "lap": return opts.clean ? cleanLaps(d) : (d.laps || []).filter(([n]) => n > 1);
+    case "gapLead": return d.gaps || [];
+    case "gapSel": { const rg = new Map((ref?.gaps || []).map(([n, g]) => [n, g])); return (d.gaps || []).filter(([n]) => rg.has(n)).map(([n, g]) => [n, +(g - rg.get(n)).toFixed(3)]); }
+    case "deltaSel": { const rl = new Map((opts.clean ? cleanLaps(ref) : ref?.laps || []).map(([n, t]) => [n, t]));
+      return (opts.clean ? cleanLaps(d) : d.laps || []).filter(([n]) => rl.has(n)).map(([n, t]) => [n, +(t - rl.get(n)).toFixed(3)]); }
+    case "energy": return d.energy || [];
+    case "stint": { const stops = d.stops || []; return (d.laps || []).map(([n]) => { const last = stops.filter(s => s <= n).at(-1); return [n, last ? n - last : n]; }); }
+    case "pos": { const ev = (d.ev || []).filter(e => e[1] === "p"); if (!ev.length) return [];
+      const out = [[Math.max(1, ev[0][0] - 1), ev[0][2]]]; ev.forEach(e => out.push([e[0], e[3]]));
+      const lastLap = d.laps?.at(-1)?.[0]; if (lastLap && lastLap > out.at(-1)[0]) out.push([lastLap, out.at(-1)[1]]); return out; }
+  }
+  return [];
+}
+const smoothPts = (pts, k) => k > 1 ? pts.map((p, i) => { const w = pts.slice(Math.max(0, i - k + 1), i + 1); return [p[0], w.reduce((a, q) => a + q[1], 0) / w.length]; }) : pts;
+
+function renderBuilder(sel, rows, lapsCls, watch, clsName) {
+  const host = $("builder");
+  const corvettes = rows.filter(r => /corvette/i.test(r.vehicle || "")).map(r => r.car);
+  const presets = { watch: watch.map(c => c.car), top5: rows.slice(0, 5).map(r => r.car), corvettes, all: rows.map(r => r.car) };
+  const watchStyle = new Map(watch.map(c => [c.car, c.style]));
+  const bands = flagBands(sel.class);
+  host.innerHTML = charts.map((c, i) => `<div class="bchart" data-i="${i}">
+      <div class="bctl">
+        <select class="b-metric" aria-label="What to plot">${Object.entries(METRICS).map(([k, m]) => `<option value="${k}"${k === c.metric ? " selected" : ""}>${esc(m.name(sel.car))}</option>`).join("")}</select>
+        <span class="bseg" role="group" aria-label="Cars">${[["watch", "Our cars"], ["top5", "Top 5"], ["corvettes", "Corvettes"], ["all", "Whole class"]].map(([k, l]) =>
+          `<button type="button" data-cars="${k}" aria-pressed="${c.cars === k}">${l}</button>`).join("")}</span>
+        <select class="b-add" aria-label="Add a car"><option value="">+ car…</option>${rows.map(r => `<option value="${esc(r.car)}">#${esc(r.car)} P${r.class_pos}</option>`).join("")}</select>
+        <select class="b-smooth" aria-label="Smoothing">${[[0, "No smoothing"], [3, "Smooth: 3 laps"], [5, "Smooth: 5 laps"], [10, "Smooth: 10 laps"]].map(([v, l]) => `<option value="${v}"${+c.smooth === v ? " selected" : ""}>${l}</option>`).join("")}</select>
+        ${["lap", "deltaSel"].includes(c.metric) ? `<label class="bchk"><input type="checkbox" class="b-clean"${c.clean ? " checked" : ""}> clean laps only</label>` : ""}
+        ${charts.length > 1 ? `<button type="button" class="chip x b-del" title="Remove this chart">×</button>` : ""}
+      </div>
+      <p class="bhelp dim">${esc(METRICS[c.metric].help(sel.car))}</p>
+      <div class="legend" id="lg-b${i}"></div>
+      <div class="chart" id="ch-b${i}"><div class="tip"></div></div>
+    </div>`).join("") + (charts.length < 4 ? `<button type="button" class="linkbtn" id="b-new">+ Add another chart</button>` : "");
+  charts.forEach((c, i) => {
+    const M = METRICS[c.metric], list = Array.isArray(c.cars) ? c.cars : presets[c.cars] || presets.watch;
+    const cars = [...new Set([...list, ...(c.extra || [])])].filter(car => lapsCls[car]);
+    let k = 0;
+    const series = cars.map(car => {
+      const st = watchStyle.get(car), mine = car === sel.car;
+      const pts = smoothPts(carSeries(c.metric, car, lapsCls[car], lapsCls[sel.car], c), +c.smooth || 0);
+      if ((c.metric === "gapSel" || c.metric === "deltaSel") && mine) return null;   // zero by definition
+      return st ? { name: `#${car}`, pts, color: st.color, width: mine ? 2.5 : 2, dash: st.dash, marker: st.marker, end: `#${car}`, stops: lapsCls[car].stops }
+        : { name: `#${car}`, pts, color: "var(--text-3)", width: 1.25, dash: OTHER_DASH[k++ % OTHER_DASH.length], end: `#${car}`, stops: cars.length <= 6 ? lapsCls[car].stops : [] };
+    }).filter(Boolean);
+    lineChart(`ch-b${i}`, { series, bands, height: 260, zeroLine: !!M.zero, invert: !!M.invert, robust: c.metric !== "pos" && c.metric !== "stint", step: !!M.step,
+      yFmt: M.lapFmt ? lapTime : M.int ? v => Math.round(v) : M.unit === "%" ? v => v.toFixed(0) + "%" : v => (M.zero && v > 0 ? "+" : "") + v.toFixed(1) + "s",
+      empty: c.metric === "energy" ? "No telemetry energy for these cars yet." : c.metric === "pos" ? "Position changes appear as the race goes on." : "Not enough laps yet." });
+    $(`lg-b${i}`).innerHTML = series.filter(s => watchStyle.has(s.name.slice(1))).map(s => `<span class="sw">${swatchOf(watchStyle.get(s.name.slice(1)))}${esc(s.name)}</span>`).join("")
+      + (series.some(s => !watchStyle.has(s.name.slice(1))) ? `<span style="--c:var(--text-3)">grey: other cars (labelled at the end)</span>` : "")
+      + (bands.length ? `<span class="sw"><i class="bandkey"></i>yellow flag</span>` : "") + `<span class="sw dim">▼ pit stop</span>`;
+  });
+  // Controls
+  host.querySelectorAll(".bchart").forEach(el => {
+    const c = charts[+el.dataset.i], redo = () => { saveCharts(); renderBuilder(sel, rows, lapsCls, watch, clsName); };
+    el.querySelector(".b-metric").onchange = e => { c.metric = e.target.value; redo(); };
+    el.querySelector(".b-smooth").onchange = e => { c.smooth = +e.target.value; redo(); };
+    el.querySelector(".b-clean")?.addEventListener("change", e => { c.clean = e.target.checked; redo(); });
+    el.querySelectorAll(".bseg button").forEach(b => b.onclick = () => { c.cars = b.dataset.cars; c.extra = []; redo(); });
+    el.querySelector(".b-add").onchange = e => { if (e.target.value) { c.extra = [...(c.extra || []), e.target.value]; redo(); } };
+    el.querySelector(".b-del")?.addEventListener("click", () => { charts.splice(+el.dataset.i, 1); redo(); });
+  });
+  $("b-new")?.addEventListener("click", () => { charts.push({ metric: "lap", cars: "watch", smooth: 3, clean: true }); saveCharts(); renderBuilder(sel, rows, lapsCls, watch, clsName); });
+  $("builder-title").textContent = `Build a chart · ${clsName}`;
+}
+
+let fullTiming = !!store.get("fullTiming"), bandsNow = [];
 // The detail section remembers whether it was open, and redraws its charts at full width when opened.
 $("deep").open = store.get("deep") === "1";
 $("deep").addEventListener("toggle", () => { store.set("deep", $("deep").open ? "1" : ""); if ($("deep").open) render(); });

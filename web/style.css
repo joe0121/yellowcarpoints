@@ -330,3 +330,32 @@ details.deep[open] > .charts { margin-top: 16px; }
 .needs-mode { margin-top: 14px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
 .needs-mode:empty { display: none; }
 .needs-mode + #answer .answer { margin-top: 2px; }
+
+/* ---- Race tab layout: one column on phones and laptops, two on wide screens ---- */
+.race-grid { display: flex; flex-direction: column; }
+.race-grid .col { display: contents; }
+#ours-card { order: 1; } #feed-card { order: 2; } #timing-card { order: 3; } #drivers-card { order: 4; }
+#cars-card { order: 5; } #builder-card { order: 6; } #pace-card { order: 7; }
+@media (min-width: 1280px) {
+  body.race main { max-width: min(1760px, 96vw); }
+  .race-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; align-items: start; }
+  .race-grid .col { display: block; }
+  body.race .charts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1700px) {
+  .race-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
+}
+
+/* chart builder */
+.bchart { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
+.bchart:first-child { border-top: 0; margin-top: 4px; padding-top: 0; }
+.bctl { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.bctl select { font: 500 13px Inter, sans-serif; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.bctl .b-metric { font-weight: 600; }
+.bseg { display: inline-flex; border: 1px solid var(--line); border-radius: 99px; padding: 2px; background: var(--bg); }
+.bseg button { font: 600 12px Inter, sans-serif; color: var(--text-2); background: none; border: 0; border-radius: 99px; padding: 3px 9px; cursor: pointer; }
+.bseg button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+.bchk { font-size: 12px; color: var(--text-2); display: inline-flex; gap: 4px; align-items: center; }
+.bhelp { font-size: 12px; margin: 6px 0 2px; }
+.bandkey { display: inline-block; width: 14px; height: 10px; background: var(--flag-yellow); opacity: .35; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+@media (max-width: 640px) { .bctl select, .bseg button { font-size: 11px; } }
