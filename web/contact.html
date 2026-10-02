@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact Yellow Car Points</title>
+<meta name="description" content="Send a suggestion, bug report or question about Yellow Car Points.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23eda100'/><text x='16' y='23' font-size='18' font-family='Arial' font-weight='700' text-anchor='middle' fill='%23111'>4</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+<style>
+.contact { max-width: 640px; }
+.contact label { display: block; font-weight: 600; font-size: 13px; margin: 12px 0 4px; }
+.contact input, .contact select, .contact textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.contact textarea { min-height: 140px; resize: vertical; }
+.contact button.send { margin-top: 14px; font: 600 14px Inter, sans-serif; padding: 9px 18px; border-radius: 99px; border: 0; background: var(--accent); color: var(--on-accent); cursor: pointer; }
+.contact p { color: var(--text-2); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Yellow Car <span>Points</span></h1>
+      <p class="sub">Contact</p>
+      <div class="navrow"><nav class="tabs"><a href="./">Championship</a><a href="strategy.html">Race</a><a href="strategy.html#73" title="Pratt Miller Motorsports #73, LMP2: race only">#73</a><a href="about.html">About</a></nav><span class="countdown" id="countdown" hidden></span></div>
+    </div>
+  </header>
+  <section class="card contact">
+    <h2>Contact</h2>
+    <p>Spotted something wrong, have an idea, or want a car added? Send a note. Pressing Send opens your email app with the message filled in.</p>
+    <form id="form">
+      <label for="kind">What's it about?</label>
+      <select id="kind"><option>Suggestion</option><option>Something looks wrong</option><option>Question</option><option>Other</option></select>
+      <label for="name">Your name (optional)</label>
+      <input id="name" autocomplete="name">
+      <label for="msg">Message</label>
+      <textarea id="msg" required></textarea>
+      <button class="send" type="submit">Send</button>
+      <p class="dim" id="fallback" hidden></p>
+    </form>
+    <noscript><p>The contact form needs JavaScript to open your email app.</p></noscript>
+  </section>
+  <footer>Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing.</footer>
+</main>
+<script>
+// The address isn't in the page as text (kept scrambled and only put together when you press Send), so address-harvesting bots don't pick it up.
+const K = 0x5a, A = [48,53,41,63,42,50,116,62,59,52,62,40,63,59], B = [61,55,59,51,54,116,57,53,55];
+const addr = () => String.fromCharCode(...A.map(c => c ^ K)) + String.fromCharCode(64) + String.fromCharCode(...B.map(c => c ^ K));
+document.getElementById("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const kind = document.getElementById("kind").value, name = document.getElementById("name").value.trim(), msg = document.getElementById("msg").value.trim();
+  if (!msg) return;
+  const subject = `Yellow Car Points: ${kind}`, body = msg + (name ? `\n\n- ${name}` : "") + `\n\n(sent from ${location.href})`;
+  location.href = `mailto:${addr()}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const fb = document.getElementById("fallback");
+  fb.hidden = false;
+  fb.innerHTML = "No email app opened? Copy your message and send it to the address shown here: ";
+  const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = "Show address";
+  b.onclick = () => { b.replaceWith(Object.assign(document.createElement("b"), { textContent: addr() })); };
+  fb.appendChild(b);
+});
+</script>
+<script src="countdown.js" defer></script>
+</body>
+</html>

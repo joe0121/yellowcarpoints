@@ -24,6 +24,12 @@
   <nav class="picker" id="picker" aria-label="Choose a Corvette"></nav>
   <section class="cars" id="cars"></section>
   <section class="card live" id="proj-card" hidden aria-live="polite"></section>
+  <section class="card" id="recap-card" hidden>
+    <h2 id="recap-title">Last race</h2>
+    <p class="live-sub" id="recap-sub"></p>
+    <div class="scroll"><table id="recap"></table></div>
+    <p class="note" id="recap-note"></p>
+  </section>
   <section class="card" id="fight-card" hidden>
     <h2 id="fight-title">Still in contention</h2>
     <p class="live-sub" id="fight-sub"></p>
@@ -109,6 +115,7 @@ function renderAll() {
   renderHistory(sel, d);
   renderTitle(d);
   renderProjection(d);
+  renderRecap(d);
 }
 addEventListener("hashchange", () => standings && renderAll());
 
@@ -194,7 +201,7 @@ function render(d) {
   $("table-card").hidden = false;
 
   $("foot").innerHTML = `Data: <a href="${esc(d.url)}" rel="noopener">IMSA championship points (${esc(d.status)})</a>, race reports and live timing via Al Kamel. `
-    + `Checked ${new Date(d.updated).toLocaleString()}. Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing.`;
+    + `Checked ${new Date(d.updated).toLocaleString()}. Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing. <a href="contact.html">Contact</a>`;
 }
 
 let drawState = null, chartWidth = 0;
@@ -244,7 +251,7 @@ setInterval(async () => {
   const now = Date.now(), slow = now - lapsAt >= 60e3, was = live?.updated;
   if (slow) { await loadLive(); lapsAt = now; } else live = await getJSON("data/live.json");
   if (!slow && live?.updated === was) return;
-  const d = view(selected()); renderTitle(d); renderProjection(d);
+  const d = view(selected()); renderTitle(d); renderProjection(d); renderRecap(d);
 }, 10e3);
 
 // Title fight: who can still win, where they are running, and what the selected car needs.
@@ -430,6 +437,45 @@ function renderProjection(d) {
   const lgB = addM(1, 2, 5, "var(--s4)", fc.champ_behind, "ahead of"), lgA = addM(3, 4, 6, "var(--s2)", fc.champ_ahead, "behind");
   lineChart("ch-margin", { series, zeroLine: true, robust: true, yFmt: v => (v > 0 ? "+" : "") + v.toFixed(0), empty: "Builds up lap by lap during the race." });
   $("lg-margin").innerHTML = lgB + lgA + `<span style="--c:var(--text-3)">solid: after pit stops · dotted: running order · above zero = ahead</span>`;
+}
+
+// Race recap: straight after the flag from live timing (provisional), otherwise the last race from
+// IMSA's published results. One row per Corvette in the class.
+function renderRecap(d) {
+  const el = $("recap-card"), colorOf = colorFor(d), cls = CLASS_NAMES[d.class] || d.class;
+  const lc = raceLive(d.class);
+  const row = (car, cells) => `<tr class="${car === d.tracked[0] ? "tracked" : ""}" style="--c:${colorOf(car)}"><td>#${esc(car)}</td>${cells}</tr>`;
+  if (lc && live.finished) {
+    const q = quali && quali.event === live.event ? quali.classes?.[d.class] || {} : {};
+    const proj = Object.fromEntries((lc.standings || []).map(r => [r.car, r]));
+    const rows = d.tracked.map(car => { const r = lc.cars.find(x => x.car === car); if (!r) return "";
+      const p = proj[car];
+      return row(car, `<td class="total">P${r.class_pos}<span class="dim"> / ${lc.cars.length}</span></td><td>${q[car] ? "P" + q[car] : "–"}</td><td>${r.laps ?? "–"}</td><td>${esc(r.best_lap || "–")}</td><td>${r.pit_stops ?? "–"}</td><td>${p ? "+" + fmt(p.race_pts + p.quali_pts) : "–"}</td>`); }).join("");
+    const top = lc.standings?.[0], me = proj[d.tracked[0]], final = lc.max_points_after === 0;
+    $("recap-title").textContent = `Race result · ${live.event} · ${cls}`;
+    $("recap-sub").innerHTML = top ? (final ? `<b>#${esc(top.car)} takes the ${esc(cls)} title</b>${top.car === d.tracked[0] ? " 🏆" : ""}` : `<b>#${esc(top.car)} leads the ${esc(cls)} championship</b>`)
+      + (me && me.car !== top.car ? `. #${esc(me.car)} ${ord(me.proj_pos)} in the championship, ${fmt(me.proj_gap)} behind.` : ".") : "";
+    $("recap").innerHTML = `<thead><tr><th>Car</th><th>Finish</th><th>Grid</th><th>Laps</th><th>Best lap</th><th>Stops</th><th>Points</th></tr></thead><tbody>${rows}</tbody>`;
+    $("recap-note").textContent = "Provisional, from IMSA live timing at the flag. Official results and points follow from IMSA.";
+    el.hidden = !rows;
+    return;
+  }
+  // Between races: the latest round in the season history.
+  const done = d.events.map((e, i) => ({ ...e, i })).filter(e => e.state === "done");
+  const lastEv = done.at(-1);
+  const rowsData = d.tracked.map(car => ({ car, h: (hist?.cars?.[car] || []).at(-1), s: d.standings.find(x => x.car === car) }))
+    .filter(x => x.h && (!lastEv || x.h.round === lastEv.name || lastEv.name.startsWith(x.h.round) || x.h.round.startsWith(lastEv.name.split(" ")[0])));
+  if (!rowsData.length) { el.hidden = true; return; }
+  const avg = st => { const t = st.map(x => secsOf(x.time)).filter(Boolean); return t.length ? (t.reduce((a, b) => a + b) / t.length).toFixed(1) + "s" : "–"; };
+  $("recap-title").textContent = `Last race · ${rowsData[0].h.round} · ${cls}`;
+  const me = rowsData.find(x => x.car === d.tracked[0]);
+  $("recap-sub").innerHTML = me ? `#${esc(me.car)} ${me.h.status === "Classified" ? `finished <b>P${me.h.class_pos}</b> of ${me.h.class_entries}` : esc(me.h.status)} from P${esc(me.h.grid || "–")} on the grid` : "";
+  $("recap").innerHTML = `<thead><tr><th>Car</th><th>Finish</th><th>Grid</th><th>Laps</th><th>Best lap</th><th>Stops</th><th class="m-hide">Avg stop</th><th>Points</th></tr></thead><tbody>`
+    + rowsData.map(({ car, h, s }) => row(car, `<td class="total">${h.status === "Classified" ? "P" + h.class_pos : esc(h.status)}<span class="dim"> / ${h.class_entries}</span></td><td>${h.grid ? "P" + h.grid : "–"}</td><td>${h.laps}</td>
+      <td>${esc(h.best_lap || "–")}${h.best_lap_rank ? `<span class="dim m-hide"> (${ord(h.best_lap_rank)})</span>` : ""}</td><td>${h.stops.length}</td><td class="dim m-hide">${avg(h.stops)}</td>
+      <td>${s && lastEv ? fmt(roundPts(s.rounds[lastEv.i])) : "–"}</td>`)).join("") + `</tbody>`;
+  $("recap-note").textContent = "From IMSA's official race results.";
+  el.hidden = false;
 }
 
 // Small line chart (one y axis) with a crosshair tooltip.

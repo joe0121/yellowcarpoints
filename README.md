@@ -76,6 +76,9 @@ No Zero Trust dashboard setup is needed for a locally managed tunnel.
 ## Track other cars
 
 Set `CARS` in `.env` as `CLASS:NUMBER` pairs, e.g. `CARS=GTDPRO:4,GTD:13`, then `docker compose up -d`.
+Each car's log of stops, driver changes and position changes (`ev` in `laps.json`) and per-driver drive
+time (`drivers` in `live.json`, with ratings from the entry list and the event's drive-time rules in
+`DRIVE_RULES`) are kept in `race_state.json`, so restarts and page reloads lose nothing.
 `RACE_CARS` (default `LMP2:73`, Pratt Miller's LMP2 ORECA) adds cars that are followed in live timing
 only: their class is tracked live and they get their own tab on the Race page, with no championship maths.
 The pages poll `live.json` every 10 s, `laps.json` every 30 s (Championship: 60 s) and the rest every 5 minutes.

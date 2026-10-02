@@ -235,7 +235,8 @@ def refresh_entries(season, event):
     latest = max(files, key=lambda f: re.search(r"/(\d{12})_", f).group(1))
     results = json.loads(http.get(BASE + quote(latest), timeout=60).content.decode("utf-8-sig"))
     cars = {r["number"]: {"class": r["class"], "team": r["team"], "vehicle": r["vehicle"],
-                          "drivers": [f'{d["firstname"]} {d["surname"]}' for d in r.get("drivers", [])]}
+                          "drivers": [f'{d["firstname"]} {d["surname"]}' for d in r.get("drivers", [])],
+                          "ratings": {f'{d["firstname"]} {d["surname"]}': d.get("license") for d in r.get("drivers", [])}}
             for r in results["classification"] if r["class"] in LIVE_CLASSES}
     write("entries.json", {"updated": now_iso(), "event": event.split("_", 1)[1],
                            "session": results["session"].get("session_name"), "cars": cars})

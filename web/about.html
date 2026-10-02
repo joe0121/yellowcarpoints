@@ -26,6 +26,10 @@ dl.terms dd { margin: 0; color: var(--text-2); }
 .next { border: 1px solid var(--accent); }
 .toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; margin: -4px 0 16px; }
 .toc a { color: var(--text-2); }
+.share-row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+.share-row img { border-radius: 8px; background: #fff; padding: 4px; }
+.share-url { font-size: 18px; margin: 4px 0 8px !important; }
+.share-btns { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -43,6 +47,19 @@ dl.terms dd { margin: 0; color: var(--text-2); }
 
     <section class="card next" id="next" hidden></section>
 
+    <section class="card share" id="share">
+      <h2>Share the site</h2>
+      <div class="share-row">
+        <img src="qr.svg" width="132" height="132" alt="QR code for yellowcarpoints.win">
+        <div>
+          <p>Point a phone camera at the code, or send the link to a friend at the track.</p>
+          <p class="share-url"><b>yellowcarpoints.win</b></p>
+          <div class="share-btns"><button type="button" class="chip" id="share-btn" hidden>Share…</button><button type="button" class="chip" id="copy-btn">Copy link</button><span class="dim" id="copy-ok" aria-live="polite"></span></div>
+          <p class="dim">Questions or ideas? <a href="contact.html">Contact me</a>.</p>
+        </div>
+      </div>
+    </section>
+
     <section class="card" id="what">
       <h2>What it is</h2>
       <p>Yellow Car Points follows the Corvettes in the <strong>IMSA WeatherTech SportsCar Championship</strong>: where they stand in the championship, how each race went, and what's happening live during a session, with a focus on the championship fight.</p>
@@ -59,6 +76,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
         <li><strong>Rival by rival:</strong> a plain line for each car still in the fight ("if #1 wins, #4 needs P2 or better"), with the full finish-by-finish table one click away. If the car is out of the title fight, the highest championship position it can still reach and what that would take.</li>
         <li><strong>If the race ended now</strong> (race only): the projected championship table, the margin to the title rivals either side, and the title margin lap by lap.</li>
         <li><strong>Still in contention:</strong> every car that can still win the title, with points now and the most it can still reach; in the race, where each is running.</li>
+        <li><strong>Last race:</strong> each Corvette's finish, grid, best lap, stops and points from the latest round; straight after the flag, the provisional result and title outcome from live timing.</li>
         <li><strong>Standings, points behind the leader, and race by race</strong> (folded away; tap to open) for the background.</li>
       </ul>
       <h3>Race: what's happening now, for the cars we care about</h3>
@@ -66,7 +84,8 @@ dl.terms dd { margin: 0; color: var(--text-2); }
       <ul>
         <li><strong>Session bar:</strong> flag, time to go, a one-line title status, and where every Corvette is running (tap one to switch to it).</li>
         <li><strong>Our cars:</strong> the selected car and the cars to watch: position, gap ahead and behind, last lap against its pace, laps to the next stop, and pit-lane status. Add any other car with "Add a car".</li>
-        <li><strong>What just happened:</strong> pit stops (time in the lane, fuel, tyres, driver change), position changes and title-rival changes for those cars, newest first. Position changes are the ones seen while the page is open.</li>
+        <li><strong>What just happened:</strong> pit stops (time in the lane, fuel, tyres, driver change), position changes and title-rival changes for those cars, newest first. Everything is recorded by the site's scraper, so reloading the page loses nothing.</li>
+        <li><strong>Drivers:</strong> each car's line-up with ratings (Pro = Platinum/Gold, Am = Bronze), drive time so far in the race, who's in the car and for how long, and the Bronze driver's progress towards this event's minimum drive time.</li>
         <li><strong>Timing:</strong> lap-time chart for our cars, and the timing table for them and the cars around them (or the full class).</li>
         <li><strong>Pit strategy and pace:</strong> energy, laps left, next stop and fill time per car, and race pace through a stint with a projected matchup.</li>
         <li><strong>#73 tab:</strong> Pratt Miller Motorsports also runs the #73 ORECA in LMP2. Its tab is the same Race page for that car (timing, our cars, pit stops, pace), without championship maths.</li>
@@ -120,7 +139,7 @@ dl.terms dd { margin: 0; color: var(--text-2); }
       </ul>
     </section>
   </div>
-  <footer>Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing.</footer>
+  <footer>Unofficial fan site, not affiliated with IMSA, GM or Corvette Racing. <a href="contact.html">Contact</a></footer>
 </main>
 <script>
 // Next WeatherTech session (or the one running), from the scraper's copy of IMSA's schedule.
@@ -138,6 +157,19 @@ dl.terms dd { margin: 0; color: var(--text-2); }
       + `${live ? 'Open the <a href="strategy.html">Race</a> tab to follow it live.' : "The Race tab comes alive then."}</p>`;
     el.hidden = false;
   } catch (e) { /* schedule unavailable: leave the card hidden */ }
+})();
+</script>
+<script>
+(() => {
+  const url = "https://yellowcarpoints.win", ok = document.getElementById("copy-ok");
+  if (navigator.share) {
+    const b = document.getElementById("share-btn"); b.hidden = false;
+    b.onclick = () => navigator.share({ title: "Yellow Car Points", text: "Live IMSA championship maths and race strategy for the Corvettes", url }).catch(() => {});
+  }
+  document.getElementById("copy-btn").onclick = async () => {
+    try { await navigator.clipboard.writeText(url); ok.textContent = "Copied"; } catch (e) { ok.textContent = url; }
+    setTimeout(() => ok.textContent = "", 2500);
+  };
 })();
 </script>
 <script src="countdown.js" defer></script>

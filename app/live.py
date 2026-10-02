@@ -40,6 +40,18 @@ SCHEDULE_EVERY = 6 * 3600
 NO_SCHEDULE_POLL = 1800     # schedule unreadable: check the feed every 30 minutes instead
 LEAD, TAIL = timedelta(minutes=10), timedelta(minutes=30)
 RACE_SESSIONS = re.compile(os.environ.get("LIVE_SESSIONS", r"\bRace\b"))
+NOT_RACE = re.compile(r"practice|qualif|warm|test", re.I)
+
+# Drive-time rules by event (IMSA event Supplementary Regulations, Art. 12.13-12.15), in seconds.
+# min: Art. 12.13 minimum drive time for the class; am_min: Art. 12.15 Trueman/Akin time for the
+# Bronze-rated driver (LMP2/GTD); max: Art. 12.14, also no more than max_in_6h in any 6 hours.
+DRIVE_RULES = {
+    "Road Atlanta": {"source": "Motul Petit Le Mans 2026 Supplementary Regulations, Art. 12.13-12.15",
+                     "max": 6 * 3600, "max_in_6h": 4 * 3600,
+                     "classes": {"GTP": {"min": 45 * 60}, "GTDPRO": {"min": 45 * 60},
+                                 "LMP2": {"min": 150 * 60, "am_min": 150 * 60},
+                                 "GTD": {"min": 150 * 60, "am_min": 150 * 60}}},
+}
 # Race points by class finishing position; qualifying pays a tenth of the same table.
 RACE_POINTS = [350, 320, 300, 280, 260] + list(range(250, 0, -10))
 
@@ -126,18 +138,43 @@ def secs(t):
     return history.secs(t) if t and "-" not in str(t) and "lap" not in str(t).lower() else None
 
 
-def track(state, feed, now):
-    """Record laps and pit stops from one leaderboard poll."""
+def track(state, feed, now, running=False):
+    """Record laps, pit stops, position and driver changes, and drive time from one leaderboard poll.
+    running: the race is under way (green/yellow, not red or finished), so drive time accrues.
+    Everything lands in race_state.json each poll, so a restart or a page reload loses nothing."""
     for c in feed:
         n, ps, lap = c["N"], int(c.get("PS") or 0), int(c.get("L") or 0)
+        pos, drv = int(c.get("PIC") or 0), c.get("F") or None
         st = state["cars"].get(n)
         if st is None:
             # First seen mid-session (scraper started late): earlier stops are at unknown laps.
             st = state["cars"][n] = {"cls": c["C"], "ps": ps, "stops": [], "from_start": ps == 0, "laps": [],
                                      "gaps": [], "last_lap": lap, "pit_in_at": None, "pit_secs": []}
+        ev = st.setdefault("ev", [])          # [lap, kind, a, b]: p = position a->b, s = stop no. a, d = driver a->b
         if ps > st["ps"]:
             st["stops"].append(lap)
+            ev.append([lap, "s", ps, None])
             st["ps"] = ps
+        prev_pos, prev_drv = st.get("pos"), st.get("driver")
+        if prev_pos and pos and pos != prev_pos:
+            ev.append([lap, "p", prev_pos, pos])
+        if drv and prev_drv and drv != prev_drv:
+            ev.append([lap, "d", prev_drv, drv])
+            st["stint_drive"] = 0
+        # Drive time: credit the poll interval to whoever is in the car. A longer gap (scraper restart)
+        # is credited only if the same driver is still in the car, and only up to 15 minutes.
+        dt = now - st.get("seen_at", now)
+        if running and drv and 0 < dt < (900 if drv == prev_drv else 120):
+            st.setdefault("drive", {})[drv] = round(st.setdefault("drive", {}).get(drv, 0) + dt, 1)
+            st["stint_drive"] = round(st.get("stint_drive", 0) + dt, 1)
+        st["seen_at"], st["pos"] = now, pos or prev_pos
+        if drv:
+            st["driver"] = drv
+        # Keep every stop and driver change; position changes only the latest 80 per car.
+        if len(ev) > 200:
+            keep = [e for e in ev if e[1] != "p"]
+            st["ev"] = (keep + [e for e in ev if e[1] == "p"][-80:])
+            st["ev"].sort(key=lambda e: e[0])
         if c.get("P") and not st["pit_in_at"]:
             st["pit_in_at"] = now
         elif not c.get("P") and st["pit_in_at"]:
@@ -167,6 +204,19 @@ def clean_laps(st):
         return []
     best = min(t for n, t in laps)
     return [(n, t) for n, t in laps if t <= best * 1.05]
+
+
+def drivers_info(st, entry, now):
+    """Line-up with ratings (from the entry list), drive time so far and who's in the car now."""
+    ratings = (entry or {}).get("ratings", {})
+    names = list((entry or {}).get("drivers") or []) or list(st.get("drive", {}))
+    for d in [st.get("driver"), *st.get("drive", {})]:
+        if d and d not in names:
+            names.append(d)
+    if not names:
+        return None
+    return {"now": st.get("driver"), "stint_secs": round(st["stint_drive"]) if "stint_drive" in st else None,
+            "list": [{"name": d, "rating": ratings.get(d), "secs": round(st.get("drive", {}).get(d, 0))} for d in names]}
 
 
 def stint_info(st, lap, model):
@@ -502,7 +552,10 @@ def step():
     TELEMETRY.ensure(True)
     if not active:   # no schedule: record under the feed's own session name
         RECORDER.start(f'{now_dt.date()}_{info.get("E")}_{name}')
-    is_race, is_quali = bool(RACE_SESSIONS.search(name)), "Qualif" in name
+    # The race may be named after the event ("... - Motul Petit Le Mans"), so any WeatherTech session
+    # that isn't practice, qualifying, a warm-up or a test counts as the race.
+    is_race = bool(RACE_SESSIONS.search(name) or not NOT_RACE.search(name))
+    is_quali = "Qualif" in name
     results = jsonp("RaceResults")
     RECORDER.feed(info, results)
     status.mark("feed", session=name, cars=len(results.get("B", [])))
@@ -516,7 +569,8 @@ def step():
         _s["state"] = saved if saved and saved.get("key") == key else {"key": key, "cars": {}}
         _s["strategy"], _s["strategy_at"] = {}, 0.0
     state = _s["state"]
-    track(state, feed, now)
+    flag_now = info.get("F", "")
+    track(state, feed, now, running=is_race and not re.search(r"check|finish|red", flag_now, re.I))
 
     by_class = {}
     for c in sorted(feed, key=lambda c: c["PIC"]):
@@ -541,6 +595,7 @@ def step():
     remaining = history.secs(info.get("TR")) if is_race else None
     bop_doc = read("bop.json") or {}
     bop_models = bop_doc.get("models")
+    entry_cars = (read("entries.json") or {}).get("cars", {})
     classes = {}
     for cls, rows in by_class.items():
         model = stint_model(cls, state, baseline)
@@ -572,6 +627,7 @@ def step():
                 "stint": stint_info(state["cars"][r["N"]], int(r.get("L") or 0), model) if is_race else None,
                 "energy": energies[r["N"]], "stops_remaining": stops[r["N"]],
                 "net_pos": net.index(r["N"]) + 1 if net else None, "owes_stop": owed.get(r["N"], 0),
+                "drivers": drivers_info(state["cars"][r["N"]], entry_cars.get(r["N"]), now),
             } for r in rows],
             "fill_secs_per_pct": fill_per_pct, "pit_loss": pit_loss,
         }
@@ -589,6 +645,7 @@ def step():
         "telemetry": {"connected": tel["connected"], "age": round(now - tel["last_data"]) if tel["last_data"] else None},
         "base_event": standings and standings["event"], "classes": classes,
         "race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()],
+        "drive_rules": DRIVE_RULES.get(info.get("E")) if is_race else None,
         "bop": bop_doc and {k: bop_doc.get(k) for k in ("bulletin", "event", "date", "url")},
     }
     write("live.json", live_out)
@@ -596,7 +653,7 @@ def step():
     laps_out = {"updated": now_iso(), "session": name, "classes": {
         cls: {n: {"laps": st["laps"], "stops": st["stops"], "gaps": st.get("gaps", []),
                   "energy": tel["cars"].get(n, {}).get("lap_energy", []),
-                  "margins": state.get("margins", {}).get(n, [])}
+                  "margins": state.get("margins", {}).get(n, []), "ev": st.get("ev", [])}
               for n, st in state["cars"].items() if st["cls"] == cls}
         for cls in LIVE_CLASSES}}
     write("laps.json", laps_out)

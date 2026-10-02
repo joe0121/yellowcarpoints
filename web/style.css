@@ -257,3 +257,73 @@ details.deep[open] > .charts { margin-top: 16px; }
 .theme button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* livery stripe across the top, in the selected car's colours */
 .livery-band { height: 6px; background: var(--livery); box-shadow: inset 0 -1px 0 rgba(0,0,0,.12); }
+/* drivers */
+.dgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 20px; margin-top: 8px; }
+.dcar { padding-left: 10px; border-left: 4px solid var(--c, var(--line)); }
+.dcar .who { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.dcar .who b { font: 600 17px Oswald, sans-serif; }
+.dlist { list-style: none; margin: 4px 0 0; padding: 0; font-size: 14px; }
+.dlist li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 0; border-top: 1px solid var(--line); }
+.dlist li:first-child { border-top: 0; }
+.dlist li.incar .dname { font-weight: 700; }
+.dname { flex: 1 1 140px; }
+.dtime { font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
+.rating { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--text-2); }
+.rating small { font-weight: 500; margin-left: 4px; color: var(--text-3); }
+.rating.r-am { border-color: var(--accent); color: var(--accent-ink); }
+.dbar { flex: 1 0 100%; display: block; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; }
+.dbar i { display: block; height: 100%; background: var(--s1); }
+
+/* ---- phones: the same pages, pared down to what matters at a glance ---- */
+.m-only { display: none; }
+@media (max-width: 640px) {
+  main { padding: 12px 12px 40px; }
+  header { margin-bottom: 10px; }
+  h1 { font-size: 26px; }
+  .sub, .meta { display: none; }
+  .navrow { gap: 6px; margin-top: 8px; }
+  .tabs { gap: 3px; }
+  .tabs a { padding: 3px 9px; font-size: 12px; }
+  .countdown { font-size: 11px; padding: 2px 8px; }
+  .theme { margin-left: 0; }
+  .theme button { padding: 2px 7px; font-size: 11px; }
+  /* car picker: one swipeable row */
+  .picker { flex-wrap: nowrap; overflow-x: auto; gap: 14px; margin: 0 -12px 12px; padding: 0 12px 4px; scrollbar-width: none; }
+  .picker div { flex-wrap: nowrap; }
+  .picker a { padding: 3px 10px; }
+  .card { padding: 14px; }
+  .m-only { display: inline; }
+  .m-hide { display: none !important; }
+  /* tables: keep the columns that matter, let the rest go */
+  td.team div { display: none; }
+  #table .rnd { display: none; }
+  #recap th:nth-child(3), #recap td:nth-child(3), #recap th:nth-child(4), #recap td:nth-child(4) { display: none; }
+  #proj-card th:nth-child(3), #proj-card td:nth-child(3), #proj-card th:nth-child(5), #proj-card td:nth-child(5) { display: none; }
+  #ours th:nth-child(4), #ours td:nth-child(4), #ours th:nth-child(6), #ours td:nth-child(6), #ours th:nth-child(8), #ours td:nth-child(8) { display: none; }
+  #ours .role { display: none; }
+  #timing th:nth-child(4), #timing td:nth-child(4), #timing th:nth-child(7), #timing td:nth-child(7),
+  #timing th:nth-child(8), #timing td:nth-child(8), #timing th:nth-child(9), #timing td:nth-child(9), #timing th:nth-child(10), #timing td:nth-child(10) { display: none; }
+  th, td { padding-left: 6px; padding-right: 6px; }
+  /* pit strategy: only the selected car's tiles, two per row */
+  .kpirow:not(.mine) { display: none; }
+  .kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi { padding: 8px 10px; }
+  .kpi .v { font-size: 22px; }
+  .watch .dim { display: none; }
+  /* pace: the headline matchup and the projection only */
+  .m-lite .charts > div:first-child, .m-lite #pace-table, .m-lite #pace-table-title, .m-lite #pace-note { display: none; }
+  .answer { font-size: 20px; }
+  .needs-lines { font-size: 13px; }
+  .facts b { font-size: 17px; }
+  .live-verdict { font-size: 20px; }
+  .dgrid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  #ours td .dim, #ours td.who svg { display: none; }
+  #ours td.who { border-left: 3px solid var(--c); }
+  .picker span { white-space: nowrap; }
+}
+@media (max-width: 640px) {
+  td.team { min-width: 90px; }
+  #timing td.team { min-width: 0; }
+}
