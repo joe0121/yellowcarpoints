@@ -89,8 +89,21 @@ function selected() {
 function view(sel) {
   const c = standings.classes[sel.class];
   const others = standings.cars.filter(x => x.class === sel.class && x.car !== sel.car).map(x => x.car);
-  return { ...c, class: sel.class, tracked: [sel.car, ...others],
-    season: standings.season, event: standings.event, status: standings.status, url: standings.url, updated: standings.updated };
+  return withQuali({ ...c, class: sel.class, tracked: [sel.car, ...others],
+    season: standings.season, event: standings.event, status: standings.status, url: standings.url, updated: standings.updated });
+}
+
+// Once this weekend's qualifying is done, its points are banked: add them to the standings (re-sorted,
+// gaps and who's still in it recomputed) and take them off the points still to play for. Only for the
+// round the standings don't include yet (quali.json notes which standings it was recorded against).
+function withQuali(d) {
+  const q = quali?.base_event === standings.event && d.rounds_remaining > 0 ? quali.classes?.[d.class] : null;
+  if (!q) return d;
+  const max = Math.floor(RACE_POINTS[0] / 10), left = Math.max(0, d.max_points_remaining - max);
+  const st = d.standings.map(s => ({ ...s, quali_pts: q[s.car] ? qualiPts(q[s.car]) : 0, quali_pos: q[s.car] || null }))
+    .map(s => ({ ...s, points: s.points + s.quali_pts })).sort((a, b) => b.points - a.points);
+  st.forEach((s, i) => { s.pos = i + 1; s.gap = st[0].points - s.points; s.alive = s.points + left >= st[0].points; });
+  return { ...d, standings: st, max_points_remaining: left, quali_in: true };
 }
 
 function colorFor(d) {
@@ -172,6 +185,7 @@ function render(d) {
       <div class="drivers">${esc(t.drivers.join(" · "))}</div>
       ${weekend}
       <div class="hero"><span class="num pos">P${t.pos}</span><span class="num pts">${fmt(t.points)}<small>pts</small></span></div>
+      ${d.quali_in ? `<div class="drivers">Includes ${t.quali_pts} qualifying point${t.quali_pts === 1 ? "" : "s"}${t.quali_pos ? ` (qualified P${t.quali_pos})` : ""}: provisional until IMSA's official points.</div>` : ""}
       <div class="needs-mode" id="needs-mode"></div>
       <div id="answer"></div>
       <div class="facts">
@@ -279,7 +293,7 @@ function renderTitle(d) {
   const running = lc ? Object.fromEntries(lc.cars.map(r => [r.car, r])) : {};
   const proj = lc ? Object.fromEntries(lc.standings.map(r => [r.car, r])) : {};
   const qmap = quali && live && quali.event === live.event ? quali.classes?.[d.class] : null;
-  const q = c => qmap && qmap[c] ? qualiPts(qmap[c]) : null;
+  const q = c => d.quali_in ? 0 : qmap && qmap[c] ? qualiPts(qmap[c]) : null;   // already in the totals once banked
   const colorOf = colorFor(d);
   const contenders = st.filter(s => s.alive || s.car === car).sort((a, b) => b.points - a.points)
     .filter((s, i) => i < 8 || s.car === car);
@@ -334,7 +348,7 @@ function renderTitle(d) {
   if (!ans) return;
   const R = d.max_points_per_round, rr = d.rounds_remaining, final = rr <= 1;
   const nextName = (d.events.find(e => e.state === "upcoming")?.name || "the next round").replace(/ \(.*\)$/, "");
-  const myQ = q(car), qKnown = qmap != null;
+  const myQ = q(car), qKnown = d.quali_in || qmap != null;
   const myTot = p => me.points + (myQ ?? 0) + racePts(p);
   const rTot = (r, p) => r.points + (q(r.car) ?? 0) + racePts(p);
   const fc = lc?.focus?.[car] || {};

@@ -607,7 +607,8 @@ def step():
     if is_quali:
         quali = read("quali.json") or {}
         if quali.get("event") != info.get("E"):
-            quali = {"event": info.get("E"), "classes": {}}
+            # base_event: the standings these points aren't in yet (the site adds them until IMSA does).
+            quali = {"event": info.get("E"), "base_event": (read("standings.json") or {}).get("event"), "classes": {}}
         for cls, rows in by_class.items():
             quali["classes"][cls] = {c["N"]: c["PIC"] for c in rows}
         write("quali.json", quali)
