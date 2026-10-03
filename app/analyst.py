@@ -2,6 +2,7 @@
 
   - After qualifying: the pre-race prediction (fitted on every past WeatherTech race) and the caution
     history for this track. Redone when qualifying changes (re-runs, penalties to the order).
+  - Race weekends: weather at the track every WX_LIVE_SECONDS (default 300), into wx_live.json.
   - During the race: every ANALYSIS_MINUTES (default 60) of race time, the in-race prediction from the
     live state (gaps, stops owed, recent pace), plus a history of the win odds for the chart.
 It only reads what the scraper writes (live, laps, standings, quali, schedule) and writes predict.json
@@ -18,11 +19,13 @@ from datetime import datetime, timezone
 import cautions
 import inrace
 import predict
+import wxlive
 from common import now_iso, read, write
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("analyst")
 EVERY = int(os.environ.get("ANALYSIS_MINUTES", "60")) * 60
+WX_EVERY = int(os.environ.get("WX_LIVE_SECONDS", "300"))   # weather at the track, race weekends only
 
 
 def secs(t):
@@ -105,6 +108,12 @@ def main():
             tick(state)
         except Exception:
             log.exception("analysis failed")
+        if time.time() >= state.get("wx_next", 0):
+            state["wx_next"] = time.time() + WX_EVERY
+            try:
+                wxlive.refresh()
+            except Exception:
+                log.exception("track weather failed")
         time.sleep(60)
 
 

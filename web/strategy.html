@@ -202,12 +202,12 @@ let standings, live, laps, schedule, entries, sectorData, config, watchData, rcD
 const loadedAt = { laps: 0, slow: 0 };
 async function load() {
   const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
-  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config", "insights"] : [])];
+  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather", "wx_live"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config", "insights"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
   if (got.live?.updated !== live?.updated) liveFetchedAt = Date.now();
   live = got.live;
-  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; loadedAt.laps = now; }
+  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; wxLive = got.wx_live; loadedAt.laps = now; }
   if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config, insights: cauData } = got); loadedAt.slow = now; }
   if (changed) render();
 }
@@ -1043,7 +1043,22 @@ function renderTrackMap(sel, rows, cars, clsName) {
 
 // --- Weather: forecast for the race (NWS + Open-Meteo), IMSA's track weather, when conditions change
 // (with estimated laps), rain/night bands on the charts, and pace vs track temperature.
-let wxData = null;
+let wxData = null, wxLive = null;
+// WMO weather codes (Open-Meteo) in words.
+const WMO = c => c == null ? "" : c === 0 ? "Clear" : c === 1 ? "Mostly clear" : c === 2 ? "Partly cloudy" : c === 3 ? "Overcast" : c <= 48 ? "Fog"
+  : c <= 57 ? "Drizzle" : c <= 67 ? "Rain" : c <= 77 ? "Snow" : c <= 82 ? "Showers" : c <= 86 ? "Snow showers" : "Thunderstorms";
+const compass = d => d == null ? "" : ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(d / 45) % 8];
+// "Now at the track": the model at the track's coordinates, the nearest station's reading, and rain in the next 2 h.
+function wxNowLine() {
+  const L = wxLive, n = L?.now, o = L?.obs, nowT = Date.now() / 1000;
+  if (!n || nowT - Date.parse(L.updated) / 1000 > 20 * 60) return "";
+  const wet = (L.next15 || []).filter(q => Date.parse(q.t) / 1000 > nowT - 900 && q.in > 0.002);
+  const rainTxt = n.rain_in > 0.002 ? `<b class="wxrain">raining now (${n.rain_in.toFixed(2)} in in 15 min)</b>`
+    : wet.length ? `<b class="wxrain">rain from ~${wxTime(wet[0].t)}</b>` : "no rain expected in the next 2 h";
+  const st = o && o.t && nowT - Date.parse(o.t) / 1000 < 90 * 60
+    ? ` · <span class="dim">${esc(L.station?.id || "")} (${L.station?.km} km): ${o.f != null ? Math.round(o.f) + "°F" : ""}${o.text ? ", " + esc(o.text.toLowerCase()) : ""}${o.wind != null ? `, wind ${Math.round(o.wind)} mph` : ""} at ${wxTime(o.t)}</span>` : "";
+  return `<b>At the track now:</b> ${Math.round(n.f)}°F · ${esc(WMO(n.code))} · ${rainTxt} · wind ${Math.round(n.wind)} mph ${compass(n.dir)}${n.gust > n.wind + 3 ? `, gusts ${Math.round(n.gust)}` : ""} · cloud ${n.cloud}%${st}`;
+}
 const WX_LOCAL = { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" };
 const wxTime = t => new Date(t).toLocaleTimeString([], WX_LOCAL);
 const raceWindow = () => {
@@ -1120,9 +1135,11 @@ function renderWeather(sel, rows, lc, lapsCls, cars) {
   // Now: IMSA's track station if it's fresh, else the forecast hour.
   const s = w.obs?.samples?.at(-1), nowT = Date.now() / 1000;
   const h0 = (w.nws || []).find(h => Date.parse(h.t) / 1000 > nowT - 3600);
-  $("wx-now").innerHTML = s && nowT - s[0] < 45 * 60
+  const nowLine = wxNowLine();
+  $("wx-now").innerHTML = (nowLine ? nowLine + "<br>" : "") + (s && nowT - s[0] < 45 * 60
     ? `<b>Track ${Math.round(s[2])}°F</b> · air ${Math.round(s[1])}°F · wind ${s[3]} mph <span class="dim">(IMSA track weather, ${wxTime(s[0] * 1000)})</span>`
-    : h0 ? `${wxIcon(h0)} <b>${h0.f}°F</b> · ${esc(h0.sky)} · ${h0.rain}% chance of rain · wind ${esc(h0.wind)} ${esc(h0.dir || "")} <span class="dim">(forecast)</span>` : "";
+    : h0 && !nowLine ? `${wxIcon(h0)} <b>${h0.f}°F</b> · ${esc(h0.sky)} · ${h0.rain}% chance of rain · wind ${esc(h0.wind)} ${esc(h0.dir || "")} <span class="dim">(forecast)</span>`
+    : h0 ? `<span class="dim">This hour's forecast: ${esc(h0.sky).toLowerCase()}, ${h0.rain}% chance of rain</span>` : "");
   // Strip: the race window if it's today or under way, else the next 12 hours.
   const rw = raceWindow(), from = rw && nowT < rw.end ? Math.max(rw.start - 3600, nowT - 3600) : nowT - 3600, to = rw && nowT < rw.end ? rw.end : nowT + 12 * 3600;
   const hours = (w.nws || []).filter(h => { const t = Date.parse(h.t) / 1000; return t >= from && t <= to; });
@@ -1140,7 +1157,7 @@ function renderWeather(sel, rows, lc, lapsCls, cars) {
   }).join("") : `<li class="dim">No rain or big temperature swings forecast for the race window.</li>`;
   // Pace vs track temperature: each clean lap's time against the track temperature when it was run.
   renderPaceTemp(sel, lapsCls, cars);
-  $("wx-note").innerHTML = `Forecast: <a href="https://www.weather.gov/" target="_blank" rel="noopener">National Weather Service</a> and <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0), updated every 30 minutes. Track weather: IMSA's station via its results service, about hourly in the race. Lap estimates use the class's current pace and assume green-flag running.`;
+  $("wx-note").innerHTML = `Forecast: <a href="https://www.weather.gov/" target="_blank" rel="noopener">National Weather Service</a> and <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0) for the track's own coordinates (Michelin Raceway Road Atlanta, Braselton), updated every 30 minutes; "at the track now" every 5 minutes (Open-Meteo's model at the track, plus the nearest National Weather Service station's reading). Track temperature: IMSA's station at the track via its results service, about hourly in the race. Lap estimates use the class's current pace and assume green-flag running.`;
 }
 function renderPaceTemp(sel, lapsCls, cars) {
   const s = wxData?.obs?.samples || [], el = $("wx-pace");
