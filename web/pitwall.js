@@ -557,3 +557,29 @@ async function renderRadar() {
   show();
   if (frames.length > 1) radarTimer = setInterval(() => { if (k === frames.length - 1 && hold++ < 3) return; hold = 0; k = (k + 1) % frames.length; show(); }, 700);
 }
+
+// --- Title-fight markers on charts ----------------------------------------------------------------
+// After a redraw, every "#NN" on a chart or legend for a car still mathematically in its class's title
+// fight gets an asterisk, and each legend says what it means. One pass instead of touching every chart.
+function titleAlive(cls) {
+  return new Set((standings?.classes?.[cls]?.standings || []).filter(s => s.alive).map(s => s.car));
+}
+function starTitleCars(cls, root = document) {
+  const alive = titleAlive(cls);
+  if (!alive.size) return;
+  const re = /#(\d{1,3})(?![\d*])/g;
+  const zones = root.querySelectorAll(".chart svg, .legend, #sg-legend, #wp-legend, #pred-odds");
+  for (const z of zones) {
+    let starred = false;
+    const walk = document.createTreeWalker(z, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walk.nextNode()) nodes.push(walk.currentNode);
+    for (const t of nodes) {
+      if (t.parentElement?.closest("title, .titlenote")) continue;
+      const v = t.nodeValue.replace(re, (m, n) => alive.has(n) ? (starred = true, `#${n}*`) : m);
+      if (v !== t.nodeValue) t.nodeValue = v;
+    }
+    if (starred && !(z instanceof SVGElement) && !z.querySelector(".titlenote"))
+      z.insertAdjacentHTML("beforeend", `<span class="titlenote dim">* still in the title fight</span>`);
+  }
+}

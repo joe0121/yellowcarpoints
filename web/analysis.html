@@ -121,6 +121,15 @@ function render() {
   renderOdds(sel, cls);
   renderWinChart(sel, cls);
   renderCautions(el);
+  // "#4*": cars still in the title fight, on the charts and legends.
+  const alive = new Set((standings?.classes?.[sel.class]?.standings || []).filter(s => s.alive).map(s => s.car));
+  for (const z of document.querySelectorAll("#wp-chart svg, #wp-legend, #pred-odds")) {
+    let starred = false;
+    const w = document.createTreeWalker(z, NodeFilter.SHOW_TEXT), nodes = [];
+    while (w.nextNode()) nodes.push(w.currentNode);
+    for (const t of nodes) { const v = t.nodeValue.replace(/#(\d{1,3})(?![\d*])/g, (m, n) => alive.has(n) ? (starred = true, `#${n}*`) : m); if (v !== t.nodeValue) t.nodeValue = v; }
+    if (starred && !(z instanceof SVGElement) && !z.querySelector(".titlenote")) z.insertAdjacentHTML("beforeend", `<span class="titlenote dim">* still in the title fight</span>`);
+  }
 }
 
 function renderPrediction(sel, clsName) {

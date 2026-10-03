@@ -388,6 +388,7 @@ function render() {
   // Don't redraw the builder under someone's fingers (an open dropdown would close).
   if (!modeOff("builder-card") && !$("builder").contains(document.activeElement)) renderBuilder(sel, rows, lapsCls, cmpCars, clsName);
   renderBoard(rows, strat, sel, lapsCls, clsName, fc);
+  starTitleCars(sel.class);   // "#4*": cars still in the title fight, on every chart and legend
 
   $("foot").innerHTML = `Timing from IMSA live scoring; energy, refuels and pit lane from IMSA telemetry (unofficial, about 1 Hz). `
     + `Updated ${new Date(live.updated).toLocaleTimeString()}. Estimates assume the current pace and energy use continue; yellows, short fills and strategy calls change them. `
@@ -1474,6 +1475,7 @@ function renderBuilder(sel, rows, lapsCls, watch, clsName) {
   });
   $("b-new")?.addEventListener("click", () => { charts.push({ metric: "lap", cars: "watch", smooth: 3, clean: true }); saveCharts(); renderBuilder(sel, rows, lapsCls, watch, clsName); });
   $("builder-title").textContent = `Build a chart · ${clsName}`;
+  starTitleCars(sel.class, $("builder-card"));
 }
 
 let fullTiming = !!store.get("fullTiming"), bandsNow = [], enemyCar = null;

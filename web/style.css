@@ -627,3 +627,4 @@ body { --mainw: min(1040px, 100vw); }
 .tyre { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 4px; margin-left: 4px; border: 1px solid var(--line); color: var(--text-2); }
 .tyre-wet { color: var(--s2); border-color: var(--s2); }
 .tyre-slick { color: var(--text); border-color: var(--text-3); }
+.titlenote { font-size: 11px; margin-left: 6px; }
