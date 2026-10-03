@@ -607,4 +607,5 @@ body.mode-fan .sv-wide { display: none !important; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .honours { opacity: .38; } }
 @media (max-width: 1000px) { .honours { display: none; } }
 /* Room for them beside the wide Race page */
-@media (min-width: 1001px) { body.race main { max-width: min(1760px, calc(100vw - 250px)); } }
+@media (min-width: 1001px) { body.race main, body.wide main { max-width: min(1760px, calc(100vw - 250px)); } }
+@media (max-width: 1000px) { body.wide main { max-width: min(1040px, 96vw); } }
