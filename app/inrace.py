@@ -2,7 +2,8 @@
 
 For each class we take the gap to the class leader (laps down at the class pace), add the pit stops a car
 still owes against the others (from the live strategy model), and project the rest of the race with each
-car's median clean lap so far (half weight, capped at 1 s/lap: pace regresses). The spread of what can still happen and the
+car's pace against the class on the same recent green-flag laps (half weight, capped at 1 s/lap: pace
+regresses; comparing on the same laps keeps it right through a wet restart or a tyre gamble). The spread of what can still happen and the
 chance of retiring come from Petit Le Mans 2021-2025 (Al Kamel time cards):
   - how far a car's gap to the class leader moves over the remaining hours (robust spread, s per sqrt hour)
   - retirements per hour, by class
@@ -57,6 +58,40 @@ def recent_pace(d, n=None):
     return (statistics.median(clean), len(clean)) if len(clean) >= 10 else None
 
 
+def relative_pace(lapsCls, flags, rows, recent=15):
+    """Each car's pace against the class on the same laps: median of (its lap - the class median on that
+    lap number) over its last `recent` green-flag laps, in- and out-laps left out. Works whatever the
+    conditions (a wet restart, slicks vs wets) because every car is compared on the same laps.
+    Returns {car: (seconds per lap, laps used)} and the class's current lap time."""
+    lead = max((int(r.get("laps") or 0) for r in rows), default=0)
+    def flag_at(lap):
+        k = "green"
+        for l, kind in flags or []:
+            if l <= lap:
+                k = kind
+            else:
+                break
+        return k
+    good = {}
+    for r in rows:
+        d = lapsCls.get(r["car"]) or {}
+        down = lead - int(r.get("laps") or 0)
+        pit = {x for s in d.get("stops", []) for x in (s, s + 1, s + 2)}
+        good[r["car"]] = [(k, t) for k, t in d.get("laps", []) if k > 1 and k not in pit and t and t < 400 and flag_at(k + down) == "green"]
+    by_lap = {}
+    for v in good.values():
+        for k, t in v:
+            by_lap.setdefault(k, []).append(t)
+    med = {k: statistics.median(v) for k, v in by_lap.items() if len(v) >= 3}
+    out = {}
+    for car, v in good.items():
+        deltas = [t - med[k] for k, t in v[-recent:] if k in med]
+        if len(deltas) >= 5:
+            out[car] = (statistics.median(deltas), len(deltas))
+    last = [statistics.median([t for _, t in v[-5:]]) for v in good.values() if len(v) >= 3]
+    return out, (statistics.median(last) if last else None)
+
+
 def predict(live, laps, standings, quali, pre, n=20000, seed=11):
     """Odds for every class from the live state. pre: the pre-race prediction (for the blend)."""
     left = secs(live.get("remaining")) or 0
@@ -70,10 +105,11 @@ def predict(live, laps, standings, quali, pre, n=20000, seed=11):
         if len(rows) < 2:
             continue
         lapsCls = (laps or {}).get("classes", {}).get(cls, {})
+        rel, lap_now = relative_pace(lapsCls, (laps or {}).get("flags", {}).get(cls), rows)
         pn = {r["car"]: recent_pace(lapsCls.get(r["car"])) for r in rows}
         paces = {c: v and v[0] for c, v in pn.items()}
         known = [p for p in paces.values() if p]
-        lap = statistics.median(known) if known else 90.0
+        lap = lap_now or (statistics.median(known) if known else 90.0)   # laps left at the current conditions' pace
         loss = lc.get("pit_loss") or 60
         owes = {r["car"]: r.get("owes_stop") or 0 for r in rows}
         base_owe = min(owes.values())
@@ -82,9 +118,9 @@ def predict(live, laps, standings, quali, pre, n=20000, seed=11):
         for r in rows:
             c = r["car"]
             d = gap_of(r, lap) + (owes[c] - base_owe) * loss
-            if paces[c]:
-                # Trust pace more as clean laps pile up (full weight from 100 laps).
-                d += PACE_WEIGHT * min(1, pn[c][1] / 100) * max(-MAX_PACE, min(MAX_PACE, paces[c] - lap)) * laps_left
+            if c in rel:
+                # Pace against the class on the same recent green laps (full weight from 15 laps).
+                d += PACE_WEIGHT * min(1, rel[c][1] / 15) * max(-MAX_PACE, min(MAX_PACE, rel[c][0])) * laps_left
             mean[c] = d
         # Pre-race strength, converted to seconds and fading out by half-race.
         pre_cls = (pre or {}).get("classes", {}).get(cls)
@@ -106,6 +142,7 @@ def predict(live, laps, standings, quali, pre, n=20000, seed=11):
             return sorted(range(k), key=lambda i: v[i])
 
         extra = [{"now": i + 1, "pace": round(paces[c["car"]], 3) if paces[c["car"]] else None,
+                  "rel_pace": round(rel[c["car"]][0], 2) if c["car"] in rel else None,
                   "proj_gap": round(mean[c["car"]], 1)} for i, c in enumerate(cars)]
         res = summarise(cars, sample, title_base(cls, standings, quali), n, extra)
         team = {x["car"]: x.get("team", "") for x in (pre_cls or {}).get("cars", [])}

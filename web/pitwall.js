@@ -21,16 +21,29 @@ function pwGap(r, pace) {
   const v = secsOf(g);
   return v == null ? null : v;
 }
+const isRed = f => /red/i.test(f || "");
+// Current pace: the car's last five green-flag laps, whatever the conditions (no 107% cut, so a wet
+// restart or a car on the wrong tyres counts straight away); in- and out-laps and yellow/red laps left out.
+function pwRecent(lc, lapsCls, car, n = 5) {
+  const d = lapsCls[car], r = lc.cars.find(x => x.car === car);
+  if (!d?.laps?.length || !r) return [];
+  const flags = laps?.flags?.[lc.cls || ""] || laps?.flags?.[Object.keys(laps?.classes || {}).find(k => laps.classes[k] === lapsCls)] || [];
+  const leadLaps = Math.max(0, ...lc.cars.map(x => +x.laps || 0)), down = leadLaps - (+r.laps || 0);
+  const pit = new Set((d.stops || []).flatMap(s => [s, s + 1, s + 2]));
+  const ok = d.laps.filter(([k, t]) => k > 1 && !pit.has(k) && pwFlagAt(flags, k + down) === "green" && t < 400);
+  return ok.slice(-n);
+}
 function pwPace(lc, lapsCls, car) {
+  const rec = pwRecent(lc, lapsCls, car).map(q => q[1]);
+  if (rec.length >= 3) return medianOf(rec);
   const p = lc.strategy?.cars?.[car]?.pace;
   if (p) return p;
   const c = pwClean(lapsCls[car]).slice(-10).map(q => q[1]);
   return c.length >= 3 ? medianOf(c) : null;
 }
 function pwClassPace(lc, lapsCls) {
-  if (lc.strategy?.class_pace) return lc.strategy.class_pace;
   const v = lc.cars.map(r => pwPace(lc, lapsCls, r.car)).filter(Boolean);
-  return v.length ? medianOf(v) : null;
+  return v.length ? medianOf(v) : lc.strategy?.class_pace || null;
 }
 // Clean laps for pace: a stop logged at lap s has its in-lap at s, the stop itself in s+1 and the
 // out-lap s+2 (checked against the race's lap times); those, lap 1 and anything over 107% left out.
@@ -207,11 +220,13 @@ function renderPitWall(sel, lc, lapsCls) {
         inCar ? `${me.drivers.stint_secs != null ? `stint ${hm(me.drivers.stint_secs)} · ` : ""}${inCar.short ? `needs ${hm(inCar.short)} more` : "minimum done"}` : "",
         drv && (drv.overbooked || ["impossible", "urgent"].includes(drv.worst)) ? "warn" : "")
     + tile("Stops to the flag", fin ? `${fin.stops}` : "–", fin ? `${up ? `#${esc(up.r.car)} ${stopsTxt(up)}` : ""}${up && dn ? " · " : ""}${dn ? `#${esc(dn.r.car)} ${stopsTxt(dn)}` : ""}${fin.measured ? "" : " · est."}` : "")
-    + `</div><p class="pwline">${pwSituation(sel, me, mine, up, dn, net, loss, fin, drv, remaining, toStop)}</p>`;
+    + `</div><p class="pwline">${pwSituation(sel, me, mine, up, dn, net, loss, fin, drv, remaining, toStop)}</p>`
+    + (overrides?.event === live.event && (overrides.notes?.[sel.class] || overrides.tyres?.[sel.car]) ? `<p class="pwline dim">${overrides.tyres?.[sel.car] ? `#${esc(sel.car)} on <b>${esc(overrides.tyres[sel.car])}</b>. ` : ""}${esc(overrides.notes?.[sel.class] || "")} <span class="dim">(noted by hand)</span></p>` : "");
 }
 
 // One plain sentence: the most pressing thing for the selected car right now.
 function pwSituation(sel, me, mine, up, dn, net, loss, fin, drv, remaining, toStop) {
+  if (isRed(live.flag)) return `<b>Red flag:</b> the running order is frozen and no work is allowed on the cars. Projections below assume racing resumes now at each car's latest green-flag pace${remaining != null ? `, with ${hm(remaining)} on the clock` : ""}; expect them to move once the first green laps after the restart come in.`;
   if (drv?.overbooked) {
     const who = drv.people.filter(p => p.short);
     return `⚠ Drive time: ${who.map(p => `<b>${esc(p.name.split(" ").at(-1))}</b> needs ${hm(p.short)}`).join(", ")}: ${hm(drv.owed)} in all, more than the ${hm(remaining)} left. Not everyone can reach their minimum.`;
@@ -244,6 +259,12 @@ function renderPitNow(sel, lc, lapsCls, clsName) {
   if (card.hidden) return;
   const loss = pwPitLoss(lc, lapsCls, sel.class), pace = pwClassPace(lc, lapsCls), yellow = isYellow(live.flag);
   $("pn-title").textContent = `If #${sel.car} pits now · ${clsName}`;
+  if (isRed(live.flag)) {
+    $("pn-types").innerHTML = "";
+    $("pn-body").innerHTML = `<p class="pncaution"><b>Red flag:</b> pit lane closed and no work allowed until race control reopens it. Under the restart procedure the field is usually led out behind the safety car, so the first stop after a red costs about what a stop under yellow does (~${Math.round(loss.fcy || 40)} s) if it comes in that first full-course caution.</p>`;
+    $("pn-note").textContent = "";
+    return;
+  }
   const types = [["fuel", "Fuel only"], ["full", "Fuel + tyres / driver"]];
   pnType ||= "full";
   // Fill time: pitting early means a shorter fill than a typical stop.
@@ -346,7 +367,7 @@ function renderStratGraph(sel, lc, lapsCls, cars, clsName) {
   const series = cars.map(c => {
     const d = lapsCls[c.car], r = rows.find(q => q.car === c.car);
     if (!d || !r) return null;
-    const clean = pwClean(d), trend = rollingTrend(clean), now = trend.at(-1)?.[1] || pwPace(lc, lapsCls, c.car);
+    const clean = pwClean(d), trend = rollingTrend(clean), now = pwPace(lc, lapsCls, c.car) || trend.at(-1)?.[1];
     const lap = +r.laps || 0, finish = now && remaining != null ? lap + remaining / now : null;
     const e = r.energy, stops = [];
     let next = e?.next_stop_lap ?? (r.stint?.laps_to_typical != null ? lap + Math.max(0, r.stint.laps_to_typical) : null);
@@ -431,8 +452,8 @@ function renderStratGraph(sel, lc, lapsCls, cars, clsName) {
   };
   svg.querySelector(".sghit").onmouseleave = () => { tip.style.display = "none"; };
   $("sg-legend").innerHTML = series.map(s => `<span>${swatchOf(s.style)}#${esc(s.car)} <span class="dim">${esc(s.role)}</span></span>`).join("")
-    + `<span class="dim">dots: laps · line: trend (median of the last 9 clean laps) · dashed ahead: current pace · ▲ stop, △ projected · ■ finish</span>`;
-  $("sg-note").innerHTML = `${phone ? "From now to two hours ahead. " : ""}Finish at ~L${xEnd}: ${useLive ? "the leader's laps plus the time left at the class pace" : esc(RACE_LAPS[live.event]?.source || "")}. `
+    + `<span class="dim">dots: laps · line: trend (median of the last 9 clean laps) · dashed ahead: pace over the last 5 green-flag laps · ▲ stop, △ projected · ■ finish</span>`;
+  $("sg-note").innerHTML = `${isRed(live.flag) ? "<b>Red flag:</b> the projection assumes racing resumes now. " : ""}${phone ? "From now to two hours ahead. " : ""}Finish at ~L${xEnd}: ${useLive ? "the leader's laps plus the time left at the class pace" : esc(RACE_LAPS[live.event]?.source || "")}. `
     + `Yellow bands behind "Now" are this race's yellows; ahead of it, the shading is how often past races here had a caution on those laps${ins ? ` (${ins.years[0].year}–${ins.years.at(-1).year})` : ""}. `
     + `Projected stops from each car's energy use${series.some(s => s.estStops) ? " (or typical stint lengths where there's no telemetry)" : ""}; weather at its estimated lap. Laps off the top of the scale (pit, yellow) are marked along the top.`;
 }

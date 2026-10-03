@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 
@@ -85,16 +86,25 @@ def tick(state):
             doc["history"] = [{"elapsed": 0, "label": "Start", "win": {c: {x["car"]: x["win"] for x in v["cars"]} for c, v in pre["classes"].items()}}]
             write("predict.json", doc)
 
-    # In race: every EVERY seconds of race time.
+    # In race: every EVERY seconds of race time, and 10 minutes after a red flag ends (conditions and
+    # tyre choices can change everything at a restart).
+    after_red = False
+    if racing:
+        if re.search(r"red", live.get("flag") or "", re.I):
+            state["red"], state["restart_at"] = True, None
+        elif state.get("red") and re.search(r"green", live.get("flag") or "", re.I):
+            state["restart_at"] = state.get("restart_at") or time.time()
+            if time.time() - state["restart_at"] >= 600:
+                after_red, state["red"] = True, False
     if racing and doc.get("prerace"):
         el = secs(live.get("elapsed")) or 0
         slot = int(el // EVERY)
-        if slot >= 1 and slot > (doc.get("as_of") or {}).get("slot", 0):
+        if (slot >= 1 and slot > (doc.get("as_of") or {}).get("slot", 0)) or after_red:
             cls = inrace.predict(live, read("laps.json"), standings, quali, doc["prerace"])
             if cls:
-                label = f"{el / 3600:.0f} h" if EVERY % 3600 == 0 else f"{int(el // 3600)}:{int(el % 3600 // 60):02d}"
+                label = f"{el / 3600:.0f} h" if EVERY % 3600 == 0 and not after_red else f"{int(el // 3600)}:{int(el % 3600 // 60):02d}{' (after red)' if after_red else ''}"
                 doc.update({"updated": now_iso(), "mode": "in-race", "classes": cls,
-                            "as_of": {"slot": slot, "elapsed": round(el), "remaining": live.get("remaining"), "label": label}})
+                            "as_of": {"slot": max(slot, (doc.get("as_of") or {}).get("slot", 0)), "elapsed": round(el), "remaining": live.get("remaining"), "label": label}})
                 doc["history"] = [h for h in doc.get("history", []) if h["elapsed"] < el] + [
                     {"elapsed": round(el), "label": label, "win": {c: {x["car"]: x["win"] for x in v["cars"]} for c, v in cls.items()}}]
                 write("predict.json", doc)

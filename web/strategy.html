@@ -202,19 +202,23 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
 async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
 
 let standings, live, laps, schedule, entries, sectorData, config, watchData, rcData, cauData, onbData;
-let watchPick = null;   // the stream chosen in the Watch card (null = IMSA's broadcast), this visit only
+let watchPick = null;
+let overrides = null;   // data/overrides.json: things the feeds don't carry (tyres), set by hand during a race
+// Tyre tag for a car, when someone has noted it this session.
+const tyreTag = car => { const t = overrides?.event === live?.event ? overrides?.tyres?.[car] : null;
+  return t ? ` <span class="tyre tyre-${/wet|rain/i.test(t) ? "wet" : "slick"}" title="Tyres (noted by hand${overrides.updated ? ", " + new Date(overrides.updated).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""})">${esc(t.toUpperCase())}</span>` : ""; };   // the stream chosen in the Watch card (null = IMSA's broadcast), this visit only
 
 // Live timing every 10 s, lap history every 30 s, everything else every 5 minutes; the page
 // only redraws when something changed (unchanged files come back as cheap 304s).
 const loadedAt = { laps: 0, slow: 0 };
 async function load() {
   const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
-  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather", "wx_live", "onboards"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config", "insights"] : [])];
+  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather", "wx_live", "onboards", "overrides"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config", "insights"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
   if (got.live?.updated !== live?.updated) liveFetchedAt = Date.now();
   live = got.live;
-  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; wxLive = got.wx_live; onbData = got.onboards; loadedAt.laps = now; }
+  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; wxLive = got.wx_live; onbData = got.onboards; overrides = got.overrides; loadedAt.laps = now; }
   if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config, insights: cauData } = got); loadedAt.slow = now; }
   if (changed) render();
 }
@@ -578,7 +582,7 @@ function renderBoard(rows, strat, sel, lapsCls, clsName, fc) {
       const last = e.refills?.at(-1);
       return `<tr class="${corvettes.includes(r.car) ? "tracked" : ""}" style="--c:${r.car === sel.car ? C.me : corvettes.includes(r.car) ? "var(--series-2)" : C.ctx}">
         <td>${r.class_pos}</td><td class="dim">${r.net_pos ?? "–"}</td><td>#${esc(r.car)}${[fc.champ_behind, fc.champ_ahead].includes(r.car) ? ` <span class="owes" title="Championship rival">TITLE</span>` : ""}</td>
-        <td class="l team">${esc(r.driver)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}${r.owes_stop ? `<span class="owes" title="Still owes a stop in this pit cycle">OWES STOP</span>` : ""}</td>
+        <td class="l team">${esc(r.driver)}${tyreTag(r.car)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}${r.owes_stop ? `<span class="owes" title="Still owes a stop in this pit cycle">OWES STOP</span>` : ""}</td>
         <td class="l">${e.now != null ? `<span class="mini"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></span>${e.now.toFixed(0)}%` : "–"}</td>
         <td title="${e.mj_per_lap ? e.mj_per_lap + " MJ per lap of a " + e.tank_mj + " MJ tank" : ""}">${e.use_per_lap ?? "–"}</td><td>${e.laps_left != null ? Math.floor(e.laps_left) : "–"}</td><td>${e.next_stop_lap ? "L" + e.next_stop_lap : "–"}</td>
         <td>${r.pit_stops ?? "–"}${e.stops_remaining != null ? ` <span class="dim">+${e.stops_remaining}</span>` : ""}</td>
@@ -834,7 +838,7 @@ function renderOurs(cars, rows, strat, lapsCls = {}) {
       const e = r.energy, pace = strat[r.car]?.pace, last = secsOf(r.last_lap);
       const vs = pace && last ? last - pace : null;
       const toStop = e?.next_stop_lap ? e.next_stop_lap - (+r.laps || 0) : r.stint?.laps_to_typical;
-      const now = [r.in_pit ? `<span class="pit">PIT</span>` : "", r.owes_stop ? `<span class="owes" title="Still owes a stop in this pit cycle">OWES STOP</span>` : "",
+      const now = [tyreTag(r.car), r.in_pit ? `<span class="pit">PIT</span>` : "", r.owes_stop ? `<span class="owes" title="Still owes a stop in this pit cycle">OWES STOP</span>` : "",
         race && r.net_pos && r.net_pos !== r.class_pos ? `<span class="dim">P${r.net_pos} after stops</span>` : "", `<span class="dn">${esc(r.driver)}</span>`].filter(Boolean).join(" ");
       return `<tr class="${c.role === "selected" ? "tracked" : ""}" style="--c:${c.style.color}">
         <td class="l who">${swatchOf(c.style)}<b>#${esc(c.car)}</b> <small class="dim role">${esc(c.role)}</small>${c.car === enemyCar ? " " + window.enemyTag : ""}${r.in_pit ? ` <span class="pit m-only">PIT</span>` : ""}</td>

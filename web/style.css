@@ -624,3 +624,6 @@ body { --mainw: min(1040px, 100vw); }
 .rdtrack { fill: var(--text); font-weight: 600; }
 .rdtime { position: absolute; right: 8px; bottom: 6px; font-size: 11px; color: var(--text-2); background: color-mix(in srgb, var(--bg) 70%, transparent); padding: 1px 6px; border-radius: 6px; }
 .wstreams { flex-wrap: wrap; margin: 2px 0 8px; border-radius: 12px; }
+.tyre { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 4px; margin-left: 4px; border: 1px solid var(--line); color: var(--text-2); }
+.tyre-wet { color: var(--s2); border-color: var(--s2); }
+.tyre-slick { color: var(--text); border-color: var(--text-3); }
