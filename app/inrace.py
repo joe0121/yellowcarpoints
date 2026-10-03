@@ -111,7 +111,18 @@ def predict(live, laps, standings, quali, pre, n=20000, seed=11):
         known = [p for p in paces.values() if p]
         lap = lap_now or (statistics.median(known) if known else 90.0)   # laps left at the current conditions' pace
         loss = lc.get("pit_loss") or 60
+        # Stops owed by fuel in hand (laps to go minus laps left, in standard class tanks), not by the timing
+        # of recent stops: tyre-only stops (wets to slicks) don't make the others look like they owe one.
         owes = {r["car"]: r.get("owes_stop") or 0 for r in rows}
+        tanks = [r["energy"]["full_tank_laps"] for r in rows if (r.get("energy") or {}).get("full_tank_laps")]
+        if len(tanks) >= len(rows) / 2:
+            tank = statistics.median(tanks)
+            to_go = left / lap
+            need = {r["car"]: max(0.0, (to_go - (tank if r.get("in_pit") else r["energy"]["laps_left"])) / tank)
+                    for r in rows if (r.get("energy") or {}).get("laps_left") is not None}
+            if need:
+                least = min(need.values())
+                owes = {c: round(need[c] - least, 2) if c in need else owes[c] for c in owes}
         base_owe = min(owes.values())
         laps_left = left / lap
         mean = {}
