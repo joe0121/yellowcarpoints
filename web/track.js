@@ -55,6 +55,20 @@
       document.body.prepend(d); };
     strip("l", HONOURS.left);
     strip("r", HONOURS.right(wins));
+    fit();
+    addEventListener("resize", fit);
+    new ResizeObserver(fit).observe(document.querySelector("main") || document.body);
+  }
+  // Centre each column in the empty space between the screen edge and the page's cards (measured,
+  // as some pages' content is narrower than the frame or off-centre).
+  function fit() {
+    const cards = [...document.querySelectorAll("main .card, main .sessionbar, main section")].map(e => e.getBoundingClientRect()).filter(r => r.width > 200);
+    const box = (document.querySelector("main") || document.body).getBoundingClientRect();
+    const left = cards.length ? Math.min(...cards.map(r => r.left)) : box.left + 16;
+    const right = cards.length ? Math.max(...cards.map(r => r.right)) : box.right - 16;
+    const w = document.documentElement.clientWidth;
+    document.querySelector(".honours-l")?.style.setProperty("width", `${Math.max(0, left)}px`);
+    document.querySelector(".honours-r")?.style.setProperty("width", `${Math.max(0, w - right)}px`);
   }
   document.addEventListener("DOMContentLoaded", honours);
 

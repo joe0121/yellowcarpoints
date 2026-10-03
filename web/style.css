@@ -596,7 +596,10 @@ body.mode-fan .sv-wide { display: none !important; }
 
 /* Corvette Racing's honours down the page margins: stacked columns, one year per line, as faint as
    the track outline. */
-.honours { position: fixed; top: 0; bottom: 0; width: 116px; z-index: -1; pointer-events: none; display: flex; flex-direction: column;
+/* Content width per page (main's max-width), so each column can fill exactly the gap beside it. */
+body { --mainw: min(1040px, 100vw); }
+@media (min-width: 1001px) { body.race, body.wide { --mainw: min(1760px, calc(100vw - 250px)); } }
+.honours { position: fixed; top: 0; bottom: 0; width: calc((100vw - var(--mainw)) / 2 + 16px); z-index: -1; pointer-events: none; display: flex; flex-direction: column;
   justify-content: center; gap: clamp(8px, 1.8vh, 20px); text-align: center; color: var(--accent); opacity: .3;
   font: 600 clamp(12px, 1.95vh, 21px) / 1.12 Oswald, Impact, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
 .honours .hb { display: flex; flex-direction: column; }
