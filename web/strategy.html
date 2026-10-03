@@ -34,7 +34,7 @@
     <div class="qnote" id="qnote" hidden></div>
   </section>
   <section class="pitwall" id="pw" hidden aria-label="Pit wall: the selected car at a glance" aria-live="polite"></section>
-  <div class="sv-wide">
+  <div class="sv-wide" id="sv-wide">
   <section class="card" id="board-card" style="margin-bottom:16px">
     <h2 id="board-title">Class strategy board</h2>
     <div class="scroll"><table id="board"></table></div>
@@ -236,7 +236,7 @@ const MODES = {
          a: ["watch-card", "ours-card", "feed-card", "rc-card", "drivers-card"], b: ["map-card", "timing-card", "wx-card"] },
   strategy: { label: "Strategy", note: "Pit wall, stops, fuel, weather and pace against our rivals",
               a: ["ours-card", "pn-card", "cars-card", "fin-card", "drivers-card", "feed-card"],
-              b: ["wx-card", "pa-card", "timing-card", "builder-card", "rc-card", "sector-card"] },
+              b: ["wx-card", "pa-card", "builder-card", "rc-card", "sector-card"] },
 };
 // ?view=fan or ?view=strategy picks the view from a link; otherwise the viewer's last choice (Fan to start).
 const viewParam = new URLSearchParams(location.search).get("view");
@@ -245,6 +245,10 @@ function setMode(mode, first) {
   raceMode = mode;
   store.set("raceMode", mode);
   const m = MODES[mode], on = new Set([...m.a, ...m.b]);
+  // Strategy view: Timing goes full width under the strategy graph; Fan keeps it in the right column.
+  const timing = $("timing-card");
+  if (mode === "strategy") { $("sg-card").after(timing); timing.classList.remove("mode-off"); }
+  else if (!timing.closest(".race-grid")) document.querySelector(".col-b").prepend(timing);
   document.body.classList.toggle("mode-fan", mode === "fan");
   document.body.classList.toggle("mode-strategy", mode === "strategy");
   document.querySelectorAll(".race-grid section.card[id]").forEach(c => c.classList.toggle("mode-off", !on.has(c.id)));
