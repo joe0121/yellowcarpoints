@@ -1,195 +1,269 @@
 # yellowcarpoints.win
 
-Championship standings, race history and live race tracking for the Corvettes in the IMSA
-WeatherTech SportsCar Championship (GTD PRO #4, #3, #74 and GTD #13, #36, #81; pick one at the top
-of the page, or link straight to one with `#13`).
+An unofficial Corvette fan site for the IMSA WeatherTech SportsCar Championship: where the cars stand in
+the championship and what they need, what's happening live in a session, race strategy, and predictions.
+It runs on one PC in Docker and is published through a Cloudflare Tunnel.
 
-- `scraper` finds the newest `00_Championship Points` PDF on IMSA's Al Kamel results site every
-  `INTERVAL_MINUTES`, parses the class's Teams and Drivers tables, and writes `standings.json`.
-- Live timing (`app/live.py`) is driven by IMSA's published weekend schedule (read from imsa.com
-  every 6 hours into `schedule.json`). It only polls the JSON behind imsa.com/scoring from 10 minutes
-  before each WeatherTech session until 30 minutes after its scheduled end, and not at all otherwise
-  (if the schedule can't be read, it checks every 30 minutes instead). While a session runs:
-  - every `LIVE_RACE_SECONDS` (10) in the race / `LIVE_SESSION_SECONDS` (15) otherwise: every car's
-    lap times and pit stops in the tracked classes (`laps.json`, `race_state.json`), the class
-    timing, and in the race the championship if it finished now (`live.json`). Qualifying class
-    positions go to `quali.json` so their points are included;
-  - every `STRATEGY_SECONDS` (300): pace over the last 5 clean laps and its trend, pace against the
-    cars either side, and where each car would rejoin if it pitted now.
-  Failed requests back off exponentially up to 15 minutes.
-- Telemetry (`app/telemetry.py`): during the same session windows it keeps one WebSocket open to the
-  stream behind imsa.com/telemetry (AppSync Events, using the public key that page ships with; about
-  1 Hz, push only). Per car it records energy remaining at each lap, every refuel (duration and energy
-  added) and every pit-lane visit with what happened in it: seconds refuelling, seconds on the air
-  jacks (`is_jacked_up` above 0.5 for 5 s+ is taken as a tyre change; its scale isn't documented, so the
-  per-stop maximum is kept for checking) and whether the active driver changed. In the race the pit
-  loss used for the net order is the class median of the most common stop type (fuel-only or full
-  service) once there are 3 timed stops. From that, `live.json` gets energy use per lap, laps left on the tank, the
-  next stop lap, the next fill time (from the class's observed fill rate) and, in the race, the stops
-  still needed to reach the flag. Unofficial: if it stops working the pages fall back to lap-count
-  estimates.
-- `web/index.html` (Championship tab): standings, the cars still in contention (points now, most
-  they can reach, and in the race where they're running and their points if it ended now), what the
-  selected car needs (guaranteed finish plus a finish-by-rival table, or for an eliminated car the
-  highest championship position it can still reach), the live championship projection and history.
-- `web/strategy.html` (Race tab): per-car race page (same car picker) with class timing and a lap
-  chart, pit strategy tiles, gap and energy charts with trend lines, pace, sectors and a strategy
-  board for the whole class.
-- After each race it reads Al Kamel's race reports (results, grid, lap and pit stop time cards) for
-  every round this season and writes `history.json`: class finish, grid, best lap and its class rank,
-  stops and their times, stint lengths and laps per driver. Each race is fetched once Provisional results are out (again for Official) and cached in
-  `history/`.
-- Pit windows: `baseline.json` holds the full-tank stint lengths (25th percentile, median, 90th
-  percentile) from last season's race at the next event's track. During a race the scraper records
-  each car's stops as its pit-stop count changes, and switches to this race's own stints once there
-  are enough of them. Each tracked car shows laps into its stint and when the window opens.
-- `web` (Caddy) serves `web/index.html` plus that JSON on `127.0.0.1:8088`.
-- `cloudflared` publishes `web` at https://yellowcarpoints.win (and www.) through a locally managed
-  Cloudflare Tunnel: no port forwarding, works behind the VPN. Routing is in `cloudflared/config.yml`;
-  the tunnel credentials live in `~/.cloudflared/` on the host (never in the repo).
+- **Championship tab**: standings for every class (GTP, LMP2, GTD PRO, GTD), what the selected car needs
+  to win, clinch or stay in the fight, rival by rival, and during the race the championship "if it ended
+  now". This weekend's qualifying points are banked as soon as qualifying ends.
+- **Race tab**, in two views:
+  - *Fan*: IMSA's video stream and a live track map first, then our cars, what just happened, race
+    control and drivers.
+  - *Strategy*: the pit wall (net position, gaps on net, next stop, energy, drive time), the class
+    strategy board, a race strategy graph (lap time through the whole race with the projection ahead),
+    "if we pit now", fuel to the flag, drive-time compliance, weather with radar, pace analysis and charts.
+- **Analysis tab**: race prediction (each car's chance to win, reach the podium and finish in each
+  position), championship odds, win chances through the race, and the caution history of this race.
 
-## Run
+Pick any car with the picker ("This is my car"); every tab follows it. Link straight to a car with
+`yellowcarpoints.win/#13`, or a view with `strategy.html?view=strategy#4`.
 
-Pushing to `main` builds both images on GitHub Actions and publishes them to
-`ghcr.io/joe0121/yellowcarpoints-scraper` and `ghcr.io/joe0121/yellowcarpoints-web`.
-The compose file pulls those images; nothing is built locally.
+## Install
 
+You need a Linux machine with Docker and the Compose plugin. Images are built by GitHub Actions and
+pulled from GitHub's container registry, so nothing has to be built locally.
+
+    git clone https://github.com/joe0121/yellowcarpoints.git
+    cd yellowcarpoints
     cp .env.example .env
-    docker compose pull && docker compose up -d   # also http://localhost:8088 locally
+    # set API_SECRET and ADMIN_TOKEN in .env (openssl rand -hex 32 for each)
+    docker compose pull
+    docker compose up -d scraper analyst api web
 
-To test a change before pushing, build locally:
+The site is then on http://localhost:8088 and the status page on http://localhost:8089 (both bound to
+127.0.0.1, so only this machine sees them). The scraper fills in the championship within a minute; live
+timing starts by itself 10 minutes before each WeatherTech session.
+
+To publish it on your own domain, set up a Cloudflare Tunnel (below), then `docker compose up -d`
+starts `cloudflared` too.
+
+### Cloudflare Tunnel (once)
+
+No port forwarding needed, and it works behind a VPN. The domain must be on Cloudflare.
+
+    CF="docker run --rm --user $(id -u):$(id -g) -e HOME=/cf -v $HOME/.cloudflared:/cf/.cloudflared cloudflare/cloudflared:latest"
+    $CF tunnel login                       # browser: authorize your domain
+    $CF tunnel create yellowcarpoints      # writes ~/.cloudflared/<tunnel id>.json
+    $CF tunnel route dns yellowcarpoints example.com
+    $CF tunnel route dns yellowcarpoints www.example.com
+
+Then put your tunnel id and hostnames in `cloudflared/config.yml`, and the credentials file name in the
+`cloudflared` volume line of `compose.yaml`. The credentials stay in `~/.cloudflared/` (never in the repo).
+No Zero Trust dashboard setup is needed for a locally managed tunnel. For passkeys, set `RP_ID` and
+`ORIGINS` in `.env` to your domain.
+
+### Configuration (`.env`)
+
+| Variable | What it does |
+|---|---|
+| `API_SECRET`, `ADMIN_TOKEN` | Required. Keys the sync codes, and lets the local status page moderate the guest book. |
+| `CARS` | Cars in the picker, `CLASS:NUMBER` (e.g. `GTDPRO:4,GTD:13`). Empty: the defaults in `app/common.py`. |
+| `RACE_CARS` | Cars followed in live timing only (own Race tab, no championship maths). |
+| `INTERVAL_MINUTES` | How often to check for a new championship points PDF (30). |
+| `ANALYSIS_MINUTES` | Minutes of race time between in-race predictions (60). |
+| `WX_LIVE_SECONDS` | Weather at the track and radar nowcast refresh during race weekends (300). |
+| `RP_ID`, `ORIGINS` | Your domain, for passkeys. |
+| `TURNSTILE_SITEKEY`, `TURNSTILE_SECRET` | Optional Cloudflare Turnstile spam check on the guest book. |
+
+### Updating
+
+Pushing to `main` builds the three images (`scraper`, `web`, `api`) on GitHub Actions and publishes them
+to `ghcr.io/joe0121/yellowcarpoints-*`. On the server:
+
+    docker compose pull && docker compose up -d
+
+During a race, update one service at a time and never recreate the scraper by hand: see
+[Making changes during a race](#making-changes-during-a-race). To run your own fork, change the image
+names in `compose.yaml` to your registry, or build locally:
 
     docker build -t ghcr.io/joe0121/yellowcarpoints-scraper:latest app
     docker build -t ghcr.io/joe0121/yellowcarpoints-web:latest -f web/Dockerfile .
-    docker compose up -d
+    docker build -t ghcr.io/joe0121/yellowcarpoints-api:latest api
 
-### Tunnel setup (done once, 2026-10-01)
+## Services
 
-    CF="docker run --rm --user $(id -u):$(id -g) -e HOME=/cf -v $HOME/.cloudflared:/cf/.cloudflared cloudflare/cloudflared:latest"
-    $CF tunnel login                       # browser: authorize yellowcarpoints.win
-    $CF tunnel create yellowcarpoints      # writes ~/.cloudflared/<tunnel id>.json
-    $CF tunnel route dns yellowcarpoints yellowcarpoints.win
-    $CF tunnel route dns yellowcarpoints www.yellowcarpoints.win
+| Service | What it does |
+|---|---|
+| `scraper` | Championship points, race history, live timing and telemetry, race control, sectors, BoP, weather forecast, IMSA's YouTube streams. Writes JSON to the `data` volume and records every session to `./archive/`. |
+| `analyst` | Same image, its own process so it can never hold up live timing: the race prediction (pre-race and every race hour), caution history, weather at the track every 5 minutes and the radar nowcast. Caches past results in the `analysis-cache` volume. |
+| `web` | Caddy: the static pages plus the JSON, on 127.0.0.1:8088; the status page on 127.0.0.1:8089. |
+| `api` | FastAPI + SQLite: anonymous profiles (sync code and/or passkeys) that sync display settings, and the guest book. |
+| `cloudflared` | The Cloudflare Tunnel that publishes `web`. |
 
-No Zero Trust dashboard setup is needed for a locally managed tunnel.
+Data sources: IMSA's live timing (the JSON behind imsa.com/scoring) and telemetry stream (imsa.com/telemetry),
+Al Kamel's published results site (points PDFs, results, time cards, race control and weather files),
+IMSA's schedule and BoP bulletins, the National Weather Service, Open-Meteo, RainViewer and IMSA's
+YouTube RSS feed. Al Kamel's own live timing site is not scraped (its terms forbid it). Everything is
+polled gently and only around sessions.
 
-## Track other cars
+## How the predictions work
 
-Set `CARS` in `.env` as `CLASS:NUMBER` pairs, e.g. `CARS=GTDPRO:4,GTD:13`, then `docker compose up -d`.
-Each car's log of stops, driver changes and position changes (`ev` in `laps.json`) and per-driver drive
-time (`drivers` in `live.json`, with ratings from the entry list and the event's drive-time rules in
-`DRIVE_RULES`) are kept in `race_state.json`, so restarts and page reloads lose nothing.
-`api/` is a small FastAPI service (SQLite in the `api-db` volume) for anonymous profiles and the guest
-book. A profile is a random sync code (stored only as an HMAC keyed by `API_SECRET`) and/or passkeys
-(WebAuthn, `RP_ID`/`ORIGINS`); it holds display settings only. Guest book posts wait for approval on the
-local status page: Caddy's :8089 server adds `X-Admin: $ADMIN_TOKEN` for `/api/admin/*`, while the public
-:80 server refuses that path and strips the header. Set `API_SECRET` and `ADMIN_TOKEN` in `.env`
-(random, private). Optional Cloudflare Turnstile spam check: `TURNSTILE_SITEKEY` / `TURNSTILE_SECRET`.
-Client IPs are used in memory for rate limiting only.
+Every number on the site comes from published data and simple, explainable maths, not a black box. Where
+something is an estimate, the page says so.
 
-`app/racecontrol.py` picks up Al Kamel's `25_FlagsAnalysisWithRCMessages` (the official race control
-log: penalties, reviews, decisions, pit lane, flags) for the newest WeatherTech session, including the
-hourly snapshots in endurance races, in the same 5-minute check as the sector times (`racecontrol.json`).
-IMSA's live feeds don't carry race control messages.
+### Championship: what a car needs
 
-`web/track.js` draws the current event's track outline faintly behind the pages, in the selected car's
-livery colour (picked from live timing's event, else the next round). Outlines are generated from
-OpenStreetMap raceway data (credited in the footer, ODbL); only Road Atlanta is in the list so far.
+From the official standings (plus this weekend's qualifying points once qualifying is done; they're only
+added while the standings don't include this round yet), for each rival the site works out the lowest
+class finish the selected car can afford if that rival finishes in each position. "Whatever anyone else
+does" assumes every rival takes the maximum it still can. Early in a season, when nobody can clinch or be
+knocked out at the next round, it shows the season picture instead of scenarios. When a car only needs to
+start the race, it's declared champion as soon as it has a lap scored, and the card moves on to the fight
+for 2nd. Ties and penalties aren't modelled.
 
-`app/weather.py`: National Weather Service hourly forecast and Open-Meteo (rain, 15-minute
-precipitation, sunrise/sunset) for the event's track every 30 minutes around race weekends, plus IMSA's
-track weather (`26_Weather`, air/track temperature, wind) with the sector check (`weather.json`). The
-Race page turns it into a forecast strip, a "what changes when" timeline with estimated laps, rain/night
-chart bands and pace vs track temperature. Track coordinates are in `TRACKS` (Road Atlanta so far).
+### During the race: net position and "if it ended now"
 
-`app/watch.py` reads YouTube's public RSS feed for IMSA's channel (no API key) to find WeatherTech
-session streams for the Race page's Watch card (embedded with YouTube's player, nothing re-hosted), and
-notes which cars IMSA.tv lists with an in-car camera (linked, never embedded: IMSA.tv uses its own
-tokenised player). Checked every 3 minutes in a session window, hourly otherwise (`watch.json`).
-`RACE_CARS` (default empty; the LMP2 #73 and #99 are in `CARS` with the LMP2 championship) adds cars that are followed in live timing
-only: their class is tracked live and they get their own tab on the Race page, with no championship maths.
-The pages poll `live.json` every 10 s, `laps.json` every 30 s (Championship: 60 s) and the rest every 5 minutes.
-Leave it empty for the default Corvettes. The class is as printed in the PDF: `GTP`, `LMP2`, `GTDPRO`, `GTD`.
+- **Net position**: where each car runs once everyone has made the stops they owe in the current pit
+  cycle: its gap to the class leader plus the cost of each stop it still owes. A car owes a stop when some
+  cars in its class stopped recently (within 40% of a typical stint) and it hasn't; in the last tank of
+  the race it's the stops each car still needs to reach the flag.
+- **Typical stint**: last year's race at this track until this race has six full-tank stints. Stints cut
+  short (under 60% of last year's typical, or 20 laps without a baseline) don't count, so an early yellow
+  or a wet start can't teach it that a stint is 8 laps.
+- **What a stop costs**: the in-lap plus the lap with the stop, compared with the cars that didn't pit on
+  those same laps (so a drying track or traffic cancels out). Measured from this race once there are three
+  green-flag stops; before that, Petit Le Mans 2021–2025 from Al Kamel's time cards: about 75 s under
+  green, and 39–56 s (by class) under a full-course yellow, because the field is slow while the car is in
+  the lane.
+- **If we pit now**: the car's gap plus the stop cost, slotted into the class order: where it would rejoin
+  and which cars it would come out between, under green and if a yellow came out now. Stopping early means
+  a shorter fill, which is credited.
+- **Fuel to the flag**: laps to the flag at each car's pace, against laps left on the tank and laps per
+  full tank (IMSA telemetry energy, or typical stint lengths for cars without telemetry): "makes it", the
+  window for a single last stop (and whether it's a short fill), or the number of stops left.
+- **Drive time**: counted from live timing every poll for whoever is in the car, against the event's
+  minimums (and the Bronze minimum), the per-driver maximum and the "4 hours in any 6" limit (that one
+  estimated from lap times between driver changes). The page shows the latest each driver can get in and
+  still make their minimum, and warns when the drivers still short need more time than the race has left.
 
-## Championship maths during the race
+### Pre-race prediction (Analysis tab)
 
-For each tracked car, `live.json` → `classes.<class>.focus.<car>` holds the cars that matter: the race
-reference (class leader, or the car behind when leading), the car ahead on track, and the championship
-neighbours either side in the projection. The projection uses the **net** order when it can: during a
-pit cycle (some cars in the class stopped within the last 40% of a stint, others not) the cars that
-still owe a stop are moved back by the class pit loss; in the final tank it compares stops still needed
-to reach the flag. Net is switched off under yellows. A change of title rival must hold for 3 polls
-before it's reported. Also: margin to each rival (raw and net), what a place is worth, the lowest
-finish needed to stay ahead of / get ahead of each rival, and what the rival behind needs. The title
-margin per lap is in `laps.json` (`margins`).
+A Plackett–Luce model, the standard way to model a finishing order: each car gets a strength, and the
+order is drawn winner first with probability proportional to exp(strength), then 2nd from the rest, and
+so on. The strength is a weighted sum of what's known before the race:
+
+- starting position in class
+- best practice lap, as % behind the class's best
+- form: average class finishing position over the last six races this season, plus last season at half
+  weight (shrunk toward the middle when there are few races)
+- retirement rate this season
+- number of Bronze-rated drivers in the line-up
+
+The weights are fitted by maximum likelihood on every WeatherTech race since 2024 (Al Kamel's JSON
+results start then), on the top three of each class, which is what win and podium odds depend on. Longer
+races are allowed to be more random. The race is then simulated 40,000 times; the share of simulations a
+car wins is its win chance, and adding each simulated finish to the points gives the championship odds.
+
+**How good is it?** Backtested on 68 class results in 2025 and 2026, each predicted only from the races
+before it: the model's favourite won 19 (28%), against 15 (22%) for the polesitter, and finished on the
+podium about half the time. Endurance racing is chaotic, so a 20–30% favourite is normal. The research
+scripts (feature selection, backtests, calibration) are in `tools/predict/`.
+
+### In-race prediction
+
+Every race hour (`ANALYSIS_MINUTES`) the analyst projects each car's finish from the live state:
+
+- its gap to the class leader (laps down at the class pace), plus the stops it still owes against the
+  others at the class stop cost
+- plus half the difference between its median clean lap so far and the class's, times the laps left
+  (capped at 1 s/lap, and only fully trusted after about 100 clean laps, so one slow stint doesn't swing it)
+- plus random spread for what can still happen, and a chance of retiring, both calibrated on Petit Le Mans
+  2021–2025: gaps move by about 18–40 s per √(hour left) depending on class, and 1–3% of a class retires
+  per hour
+- the pre-race view fades out by half distance
+
+Simulated 20,000 times as above. The Analysis tab draws each car's win chance after every update.
+
+### Caution history
+
+From Al Kamel's lap-by-lap time cards for past editions of the race: the flag at the line on every lap
+(available from 2021). Earlier years have no flag column, so a caution is taken as the top class running
+30%+ off green pace for over 2.5 minutes; checked against 2021–2025, that found 40 of 43 cautions
+(back-to-back cautions merge). From that: cautions per race, time under caution, the chance of a caution
+in each race hour, and a heat map of which laps ran under caution.
+
+### Weather and radar
+
+- **Forecast** (every 30 minutes around race weekends): National Weather Service hourly forecast and
+  Open-Meteo for the track's own coordinates, turned into a timeline of what changes when (rain, sunset,
+  dark, cooling) with the estimated lap.
+- **At the track now** (every 5 minutes): Open-Meteo's model at the track, and the latest reading from the
+  nearest weather station (for Road Atlanta, Gainesville airport, 14 km).
+- **Radar nowcast**: forecast models miss pop-up storms, so the analyst reads RainViewer's two latest
+  radar frames around the track (zoom 7, about 1 km a pixel), finds the nearest rain and its intensity,
+  estimates how the rain field is moving from the shift between the frames, and extrapolates: when (if
+  at all, within 3 hours) rain would reach the track. A rough heads-up, labelled as such. The Weather
+  card shows a looping radar map centred on the track.
+- **Track temperature**: IMSA's own station at the track (Al Kamel's `26_Weather` file, about hourly).
+
+## Data details
+
+- `scraper` finds the newest `00_Championship Points` PDF on Al Kamel's results site every
+  `INTERVAL_MINUTES`, parses each class's Teams and Drivers tables, and writes `standings.json`.
+- Live timing (`app/live.py`) is driven by IMSA's published weekend schedule (read every 6 hours into
+  `schedule.json`). It only polls from 10 minutes before each WeatherTech session until 30 minutes after
+  its scheduled end. While a session runs, every `LIVE_RACE_SECONDS` (10) in the race /
+  `LIVE_SESSION_SECONDS` (15) otherwise: every car's laps and pit stops (`laps.json`, `race_state.json`),
+  class timing and the championship if it finished now (`live.json`); qualifying positions go to
+  `quali.json`. Every `STRATEGY_SECONDS` (300): pace over the last 5 clean laps, its trend, and pace
+  against the cars either side. Failed requests back off exponentially up to 15 minutes.
+- Telemetry (`app/telemetry.py`): one WebSocket to the stream behind imsa.com/telemetry (about 1 Hz, push
+  only). Per car: energy at each lap, every refuel, and every pit-lane visit (refuelling, air jacks taken
+  as a tyre change, driver change). From that: energy per lap, laps left on the tank, next stop, next fill
+  time and stops to the flag. LMP2 has no telemetry; the pages fall back to stint lengths.
+- After each race, Al Kamel's race reports for every round this season go into `history.json` (finish,
+  grid, best lap, stops, stint lengths, laps per driver), cached in `history/`. `baseline.json` holds last
+  season's stint lengths and pit-lane time at the next event's track.
+- `app/racecontrol.py`: Al Kamel's official race control log (`25_FlagsAnalysisWithRCMessages`), after
+  each session and hourly in endurance races. IMSA's live feeds don't carry race control messages.
+- `app/sectors.py`: best and typical sector times and the ideal lap from Al Kamel's time cards.
+- `app/bop.py`: IMSA's event BoP bulletin (stint energy and refuel rate per make), so a refuel's length is
+  exact for GTD / GTD PRO.
+- `app/watch.py`: IMSA's YouTube RSS feed for session streams (embedded with YouTube's player) and IMSA.tv
+  in-car cameras (linked).
+- `web/track.js`: the track outline behind the pages (OpenStreetMap, ODbL) and Corvette Racing's honours
+  in the margins.
 
 ## Recordings and replay
 
-Every WeatherTech session is recorded to `./archive/<date>_<session>/` (bind-mounted into the
-scraper): `feed.jsonl.gz` (every leaderboard poll), `telemetry.jsonl.gz` (tracked classes every 10 s), `pit.jsonl.gz` (about 1 Hz while a tracked-class car is in the pit lane)
-and `outputs.jsonl.gz` (live.json / laps.json every 5 minutes). The scraper log is
-`./archive/scraper.log`. To rebuild what the live code computed:
+Every WeatherTech session is recorded to `./archive/<date>_<session>/`: `feed.jsonl.gz` (every
+leaderboard poll), `telemetry.jsonl.gz`, `pit.jsonl.gz` (about 1 Hz while a car is in the pit lane) and
+`outputs.jsonl.gz` (live.json / laps.json every 5 minutes). The scraper log is `./archive/scraper.log`.
+To rebuild what the live code computed:
 
     docker compose exec scraper python replay.py /data/archive/<folder> /tmp/replay
-    # or locally: DATA_DIR is set by the script; --data points at a copy of standings/baseline/quali
 
-## Status page (this PC only)
+## Status page (this machine only)
 
-http://localhost:8089 shows, refreshed every 5 s: scraper heartbeat, live session window, leaderboard
-feed and telemetry freshness, points/history/schedule checks, the current recording and disk space,
-Cloudflare tunnel connections, public requests/min and upload use, and recent warnings/errors.
-
-It is a separate Caddy site on `127.0.0.1:8089` (not in the tunnel's ingress, so not public). The
-scraper writes `status.json` every 15 s to the `status` volume (`app/status.py`); traffic comes from
-Caddy's metrics and tunnel connections from cloudflared's metrics (`--metrics`, Docker network only).
-Read-only by design: restarts and logs stay in lazydocker.
-
-## Sectors
-
-IMSA's live feed carries no sector times, so `app/sectors.py` reads Al Kamel's time card for the latest
-WeatherTech session at the current event (published at the end of each session and as hourly snapshots
-during endurance races), checked every 5 minutes during session windows and every 30 minutes otherwise,
-and re-downloaded only when the file changes. Per car: best time in each of IMSA's three sectors, the
-ideal lap, and a typical time per sector (median of clean laps). Shown as the Sectors table on the
-Race page.
-
-## Balance of Performance (BoP)
-
-`app/bop.py` reads IMSA's newest event BoP technical bulletin (found on
-imsa.com/competitors/<year>-technical-bulletins/; only checked around a race weekend, from 4 days before
-the first scheduled session to the last session's end, at most every 12 hours) and parses the GTD /
-GTD PRO table: maximum stint energy (MJ) and energy replenishment rate (MJ/s) per make. GTD cars use a
-virtual energy tank refilled at that fixed rate, so a refill takes exactly (energy to add / rate);
-for 2026 that is 40 s for a full tank for every make. The Race page uses it for the next fill time
-and shows each car's energy use in MJ per lap. Feed vehicle names are matched to BoP rows by model.
+http://localhost:8089, refreshed every 5 s: scraper heartbeat, live session window, feed and telemetry
+freshness, the current recording and disk space, tunnel connections, public requests/min, recent
+warnings and errors, and the guest book moderation queue. Not in the tunnel's ingress, so never public.
 
 ## Making changes during a race
 
-Production keeps its tracked data across restarts: the scraper saves the whole session state
-(`race_state.json`: laps, stops, driver changes, drive time, flags; `telemetry_state.json`) on
-every poll and restores it on start, so even a scraper update mid-race only loses the polls while
-it's down. Web-only deploys (`docker compose up -d --no-deps web`) never touch the scraper.
+Production keeps its data across restarts: the scraper saves the whole session state on every poll and
+restores it on start. Web-only changes (`docker compose up -d --no-deps web`) and analyst changes
+(`docker compose up -d --no-deps analyst`) never touch the scraper.
 
-To try changes first, use the dev site (`compose.dev.yaml`, separate from production):
+The dev site (`compose.dev.yaml`) is separate from production:
 
-    ./dev.sh up              # http://localhost:8098 (red DEV badge): serves ./web straight from disk,
-                             # production's live data read-only, its own test API database
-    ./dev.sh replay [dir]    # run the scraper code in ./app over a recording (default: newest,
-                             # works mid-race) into dev data; no IMSA traffic
-    ./dev.sh scraper         # dev scraper live against IMSA (30 s polling) into dev data: a second
-                             # recorder that keeps going while production restarts
+    ./dev.sh up              # http://localhost:8098 (DEV badge): ./web from disk, production's data
+                             # read-only. NOTE: this stops the dev recorder.
+    ./dev.sh replay [dir]    # run ./app over a recording into dev data; no IMSA traffic
+    ./dev.sh scraper         # a second recorder live against IMSA (30 s polling)
     ./dev.sh update-scraper  # update production's scraper, then fill its gap from the dev recorder
     ./dev.sh fill-gap        # just the gap fill
-    ./dev.sh prod-data       # back to production's live data
+    ./dev.sh prod-data       # dev site back on production's data
     ./dev.sh down
 
-Gap fill: with the dev recorder running, `./dev.sh update-scraper` restarts production on the new image
-and hands it the dev recorder's `race_state.json` / `telemetry_state.json` as `merge_race.json` /
-`merge_telemetry.json`. On its next poll production merges them (`app/merge.py`: same session only;
-adds missing laps, gaps, stops, driver and position changes, flags, energy and refuels; drive time
-takes the larger of the two) and deletes the files. Tested by cutting 6 minutes out of a recording:
-the merge restored all 142 missing laps and every stop and driver change.
+To change the scraper mid-race: start the dev recorder (`./dev.sh scraper`) well before, push the change,
+wait for the image build, then `./dev.sh update-scraper`. Production restarts on the new image and merges
+the dev recorder's state (`app/merge.py`: same session only, adds what's missing). Never pull and recreate
+the scraper by hand mid-race: the analyst uses the same image, so a newer one may already be pulled.
 
-When it looks right: commit and push (GitHub builds the images), then update production one service
-at a time, web first: `docker compose pull web && docker compose up -d --no-deps web`; the scraper
-only if it changed (`... scraper`), ideally under a yellow or between stints.
+## License and credits
+
+Unofficial fan project, not affiliated with IMSA, Al Kamel, GM, Chevrolet or Corvette Racing. Track
+outlines © OpenStreetMap contributors (ODbL). Weather: National Weather Service, Open-Meteo (CC BY 4.0),
+RainViewer.

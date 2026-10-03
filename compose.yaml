@@ -22,6 +22,7 @@ services:
     command: ["python", "analyst.py"]
     environment:
       ANALYSIS_MINUTES: ${ANALYSIS_MINUTES:-60}
+      WX_LIVE_SECONDS: ${WX_LIVE_SECONDS:-300}
       CACHE_DIR: /cache
     volumes:
       - data:/data
