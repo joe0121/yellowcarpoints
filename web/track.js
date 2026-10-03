@@ -32,14 +32,15 @@
   // Corvette Racing's honours, up the page margins (left: titles and Le Mans; right: the numbers).
   // Sources: Wikipedia (Corvette Racing; C7.R; C8.R; Michelin Endurance Cup), Chevrolet newsroom
   // (Oct 2025: 15th IMSA GT-class manufacturers' title), Corvette Racing release (Mar 2026: 154 wins
-  // worldwide entering 2026), GM Authority (Jun 2026: 10th Le Mans class win). Endurance Cup years are
-  // the ones we could confirm (2015 Patrón Endurance Cup GTLM; 2016 and 2017 team titles).
+  // worldwide entering 2026), GM Authority (Jun 2026: 10th Le Mans class win), Wikipedia's "List of IMSA
+  // SportsCar Championship champions", Michelin Endurance Cup tables (GTLM: Corvette Racing team and
+  // Chevrolet manufacturer titles 2015, 2016, 2021; GTD PRO: Chevrolet manufacturers' title 2024).
   const HONOURS = {
     left: ["Class champions 2001–08 · 2012 · 2013 · 2016–18 · 2020 · 2021 · 2023 (WEC) · 2025",
            "Le Mans class wins 2001 · 2002 · 2004 · 2005 · 2006 · 2009 · 2011 · 2015 · 2023 · 2026"],
     winsBefore: 154, season: "2026", otherWinsThisSeason: 1,   // + Le Mans 2026 (TF Sport #33)
     teamCars: ["3", "4"],
-    right: wins => [`${wins}+ race wins`, "15 IMSA manufacturer titles", "Endurance Cup 2015 · 2016 · 2017"],
+    right: wins => [`${wins}+ race wins`, "15 IMSA manufacturer titles", "Endurance Cup 2015 · 2016 · 2021 · 2024"],
   };
   async function honours() {
     let wins = HONOURS.winsBefore + HONOURS.otherWinsThisSeason;
