@@ -436,3 +436,68 @@ function renderStratGraph(sel, lc, lapsCls, cars, clsName) {
     + `Yellow bands behind "Now" are this race's yellows; ahead of it, the shading is how often past races here had a caution on those laps${ins ? ` (${ins.years[0].year}–${ins.years.at(-1).year})` : ""}. `
     + `Projected stops from each car's energy use${series.some(s => s.estStops) ? " (or typical stint lengths where there's no telemetry)" : ""}; weather at its estimated lap. Laps off the top of the scale (pit, yellow) are marked along the top.`;
 }
+
+// --- Radar in the Weather card (RainViewer tiles, loaded straight from RainViewer) -------------------
+// A square centred on the track: the last half hour of radar (loops), rings at 10/25/50 km, nearby
+// towns, and the nowcast from the analyst (nearest rain, how it's moving, when it could arrive).
+const RADAR_PLACES = { "Road Atlanta": [["Gainesville", 34.298, -83.824], ["Atlanta", 33.749, -84.388], ["Athens", 33.951, -83.357], ["Lawrenceville", 33.956, -83.988], ["Commerce", 34.204, -83.457]] };
+let radarFrames = null, radarAt = 0, radarTimer = null;
+const compass16 = d => ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"][Math.round(d / 22.5) % 16];
+const LEVEL = ["", "light rain", "moderate rain", "heavy rain / storms"];
+
+function radarText(R) {
+  if (!R) return "";
+  const t = new Date(R.time * 1000).toLocaleTimeString([], { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
+  const n = R.nearest, h = R.nearest_heavier, m = R.motion;
+  const parts = [];
+  if (R.at_track) parts.push(`<b class="wxrain">rain over the track</b>`);
+  else if (n) parts.push(`nearest rain <b>${Math.round(n.km)} km ${compass16(n.bearing)}</b> (${LEVEL[n.level]})`);
+  else parts.push("no rain within ~190 km");
+  if (h && (!n || h.km > n.km + 3)) parts.push(`${LEVEL[h.level]} ${Math.round(h.km)} km ${compass16(h.bearing)}`);
+  if (m && m.kmh >= 5 && m.fit >= 0.15) parts.push(`moving toward the ${compass16(m.toward)} at ~${m.kmh} km/h`);
+  if (R.eta && !R.at_track) parts.push(`<b class="wxrain">could reach the track in ~${R.eta.min} min</b> (${LEVEL[R.eta.level]})`);
+  else if (n && !R.at_track && m?.fit >= 0.15) parts.push("not heading for the track at the moment");
+  return `<b>Radar ${t}:</b> ${parts.join(" · ")}`;
+}
+
+async function renderRadar() {
+  const box = $("wx-radar"), R = wxLive?.radar;
+  if (!box) return;
+  box.hidden = !R;
+  if (!R) return;
+  $("wx-radar-text").innerHTML = radarText(R);
+  // Frames for the loop: RainViewer's list, refreshed every 5 minutes (the newest from the analyst if that fails).
+  if (!radarFrames || Date.now() - radarAt > 300e3) {
+    radarAt = Date.now();
+    try { const m = await (await fetch("https://api.rainviewer.com/public/weather-maps.json")).json(); radarFrames = { host: m.host, list: m.radar.past.slice(-4) }; }
+    catch (e) { radarFrames = { host: R.host, list: [{ time: R.time, path: R.path }] }; }
+  }
+  const S = Math.min(box.clientWidth || 360, 420), kmpx = R.km_per_px, { z, x: tx, y: ty } = R.tiles;
+  // Only rebuild (and restart the loop) when there's a new frame or the card changed size.
+  const key = `${radarFrames.list.map(f => f.time).join(",")}|${S}|${live?.event}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  const lat = wxLive.lat, lon = wxLive.lon, n = 2 ** z;
+  const fx = (lon + 180) / 360 * n, fy = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+  const VIEW_KM = 130, scale = S / (VIEW_KM / kmpx);                 // screen px per tile px
+  const toScreen = (la, lo) => { const X = (lo + 180) / 360 * n, Y = (1 - Math.log(Math.tan(la * Math.PI / 180) + 1 / Math.cos(la * Math.PI / 180)) / Math.PI) / 2 * n;
+    return [S / 2 + (X - fx) * 256 * scale, S / 2 + (Y - fy) * 256 * scale]; };
+  const tiles = f => [-1, 0, 1].flatMap(i => [-1, 0, 1].map(j => {
+    const [l, t] = [S / 2 + (tx + i - fx) * 256 * scale, S / 2 + (ty + j - fy) * 256 * scale];
+    return `<img src="${radarFrames.host}${f.path}/256/${z}/${tx + i}/${ty + j}/2/1_0.png" style="left:${l}px;top:${t}px;width:${256 * scale}px;height:${256 * scale}px" alt="">`; })).join("");
+  const rings = [10, 25, 50].map(km => `<circle cx="${S / 2}" cy="${S / 2}" r="${km / kmpx * scale}" fill="none" stroke="var(--text-3)" stroke-dasharray="3 4"/><text x="${S / 2 + 4}" y="${S / 2 - km / kmpx * scale - 3}" class="rdl">${km} km</text>`).join("");
+  const places = (RADAR_PLACES[live?.event] || []).map(([nm, la, lo]) => { const [a, b] = toScreen(la, lo);
+    return a > 0 && a < S && b > 0 && b < S ? `<circle cx="${a}" cy="${b}" r="2.5" fill="var(--text-2)"/><text x="${a + 5}" y="${b + 4}" class="rdl">${nm}</text>` : ""; }).join("");
+  box.querySelector(".rdmap").style.cssText = `width:${S}px;height:${S}px`;
+  box.querySelector(".rdframes").innerHTML = radarFrames.list.map((f, i) => `<div class="rdframe" data-i="${i}" ${i === radarFrames.list.length - 1 ? "" : "hidden"}>${tiles(f)}</div>`).join("");
+  box.querySelector("svg").setAttribute("viewBox", `0 0 ${S} ${S}`);
+  box.querySelector("svg").innerHTML = rings + places + `<circle cx="${S / 2}" cy="${S / 2}" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text x="${S / 2 + 8}" y="${S / 2 + 16}" class="rdl rdtrack">Track</text>`;
+  // Loop the last half hour (pauses on the newest frame).
+  clearInterval(radarTimer);
+  const frames = [...box.querySelectorAll(".rdframe")], stamp = box.querySelector(".rdtime");
+  let k = frames.length - 1, hold = 0;
+  const show = () => { frames.forEach((f, i) => f.hidden = i !== k); const t = radarFrames.list[k]?.time;
+    stamp.textContent = t ? new Date(t * 1000).toLocaleTimeString([], { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }) + (k === frames.length - 1 ? " (latest)" : "") : ""; };
+  show();
+  if (frames.length > 1) radarTimer = setInterval(() => { if (k === frames.length - 1 && hold++ < 3) return; hold = 0; k = (k + 1) % frames.length; show(); }, 700);
+}

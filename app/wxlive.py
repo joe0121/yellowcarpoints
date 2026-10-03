@@ -6,6 +6,7 @@ weather.json from the scraper.
   cloud, wind and gusts now, and rain expected over the next two hours in 15-minute steps (model values).
 - The National Weather Service's latest observation from the nearest station to the track (measured,
   but the station is some kilometres away; its name and distance are kept).
+- Radar (RainViewer): nearest rain, how the rain is moving, and when it could reach the track.
 """
 
 import logging
@@ -80,5 +81,107 @@ def refresh():
     except Exception:
         log.exception("NWS observation failed")
         doc["obs"] = old.get("obs")
+    try:
+        doc["radar"] = radar(*ll)
+    except Exception:
+        log.exception("radar failed")
+        doc["radar"] = old.get("radar")
     write("wx_live.json", doc)
     return True
+
+
+# --- Radar nowcast (RainViewer, free, with attribution) ----------------------------------------------
+# The forecast models miss pop-up storms; radar doesn't. Every refresh we read the newest radar frame and
+# the one ~30 minutes before around the track (zoom 7, about 1 km a pixel, 3x3 tiles = ~380 km square),
+# find the nearest rain, estimate how the rain field is moving from the shift between the two frames,
+# and extrapolate: when (if at all, within 3 hours) rain would reach the track. Rough, and labelled so.
+ZOOM, TILE, KMPX = 7, 256, None
+
+
+def _tile_xy(lat, lon, z=ZOOM):
+    n = 2 ** z
+    x = (lon + 180) / 360 * n
+    y = (1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * n
+    return x, y
+
+
+def _frame(host, path, tx, ty):
+    """Rain pixels around the track: {(px, py): level} with 1 light, 2 moderate, 3 heavy (by colour)."""
+    from io import BytesIO
+    from PIL import Image
+    rain = {}
+    for i in (-1, 0, 1):
+        for j in (-1, 0, 1):
+            r = http.get(f"{host}{path}/256/{ZOOM}/{tx + i}/{ty + j}/2/1_0.png", timeout=30)
+            if r.status_code != 200:
+                continue
+            im = Image.open(BytesIO(r.content)).convert("RGBA")
+            px = im.load()
+            for x in range(0, TILE, 2):          # every other pixel (2 km) is plenty
+                for y in range(0, TILE, 2):
+                    R, G, B, A = px[x, y]
+                    if A < 150:
+                        continue                  # transparent, or the faint clutter/drizzle shade
+                    lvl = 3 if R > 190 and G < 110 else 2 if R > 190 else 1
+                    rain[((i + 1) * TILE + x, (j + 1) * TILE + y)] = lvl
+    return rain
+
+
+def _shift(a, b, max_px=30, step=2):
+    """(dx, dy) in pixels that best moves rain field a onto b (most overlapping rain pixels)."""
+    sb, best = set(b), (0, 0, -1)
+    pts = list(a)
+    if len(pts) > 6000:
+        pts = pts[::len(pts) // 6000 + 1]
+    for dx in range(-max_px, max_px + 1, step):
+        for dy in range(-max_px, max_px + 1, step):
+            n = sum(1 for (x, y) in pts if (x + dx, y + dy) in sb)
+            if n > best[2]:
+                best = (dx, dy, n)
+    return best[0], best[1], best[2] / max(1, len(pts))
+
+
+def radar(lat, lon):
+    maps = http.get("https://api.rainviewer.com/public/weather-maps.json", timeout=30).json()
+    host, past = maps["host"], maps["radar"]["past"]
+    if len(past) < 4:
+        return None
+    fx, fy = _tile_xy(lat, lon)
+    tx, ty = int(fx), int(fy)
+    cx, cy = (fx - tx + 1) * TILE, (fy - ty + 1) * TILE              # the track, in our 3x3 pixel grid
+    kmpx = 40075 * math.cos(math.radians(lat)) / (2 ** ZOOM * TILE)
+    now, before = past[-1], past[-4]                                  # frames are 10 minutes apart
+    a, b = _frame(host, before["path"], tx, ty), _frame(host, now["path"], tx, ty)
+    dt_h = (now["time"] - before["time"]) / 3600 or 0.5
+    out = {"time": now["time"], "km_per_px": round(kmpx, 3), "tiles": {"z": ZOOM, "x": tx, "y": ty}, "host": host, "path": now["path"]}
+
+    def polar(x, y):
+        dx, dy = (x - cx) * kmpx, (y - cy) * kmpx
+        return math.hypot(dx, dy), (math.degrees(math.atan2(dx, -dy)) + 360) % 360
+    near = [(polar(x, y), lvl) for (x, y), lvl in b.items()]
+    within = lambda km, lvl=1: sum(1 for (d, _), l in near if d <= km and l >= lvl)
+    if near:
+        (d, brg), lvl = min(near)
+        out["nearest"] = {"km": round(d, 1), "bearing": round(brg), "level": lvl}
+        heavy = [n for n in near if n[1] >= 2]
+        if heavy:
+            (hd, hb), hl = min(heavy)
+            out["nearest_heavier"] = {"km": round(hd, 1), "bearing": round(hb), "level": hl}
+    area = math.pi * (25 / kmpx) ** 2 / 4                              # pixels sampled every 2 px
+    out["cover_25km"] = round(min(1, within(25) / area), 3)
+    out["at_track"] = within(3) > 0
+    # Motion of the rain field near the track (within ~120 km), then when rain would arrive.
+    loc = lambda f: {p: l for p, l in f.items() if math.hypot(p[0] - cx, p[1] - cy) * kmpx <= 120}
+    sx, sy, fit = _shift(loc(a), loc(b))
+    vx, vy = sx * kmpx / dt_h, sy * kmpx / dt_h                         # km/h, east and south
+    spd = math.hypot(vx, vy)
+    out["motion"] = {"kmh": round(spd), "toward": round((math.degrees(math.atan2(vx, -vy)) + 360) % 360), "fit": round(fit, 2)}
+    eta = None
+    if spd >= 5 and fit >= 0.15:
+        for (x, y), lvl in b.items():
+            px_, py_ = (x - cx) * kmpx, (y - cy) * kmpx
+            t = -(px_ * vx + py_ * vy) / (spd * spd)                    # hours to closest approach
+            if 0 < t <= 3 and math.hypot(px_ + vx * t, py_ + vy * t) <= 4 and (eta is None or t < eta[0]):
+                eta = (t, lvl)
+    out["eta"] = eta and {"min": round(eta[0] * 60), "level": eta[1]}
+    return out
