@@ -594,14 +594,19 @@ body.mode-fan .sv-wide { display: none !important; }
 .sgwx { font-size: 10px; fill: var(--text-2); }
 #sg-chart .tip { min-width: 150px; }
 
-/* Corvette Racing's honours up the page margins, as faint as the track outline */
-.honours { position: fixed; top: 0; bottom: 0; z-index: -1; pointer-events: none; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center;
-  writing-mode: vertical-rl; transform: rotate(180deg); font: 600 clamp(11px, 1.35vh, 16px) / 1 Oswald, Impact, sans-serif; letter-spacing: .14em;
-  text-transform: uppercase; color: var(--accent); opacity: .22; white-space: nowrap; }
-.honours-l { left: 4px; }
-.honours-r { right: 4px; }
-:root[data-theme="dark"] .honours { opacity: .3; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .honours { opacity: .3; } }
-@media (max-width: 900px) { .honours { display: none; } }
+/* Corvette Racing's honours down the page margins: stacked columns, one year per line, as faint as
+   the track outline. */
+.honours { position: fixed; top: 0; bottom: 0; width: 76px; z-index: -1; pointer-events: none; display: flex; flex-direction: column;
+  justify-content: center; gap: clamp(6px, 1.4vh, 14px); text-align: center; color: var(--accent); opacity: .3;
+  font: 600 clamp(9px, 1.25vh, 13px) / 1.15 Oswald, Impact, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.honours .hb { display: flex; flex-direction: column; }
+.honours b { font-size: .78em; font-weight: 700; letter-spacing: .1em; margin-bottom: 3px; opacity: .85; }
+.honours-l { left: 0; }
+.honours-r { right: 0; }
+:root[data-theme="dark"] .honours { opacity: .38; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .honours { opacity: .38; } }
+@media (max-width: 1000px) { .honours { display: none; } }
+/* Room for them beside the wide Race page */
+@media (min-width: 1001px) { body.race main { max-width: min(1760px, calc(100vw - 170px)); } }
 /* Keep the outline pattern off the margins the honours run up. */
-@media (min-width: 901px) { .track-bg { left: 62px; right: 62px; } }
+@media (min-width: 1001px) { .track-bg { left: 78px; right: 78px; } }

@@ -35,12 +35,13 @@
   // worldwide entering 2026), GM Authority (Jun 2026: 10th Le Mans class win), Wikipedia's "List of IMSA
   // SportsCar Championship champions", Michelin Endurance Cup tables (GTLM: Corvette Racing team and
   // Chevrolet manufacturer titles 2015, 2016, 2021; GTD PRO: Chevrolet manufacturers' title 2024).
+  // Each block: a heading (one short word per line) and its entries, one per line.
   const HONOURS = {
-    left: ["Class champions 2001–08 · 2012 · 2013 · 2016–18 · 2020 · 2021 · 2023 (WEC) · 2025",
-           "Le Mans class wins 2001 · 2002 · 2004 · 2005 · 2006 · 2009 · 2011 · 2015 · 2023 · 2026"],
+    left: [["Class", "champions"], ["2001", "2002", "2003", "2004", "2005", "2006", "2007", "2008", "2012", "2013", "2016", "2017", "2018", "2020", "2021", "2023 WEC", "2025"],
+           ["Le Mans", "class wins"], ["2001", "2002", "2004", "2005", "2006", "2009", "2011", "2015", "2023", "2026"]],
     winsBefore: 154, season: "2026", otherWinsThisSeason: 1,   // + Le Mans 2026 (TF Sport #33)
     teamCars: ["3", "4"],
-    right: wins => [`${wins}+ race wins`, "15 IMSA manufacturer titles", "Endurance Cup 2015 · 2016 · 2021 · 2024"],
+    right: wins => [["Race", "wins"], [`${wins}+`], ["IMSA", "manufac-", "turer", "titles"], ["15"], ["Endurance", "Cup"], ["2015", "2016", "2021", "2024"]],
   };
   async function honours() {
     let wins = HONOURS.winsBefore + HONOURS.otherWinsThisSeason;
@@ -48,8 +49,10 @@
       const h = await (await fetch("data/history.json", { cache: "no-cache" })).json();
       if (h?.season === HONOURS.season) wins += HONOURS.teamCars.reduce((n, c) => n + (h.cars?.[c] || []).filter(r => r.class_pos === 1).length, 0);
     } catch (e) {}
-    const strip = (side, lines) => { const d = document.createElement("div"); d.className = `honours honours-${side}`; d.setAttribute("aria-hidden", "true");
-      d.innerHTML = lines.map(l => `<span>${l}</span>`).join(""); document.body.prepend(d); };
+    // Pairs of [heading words, entries].
+    const strip = (side, list) => { const d = document.createElement("div"); d.className = `honours honours-${side}`; d.setAttribute("aria-hidden", "true");
+      for (let i = 0; i < list.length; i += 2) d.innerHTML += `<div class="hb"><b>${list[i].join("<br>")}</b>${list[i + 1].map(x => `<span>${x}</span>`).join("")}</div>`;
+      document.body.prepend(d); };
     strip("l", HONOURS.left);
     strip("r", HONOURS.right(wins));
   }
