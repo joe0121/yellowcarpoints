@@ -484,13 +484,19 @@ def focus(car, rows, proj, state):
 
 # --- strategy (slow tier) ----------------------------------------------------------
 
+MIN_FULL_STINT = 20   # laps: shorter stints are yellow-flag or problem stops, not a full tank
+
+
 def stint_model(cls, state, baseline):
-    """This session's own completed stints once there are enough, else last year's race here."""
-    stints = [x for st in state["cars"].values() if st["cls"] == cls for x in race_stints(st)]
+    """This session's own full-tank stints once there are enough, else last year's race here.
+    Stints cut short (an early yellow sends the whole field in after a few laps) are left out: under
+    60% of last year's typical stint, or under MIN_FULL_STINT laps without a baseline."""
+    b = (baseline or {}).get("classes", {}).get(cls)
+    floor = 0.6 * b["typical"] if b else MIN_FULL_STINT
+    stints = [x for st in state["cars"].values() if st["cls"] == cls for x in race_stints(st) if x >= floor]
     model = history.stint_model(stints)
     if model and model["sample"] >= 6:
         return {**model, "source": "this race"}
-    b = (baseline or {}).get("classes", {}).get(cls)
     return b and {**b, "source": baseline["source"]}
 
 
