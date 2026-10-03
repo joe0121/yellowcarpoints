@@ -32,11 +32,11 @@ function pwClassPace(lc, lapsCls) {
   const v = lc.cars.map(r => pwPace(lc, lapsCls, r.car)).filter(Boolean);
   return v.length ? medianOf(v) : null;
 }
-// Clean laps for pace: the stop is in lap s+1 and the out-lap is s+2 (stops are logged when the
-// pit-stop count goes up, before the in-lap is complete), lap 1 and anything over 107% left out.
+// Clean laps for pace: a stop logged at lap s has its in-lap at s, the stop itself in s+1 and the
+// out-lap s+2 (checked against the race's lap times); those, lap 1 and anything over 107% left out.
 function pwClean(d) {
   if (!d?.laps?.length) return [];
-  const pit = new Set((d.stops || []).flatMap(s => [s + 1, s + 2]));
+  const pit = new Set((d.stops || []).flatMap(s => [s, s + 1, s + 2]));
   const l = d.laps.filter(([n]) => n > 1 && !pit.has(n));
   if (!l.length) return [];
   const best = Math.min(...l.map(q => q[1]));
@@ -57,7 +57,7 @@ function pwPitLoss(lc, lapsCls, cls) {
   // Class lap time per lap number, from laps nobody pitted on (the yardstick for yellow stops).
   const byLap = {};
   for (const d of Object.values(lapsCls)) {
-    const pit = new Set((d.stops || []).flatMap(s => [s + 1, s + 2]));
+    const pit = new Set((d.stops || []).flatMap(s => [s, s + 1, s + 2]));
     for (const [n, t] of d.laps || []) if (n > 1 && !pit.has(n)) (byLap[n] ||= []).push(t);
   }
   const green = { all: [], fuel: [], full: [] }, fcy = [];
@@ -67,9 +67,10 @@ function pwPitLoss(lc, lapsCls, cls) {
     const L = new Map(d.laps), ref = medianOf(pwClean(d).map(q => q[1])), down = leadLaps - (+r.laps || 0);
     const tel = r.energy?.stops || [];
     for (const s of d.stops) {
-      const a = L.get(s + 1), b = L.get(s + 2);
+      // In-lap + the lap with the stop (same as the historical figures).
+      const a = L.get(s), b = L.get(s + 1);
       if (!a || !b || s < 2) continue;
-      const kind = pwFlagAt(flags, s + 1 + down), kind2 = pwFlagAt(flags, s + 2 + down);
+      const kind = pwFlagAt(flags, s + down), kind2 = pwFlagAt(flags, s + 1 + down);
       if (kind === "green" && kind2 === "green" && ref) {
         const loss = a + b - 2 * ref;
         if (loss < 20 || loss > 250) continue;
@@ -77,7 +78,7 @@ function pwPitLoss(lc, lapsCls, cls) {
         const t = tel.find(x => Math.abs(x.lap - s) <= 1);
         if (t) (t.tyres || t.driver_change ? green.full : green.fuel).push(loss);
       } else if (kind === "yellow" && kind2 === "yellow") {
-        const y = [byLap[s + 1], byLap[s + 2]].map(v => v && v.length >= 3 ? medianOf(v) : null);
+        const y = [byLap[s], byLap[s + 1]].map(v => v && v.length >= 3 ? medianOf(v) : null);
         if (y[0] && y[1]) { const loss = a + b - y[0] - y[1]; if (loss > 10 && loss < 250) fcy.push(loss); }
       }
     }
@@ -395,7 +396,7 @@ function renderStratGraph(sel, lc, lapsCls, cars, clsName) {
   // Cars: lap dots, trend, projection at the current pace, stops (past filled, projected hollow), finish.
   for (const s of series) {
     const col = s.style.color, mine = s.car === sel.car;
-    const pastPit = new Set((s.d.stops || []).flatMap(q => [q + 1, q + 2]));
+    const pastPit = new Set((s.d.stops || []).flatMap(q => [q, q + 1, q + 2]));
     for (const [n, t] of s.d.laps) {
       if (n < x0 || n > x1 || n < 2) continue;
       if (t > hi) { if (!pastPit.has(n)) g += `<path d="M${x(n) - 3} ${m.t + 2}L${x(n) + 3} ${m.t + 2}L${x(n)} ${m.t + 7}Z" fill="${col}" opacity=".5"><title>#${esc(s.car)} L${n}: ${lapTime(t)} (off the scale)</title></path>`; continue; }

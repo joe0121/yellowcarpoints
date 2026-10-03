@@ -613,3 +613,4 @@ body { --mainw: min(1040px, 100vw); }
 @media (min-width: 1001px) { body.race main, body.wide main { max-width: min(1760px, calc(100vw - 250px)); } }
 @media (max-width: 1000px) { body.wide main { max-width: min(1040px, 96vw); } }
 .wxrain { color: var(--text); }
+.lslap { color: var(--text); font-weight: 600; }
