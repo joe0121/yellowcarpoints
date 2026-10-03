@@ -49,7 +49,8 @@ function pwFlagAt(flags, leaderLap) {
   return k;
 }
 
-// What a stop costs in this class: measured from this race's stops once there are enough, else the
+// What a stop costs in this class: in-lap + the lap with the stop, against the cars that didn't pit on
+// those laps; measured from this race's stops once there are enough, else the
 // historical figure for this track, else the pit-lane time the scraper uses.
 function pwPitLoss(lc, lapsCls, cls) {
   const flags = laps?.flags?.[cls] || [], rows = lc.cars;
@@ -71,8 +72,11 @@ function pwPitLoss(lc, lapsCls, cls) {
       const a = L.get(s), b = L.get(s + 1);
       if (!a || !b || s < 2) continue;
       const kind = pwFlagAt(flags, s + down), kind2 = pwFlagAt(flags, s + 1 + down);
-      if (kind === "green" && kind2 === "green" && ref) {
-        const loss = a + b - 2 * ref;
+      // Against the cars that didn't pit on those laps (cancels out a drying track or traffic), else
+      // against this car's own median clean lap.
+      const same = [byLap[s], byLap[s + 1]].map(v => v && v.length >= 3 ? medianOf(v) : null);
+      if (kind === "green" && kind2 === "green" && (ref || (same[0] && same[1]))) {
+        const loss = same[0] && same[1] ? a + b - same[0] - same[1] : a + b - 2 * ref;
         if (loss < 20 || loss > 250) continue;
         green.all.push(loss);
         const t = tel.find(x => Math.abs(x.lap - s) <= 1);
