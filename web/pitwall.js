@@ -246,12 +246,22 @@ function renderPitWall(sel, lc, lapsCls) {
   const e = me.energy, s = me.stint, toStop = e?.next_stop_lap ? e.next_stop_lap - (+me.laps || 0) : s?.laps_to_typical;
   const tile = (k, v, sub = "", cls = "") => `<div class="pwt ${cls}"><span class="k">${k}</span><b>${v}</b><span class="s">${sub}</span></div>`;
   const gapTxt = (a, b) => a && b ? `${(Math.abs(a.net - b.net)).toFixed(1)} s` : "";
+  // The sum behind a net gap: time apart on track, and how much more one owes in stops and refuelling.
+  const owed = x => x.net - (x.gap ?? 0);
+  // Told from the rival's side: "#1 is 6.4 s behind on track but owes 12.7 s less in stops and fuel".
+  const why = rival => {
+    if (!rival || rival.gap == null || mine.gap == null) return "";
+    const track = mine.gap - rival.gap, fuel = owed(mine) - owed(rival);
+    const t = Math.abs(track) < 0.05 ? "level on track" : `${Math.abs(track).toFixed(1)} s ${track > 0 ? "ahead" : "behind"} on track`;
+    const f = Math.abs(fuel) < 0.05 ? "the same fuel to find" : `owes ${Math.abs(fuel).toFixed(1)} s ${fuel > 0 ? "less" : "more"} in stops and fuel`;
+    return `: ${t}, ${f}`;
+  };
   const inCar = drv?.people.find(p => p.inCar);
   const stopsTxt = c => { const f = pwFinish(c.r, lc, lapsCls, remaining); return f ? `${f.stops}` : "–"; };
   el.innerHTML = `<div class="pwgrid">`
     + tile(net.yellow ? "Net to the flag (if yellow holds)" : "Net to the flag", `P${mine.pos}`, `P${me.class_pos} on track${mine.owes >= 0.25 ? ` · ${mine.r.owe_tanks != null ? `needs ~${mine.r.owe_tanks.toFixed(1)} tank${mine.r.owe_tanks >= 1.5 ? "s" : ""} more fuel to the flag` : `owes ${mine.owes >= 0.75 ? "a stop" : `~${mine.owes.toFixed(1)} of a stop`}`}` : ""}`, "big")
-    + tile("Ahead on net", up ? `#${esc(up.r.car)}` : "—", up ? `${gapTxt(mine, up)} up the road${up.owes >= 0.5 ? " · owes a stop" : ""}` : "leading on net")
-    + tile("Behind on net", dn ? `#${esc(dn.r.car)}` : "—", dn ? `${gapTxt(dn, mine)} back${dn.owes >= 0.5 ? " · owes a stop" : ""}` : "")
+    + tile("Ahead on net", up ? `#${esc(up.r.car)}` : "—", up ? `${gapTxt(mine, up)} up the road${why(up)}` : "leading on net")
+    + tile("Behind on net", dn ? `#${esc(dn.r.car)}` : "—", dn ? `${gapTxt(dn, mine)} back${why(dn)}` : "")
     + tile("Next stop", me.in_pit ? "in pit" : toStop != null ? (toStop <= 0 ? "due" : `${toStop} lap${toStop === 1 ? "" : "s"}`) : "–",
         e?.next_stop_lap ? `L${e.next_stop_lap}${e.eta_min != null ? ` · ~${e.eta_min} min` : ""}` : s?.typical ? `est. from stint lengths` : "")
     + tile("Energy", e ? `${Math.round(e.now)}%` : "–", e?.laps_left != null ? `${e.laps_left.toFixed(1)} laps on this tank` : "no telemetry")
