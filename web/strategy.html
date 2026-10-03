@@ -748,11 +748,15 @@ function renderTiming(lc, sel, rows, strat, lapsCls, cars, clsName) {
     const pit = new Set((d.stops || []).flatMap(n => [n, n + 1]));
     const pts = d.laps.filter(([n]) => n > 1 && !pit.has(n));
     const best = Math.min(...pts.map(p => p[1]));
-    series.push({ name: `#${c.car}`, pts: pts.filter(p => p[1] <= best * 1.07), color: c.style.color, width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}`, stops: d.stops });
+    const clean = pts.filter(p => p[1] <= best * 1.07);
+    // Each lap as a faint dot; the line is the 5-lap rolling average (mean of the last five clean laps).
+    const avg = clean.map((p, i) => { const w = clean.slice(Math.max(0, i - 4), i + 1); return [p[0], +(w.reduce((a, q) => a + q[1], 0) / w.length).toFixed(3)]; }).slice(Math.min(2, clean.length));
+    series.push({ name: `#${c.car} lap`, pts: clean, color: c.style.color, dots: true });
+    series.push({ name: `#${c.car} 5-lap avg`, pts: avg, color: c.style.color, width: c.style.width, dash: c.style.dash, marker: c.style.marker, end: `#${c.car}`, stops: d.stops });
   }
   lineChart("ch-laps2", { series, bands: bandsNow, height: 260, yFmt: lapTime, empty: "Lap times appear after a few laps." });
   $("lg-laps2").innerHTML = cars.map(c => `<span class="sw">${swatchOf(c.style)}#${esc(c.car)} <span class="dim">${esc(c.role)}</span></span>`).join("")
-    + `<span class="sw dim">laps over 107% of the car's best, in- and out-laps left out</span>`;
+    + `<span class="sw dim">dots: each lap · line: 5-lap rolling average · laps over 107% of the car's best, in- and out-laps left out</span>`;
   // Class timing (practice/qualifying: gap to the class's fastest lap, since IMSA's gap column is a laps difference there).
   const toSecs = t => { if (!t || /^[0:.\s-]*$/.test(String(t))) return null; let v = 0; for (const p of String(t).split(":")) v = v * 60 + parseFloat(p); return isNaN(v) ? null : v; };
   const lapStr = t => toSecs(t) == null ? "–" : esc(t);
