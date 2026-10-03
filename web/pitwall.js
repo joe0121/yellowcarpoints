@@ -120,38 +120,42 @@ function pwPitLoss(lc, lapsCls, cls) {
   return out;
 }
 
-// Who owes a stop, by fuel: each car's refuelling still needed to reach the flag, in standard class tanks
-// ((laps to go - laps left in its tank) / the class's median full-tank laps), against the car in its
-// class that needs the least. In effect: laps of fuel in hand, compared on one yardstick. Tyre-only stops (wets to slicks) and stop timing don't fool it. Fractional: a car a few laps
-// of fuel behind owes a fraction of a stop. Needs telemetry energy for at least half the class; otherwise
-// the scraper's pit-cycle guess stays. Marks the rows (owe_frac, owes_stop, net_pos) for every card.
+// Who owes what, by fuel: the energy each car still has to put in to reach the flag (laps to go at the
+// class's current pace x its own use per lap, minus what's in the tank), in tanks. Each tank still to add
+// costs a stop's fixed part (the stop cost minus a typical fill) plus its refuelling time (a full tank
+// is 40 s at the BoP rate). Net position is "to the flag": it includes fuel economy over the rest of race.
+// so a car saving fuel, or with more in the tank, is credited with what it really saves, and tyre-only
+// stops (wets to slicks) or stop timing don't fool it. Against the car in its class that needs the least.
+// Needs telemetry energy for at least half the class; otherwise the scraper's pit-cycle guess stays.
 function pwFixNet(lc, lapsCls) {
   if (!live?.is_race || !lc?.cars?.length) return;
-  const remaining = hmsSecs(live.remaining);
-  if (remaining == null) return;
-  // Same laps to go for every car (the class's current lap time), so only tank state and fuel use differ.
-  const need = {}, pace = pwClassPace(lc, lapsCls);
-  if (!pace) return;
-  // One standard tank for the class (median of the cars' full-tank laps), so small differences in
-  // per-lap fuel use (and wet laps using less) don't get multiplied over the whole race.
-  const tanks = lc.cars.map(r => r.energy?.full_tank_laps).filter(Boolean);
-  const tank = tanks.length ? medianOf(tanks) : null;
-  if (!tank) return;
+  const remaining = hmsSecs(live.remaining), pace = pwClassPace(lc, lapsCls);
+  if (remaining == null || !pace) return;
+  const cls = Object.keys(laps?.classes || {}).find(k => laps.classes[k] === lapsCls) || "";
+  const loss = pwPitLoss(lc, lapsCls, cls);
+  const fills = lc.cars.flatMap(r => r.energy?.refills || []).filter(f => f.to - f.from >= 40).map(f => f.secs);
+  const fixed = Math.max(10, (loss.green || 60) - (fills.length ? medianOf(fills) : 25));   // the stop minus its fill
+  const toGo = remaining / pace, cost = {};
   for (const r of lc.cars) {
     const e = r.energy;
-    if (!e?.full_tank_laps || e.laps_left == null) continue;
-    const left = r.in_pit ? tank : e.laps_left;
-    need[r.car] = Math.max(0, (remaining / pace - left) / tank);
+    if (!e?.full_tank_laps || e.now == null) continue;
+    const use = 100 / e.full_tank_laps, have = r.in_pit ? 100 : e.now;
+    const need = Math.max(0, toGo * use - have);                 // % of a tank still to add
+    // Stops counted as a continuous amount (tanks to add), not rounded up: rounding makes 2.99 vs 3.01
+    // tanks a whole stop's difference, and fuel saving or a late yellow decides which side it lands.
+    cost[r.car] = { tanks: need / 100, secs: need / 100 * (fixed + (e.full_fill_secs || 40)) };
   }
-  if (Object.keys(need).length < lc.cars.length / 2) return;
-  const least = Math.min(...Object.values(need));
+  if (Object.keys(cost).length < lc.cars.length / 2) return;
+  const least = Math.min(...Object.values(cost).map(c => c.secs)), fewest = Math.min(...Object.values(cost).map(c => c.tanks));
   for (const r of lc.cars) {
-    if (!(r.car in need)) continue;
-    r.owe_frac = +(need[r.car] - least).toFixed(2);
-    r.owes_stop = r.owe_frac >= 0.75 ? 1 : 0;      // a whole stop behind on fuel, not just a later cycle
+    const c = cost[r.car];
+    if (!c) continue;
+    r.owe_secs = +(c.secs - least).toFixed(1);
+    r.owe_frac = +(r.owe_secs / (loss.green || 60)).toFixed(2);
+    r.owe_tanks = +(c.tanks - fewest).toFixed(2);
+    r.owes_stop = c.tanks - fewest >= 1 ? 1 : 0;               // a whole tank more to the flag
     r.owe_by = "fuel";
   }
-  const loss = pwPitLoss(lc, lapsCls, Object.keys(laps?.classes || {}).find(k => laps.classes[k] === lapsCls) || "");
   for (const x of pwNet(lc, lapsCls, loss).rows) x.r.net_pos = x.pos;
 }
 
@@ -159,7 +163,7 @@ function pwFixNet(lc, lapsCls) {
 function pwNet(lc, lapsCls, loss) {
   const pace = pwClassPace(lc, lapsCls), yellow = isYellow(live.flag), per = yellow && loss.fcy ? loss.fcy : loss.green;
   const rows = lc.cars.map(r => ({ r, gap: pwGap(r, pace), owes: r.owe_frac ?? (r.owes_stop || 0) }))
-    .map(x => ({ ...x, net: x.gap == null ? 1e6 + x.r.class_pos : x.gap + x.owes * (per || 0) }))
+    .map(x => ({ ...x, net: x.gap == null ? 1e6 + x.r.class_pos : x.gap + (x.r.owe_secs != null ? x.r.owe_secs * (yellow && loss.fcy && loss.green ? loss.fcy / loss.green : 1) : x.owes * (per || 0)) }))
     .sort((a, b) => a.net - b.net);
   rows.forEach((x, i) => x.pos = i + 1);
   return { rows, per, yellow, pace };
@@ -245,7 +249,7 @@ function renderPitWall(sel, lc, lapsCls) {
   const inCar = drv?.people.find(p => p.inCar);
   const stopsTxt = c => { const f = pwFinish(c.r, lc, lapsCls, remaining); return f ? `${f.stops}` : "–"; };
   el.innerHTML = `<div class="pwgrid">`
-    + tile(net.yellow ? "Net (if yellow holds)" : "Net position", `P${mine.pos}`, `P${me.class_pos} on track${mine.owes >= 0.25 ? ` · owes ${mine.owes >= 0.75 ? "a stop" : `~${mine.owes.toFixed(1)} of a stop`} (fuel)` : ""}`, "big")
+    + tile(net.yellow ? "Net to the flag (if yellow holds)" : "Net to the flag", `P${mine.pos}`, `P${me.class_pos} on track${mine.owes >= 0.25 ? ` · ${mine.r.owe_tanks != null ? `needs ~${mine.r.owe_tanks.toFixed(1)} tank${mine.r.owe_tanks >= 1.5 ? "s" : ""} more fuel to the flag` : `owes ${mine.owes >= 0.75 ? "a stop" : `~${mine.owes.toFixed(1)} of a stop`}`}` : ""}`, "big")
     + tile("Ahead on net", up ? `#${esc(up.r.car)}` : "—", up ? `${gapTxt(mine, up)} up the road${up.owes >= 0.5 ? " · owes a stop" : ""}` : "leading on net")
     + tile("Behind on net", dn ? `#${esc(dn.r.car)}` : "—", dn ? `${gapTxt(dn, mine)} back${dn.owes >= 0.5 ? " · owes a stop" : ""}` : "")
     + tile("Next stop", me.in_pit ? "in pit" : toStop != null ? (toStop <= 0 ? "due" : `${toStop} lap${toStop === 1 ? "" : "s"}`) : "–",
