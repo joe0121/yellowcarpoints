@@ -623,3 +623,4 @@ body { --mainw: min(1040px, 100vw); }
 .rdl { font-size: 11px; fill: var(--text-2); }
 .rdtrack { fill: var(--text); font-weight: 600; }
 .rdtime { position: absolute; right: 8px; bottom: 6px; font-size: 11px; color: var(--text-2); background: color-mix(in srgb, var(--bg) 70%, transparent); padding: 1px 6px; border-radius: 6px; }
+.wstreams { flex-wrap: wrap; margin: 2px 0 8px; border-radius: 12px; }

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import cautions
 import inrace
 import predict
+import onboards
 import wxlive
 from common import now_iso, read, write
 
@@ -114,6 +115,10 @@ def main():
                 wxlive.refresh()
             except Exception:
                 log.exception("track weather failed")
+            try:
+                onboards.refresh()                  # teams' and makes' onboard streams, same cadence
+            except Exception:
+                log.exception("onboard streams failed")
         time.sleep(60)
 
 

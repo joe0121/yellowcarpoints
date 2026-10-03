@@ -150,6 +150,7 @@
   </section>
   <section class="card" id="watch-card" style="margin-bottom:16px">
     <div class="pace-head"><h2 id="watch-title">Watch</h2><button type="button" class="chip" id="watch-toggle"></button></div>
+    <div class="bseg wstreams" id="watch-streams" role="group" aria-label="Which stream" hidden></div>
     <div id="watch-body"></div>
   </section>
     </div>
@@ -200,19 +201,20 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
 
-let standings, live, laps, schedule, entries, sectorData, config, watchData, rcData, cauData;
+let standings, live, laps, schedule, entries, sectorData, config, watchData, rcData, cauData, onbData;
+let watchPick = null;   // the stream chosen in the Watch card (null = IMSA's broadcast), this visit only
 
 // Live timing every 10 s, lap history every 30 s, everything else every 5 minutes; the page
 // only redraws when something changed (unchanged files come back as cheap 304s).
 const loadedAt = { laps: 0, slow: 0 };
 async function load() {
   const now = Date.now(), wantLaps = now - loadedAt.laps >= 30e3, wantSlow = now - loadedAt.slow >= 300e3;
-  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather", "wx_live"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config", "insights"] : [])];
+  const names = ["live", ...(wantLaps ? ["laps", "watch", "racecontrol", "weather", "wx_live", "onboards"] : []), ...(wantSlow ? ["standings", "schedule", "entries", "sectors", "config", "insights"] : [])];
   const got = Object.fromEntries(await Promise.all(names.map(async n => [n, await getJSON(`data/${n}.json`)])));
   const changed = got.live?.updated !== live?.updated || (wantLaps && got.laps?.updated !== laps?.updated) || wantSlow;
   if (got.live?.updated !== live?.updated) liveFetchedAt = Date.now();
   live = got.live;
-  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; wxLive = got.wx_live; loadedAt.laps = now; }
+  if (wantLaps) { laps = got.laps; watchData = got.watch; rcData = got.racecontrol; wxData = got.weather; wxLive = got.wx_live; onbData = got.onboards; loadedAt.laps = now; }
   if (wantSlow) { ({ standings, schedule, entries, sectors: sectorData, config, insights: cauData } = got); loadedAt.slow = now; }
   if (changed) render();
 }
@@ -925,12 +927,22 @@ function renderWatchCard(sel) {
   let ytLink = match ? `https://www.youtube.com/watch?v=${match.id}` : latest && !running ? `https://www.youtube.com/watch?v=${latest.id}` : "https://www.youtube.com/@IMSAOfficial/streams";
   if (running) { src = match ? `https://www.youtube.com/embed/${match.id}?rel=0` : w ? `https://www.youtube.com/embed/live_stream?channel=${w.channel}` : null; label = match ? match.title : "IMSA's live stream on YouTube"; }
   else if (latest) { src = `https://www.youtube-nocookie.com/embed/${latest.id}?rel=0`; label = `Latest: ${latest.title}`; }
+  // Onboard streams from the makes' and teams' own channels (the selected car's make first).
+  const vehicle = live?.classes?.[sel.class]?.cars?.find(r => r.car === sel.car)?.vehicle || entries?.cars?.[sel.car]?.vehicle || "";
+  const myMake = /corvette/i.test(vehicle) ? "Chevrolet" : vehicle.split(" ")[0];
+  const onb = running && kind === "race" && onbData?.event === live?.event ? [...(onbData.streams || [])].sort((a, b) => (b.make === myMake) - (a.make === myMake)) : [];
+  const pick = onb.find(o => o.id === watchPick);
+  if (pick) { src = `https://www.youtube.com/embed/${pick.id}?rel=0`; label = `${pick.channel}: ${pick.title}`; ytLink = `https://www.youtube.com/watch?v=${pick.id}`; }
+  $("watch-streams").innerHTML = onb.length ? [`<button type="button" data-v="" aria-pressed="${!pick}">IMSA broadcast</button>`,
+    ...onb.map(o => `<button type="button" data-v="${esc(o.id)}" aria-pressed="${pick?.id === o.id}" title="${esc(o.title)}">Onboard · ${esc(o.channel)}${o.car ? " #" + esc(o.car) : ""}</button>`)].join("") : "";
+  $("watch-streams").hidden = !onb.length;
+  $("watch-streams").querySelectorAll("button").forEach(b => b.onclick = () => { watchPick = b.dataset.v || null; renderWatchCard(sel); });
   $("watch-title").textContent = running ? `Watch live · ${kind}` : "Watch";
   $("watch-toggle").textContent = off ? "Turn video on" : "Turn video off";
   $("watch-toggle").onclick = () => { store.set("watch", off ? "" : "off"); renderWatchCard(sel); };
   const incar = w?.incar?.includes(sel.car) ? `<a class="golink" href="${esc(w.incar_url)}" target="_blank" rel="noopener">Watch #${esc(sel.car)}'s in-car on IMSA.tv ↗</a>` : "";
   const note = `<p class="note">${running && kind === "race" ? `In the US the race is on <a href="https://www.peacocktv.com/" target="_blank" rel="noopener">Peacock</a> and NBC; IMSA's YouTube stream is for viewers outside the US. ` : ""}`
-    + `Video from IMSA's YouTube channel, played by YouTube. ${incar ? "" : "IMSA.tv has in-car cameras for a few cars each race; a link appears here when the selected car has one."}</p>`;
+    + `${pick ? `Onboard stream from ${esc(pick.channel)}'s YouTube channel` : "Video from IMSA's YouTube channel"}, played by YouTube.${onb.length ? " Onboard streams come from the makes' and teams' own channels when they run one." : ""} ${incar ? "" : "IMSA.tv has in-car cameras for a few cars each race; a link appears here when the selected car has one."}</p>`;
   const body = $("watch-body");
   if (off) { body.innerHTML = `<p class="dim" style="margin:4px 0 0">Video is off on this device.${incar ? " " + incar : ""}</p>`; body.dataset.src = ""; return; }
   if (!src) { body.innerHTML = `<p class="empty">No IMSA stream found yet.</p>${incar}${note}`; body.dataset.src = ""; return; }
