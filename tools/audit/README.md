@@ -22,3 +22,10 @@ Petit Le Mans 2026 findings (and what changed):
   result), equal in the last 2 h; the scraper's old pit-cycle net was no better than track position.
 - Hourly win odds: too confident (worse than a random pick: 7.2% vs 7.6% geometric probability on the
   winner). -> Spread doubled, pace weight halved: 10.5%.
+
+Fuel (fuel.py), Petit Le Mans 2026:
+- A yellow minute uses 32-46% of a green minute's fuel (GTD PRO 32%, GTD 39%, GTP 46%); per lap 0.9-1.6% vs 2.1-2.2%.
+- A full tank is ~65 green minutes in GT, ~55 in GTP; all-green GT stints ran a median 58-64 min.
+- On a yellow, cars with <=10 green minutes of fuel pitted ~always, 10-40 min 55-80%, 40-60 min 30-45%,
+  60+ ~20%. -> Pit window: "a yellow brings it in" at <=40 min, "must stop" at <=10.
+- Fuel saving by lifting isn't visible at the telemetry's ~0.1%/lap resolution: not modelled.

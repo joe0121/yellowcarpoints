@@ -64,15 +64,42 @@ function pwGreenUse(lc, lapsCls, car) {
   const last = drops.slice(-8);
   return last.length >= 3 ? medianOf(last) : null;
 }
-// Fuel state on green-flag terms: % in the tank, use per lap, laps left and laps per full tank.
+// Fuel state on green-flag terms: % in the tank, use per lap, laps left and laps per full tank, and the
+// same in green minutes (how strategists think of it: BoP sets the tank and refill rate so a full tank is
+// roughly an hour of green running).
 function pwFuel(lc, lapsCls, r) {
   const e = r.energy;
   if (!e || e.now == null) return null;
   const use = pwGreenUse(lc, lapsCls, r.car) || e.use_per_lap;
   if (!use) return null;
-  const now = r.in_pit ? 100 : e.now;
-  return { now, use, left: now / use, tank: 100 / use, fillSecs: e.full_fill_secs || 40 };
+  const now = r.in_pit ? 100 : e.now, pace = pwPace(lc, lapsCls, r.car) || pwClassPace(lc, lapsCls);
+  const perMin = pace ? use / pace * 60 : null;          // % of a tank per green minute
+  return { now, use, left: now / use, tank: 100 / use, fillSecs: e.full_fill_secs || 40,
+           greenMin: perMin ? now / perMin : null, tankMin: perMin ? 100 / perMin : null, pace };
 }
+
+// Measured at Petit Le Mans 2026 (tools/audit/fuel.py): a minute under yellow uses this share of a green
+// minute's fuel, and how teams reacted to a yellow by green minutes of fuel left (<=10: ~all pitted;
+// 10-40: 55-80%; 40-60: 30-45%; 60+: ~20%).
+const YELLOW_FUEL = { GTP: 0.46, GTDPRO: 0.32, GTD: 0.39, LMP2: 0.4 };
+const YELLOW_PIT_MIN = 40, MUST_STOP_MIN = 10;
+
+// Pit window in green minutes from now. Closes when green fuel runs out (the overcut end); opens at the
+// earliest stop that doesn't add a stop to the flag (the undercut end). Time to the flag is counted in
+// green-fuel minutes: caution time (this track's usual share) burns only YELLOW_FUEL of a green minute.
+function pwWindow(lc, lapsCls, r, cls) {
+  const f = pwFuel(lc, lapsCls, r), remaining = hmsSecs(live?.remaining);
+  if (!f?.greenMin || !f.tankMin || remaining == null) return null;
+  const c = cauData?.track === live?.event ? (cauData.summary?.pct_under_caution ?? 19) / 100 : 0.19;
+  const raceMin = remaining / 60 * (1 - c + c * (YELLOW_FUEL[cls] ?? 0.4));   // green-fuel minutes to the flag
+  const F = f.greenMin, T = f.tankMin, toLaps = m => Math.round(m * 60 / f.pace);
+  const base = { fuelMin: F, tankMin: T, laps: toLaps(F), yellowIn: F <= YELLOW_PIT_MIN, must: F <= MUST_STOP_MIN };
+  if (F >= raceMin) return { ...base, noStop: true };
+  const need = Math.ceil((raceMin - F) / T - 1e-9);          // fewest stops to the flag
+  const open = Math.max(0, raceMin - (need - 1) * T - F);    // minutes from now until a stop costs no extra one
+  return { ...base, need, openMin: Math.min(open, F), closeMin: F, openLaps: toLaps(Math.min(open, F)) };
+}
+const pwWindowText = w => !w ? "–" : w.noStop ? "no stop needed" : w.openMin <= 0.5 ? `open · closes in ${Math.round(w.closeMin)} min` : `in ${Math.round(w.openMin)}–${Math.round(w.closeMin)} min`;
 
 function pwPace(lc, lapsCls, car) {
   const rec = pwRecent(lc, lapsCls, car).map(q => q[1]);
@@ -304,9 +331,13 @@ function renderPitWall(sel, lc, lapsCls) {
     + tile(net.yellow ? "Net to the flag (if yellow holds)" : "Net to the flag", `P${mine.pos}`, `P${me.class_pos} on track${mine.owes >= 0.25 ? ` · ${mine.r.owe_tanks != null ? `needs ~${mine.r.owe_tanks.toFixed(1)} tank${mine.r.owe_tanks >= 1.5 ? "s" : ""} more fuel to the flag` : `owes ${mine.owes >= 0.75 ? "a stop" : `~${mine.owes.toFixed(1)} of a stop`}`}` : ""}`, "big")
     + tile("Ahead on net", up ? `#${esc(up.r.car)}` : "—", up ? `${gapTxt(mine, up)} up the road${why(up)}` : "leading on net")
     + tile("Behind on net", dn ? `#${esc(dn.r.car)}` : "—", dn ? `${gapTxt(dn, mine)} back${why(dn)}` : "")
-    + tile("Fuel lasts", me.in_pit ? "in pit" : toStop != null ? (toStop <= 0 ? "due" : `${toStop} lap${toStop === 1 ? "" : "s"}`) : "–",
-        e?.next_stop_lap ? `to L${e.next_stop_lap}${e.eta_min != null ? ` · ~${e.eta_min} min` : ""} · stops often come sooner` : s?.typical ? `est. from stint lengths` : "")
-    + tile("Energy", e ? `${Math.round(e.now)}%` : "–", (() => { const f = pwFuel(lc, lapsCls, me); return f ? `${f.left.toFixed(1)} green laps on this tank` : e?.laps_left != null ? `${e.laps_left.toFixed(1)} laps on this tank` : "no telemetry"; })())
+    + (() => { const w = pwWindow(lc, lapsCls, me, sel.class);
+        if (!w) return tile("Pit window", me.in_pit ? "in pit" : toStop != null ? `~${Math.max(0, toStop)} laps` : "–", s?.typical ? "est. from stint lengths" : "");
+        return tile("Pit window", me.in_pit ? "in pit" : w.noStop ? "none" : w.openMin <= 0.5 ? "open" : `in ${Math.round(w.openMin)} min`,
+          me.in_pit ? "" : w.noStop ? `${Math.round(w.fuelMin)} green min of fuel: enough to the flag` : `closes in ${Math.round(w.closeMin)} min (~${w.laps} laps)${w.must ? " · must stop" : w.yellowIn ? " · a yellow brings it in" : ""}`,
+          w.must ? "warn" : ""); })()
+    + tile("Green fuel", (() => { const f = pwFuel(lc, lapsCls, me); return f?.greenMin != null ? `${Math.round(f.greenMin)} min` : e ? `${Math.round(e.now)}%` : "–"; })(),
+        (() => { const f = pwFuel(lc, lapsCls, me); return f ? `${Math.round(f.now)}% · ~${Math.floor(f.left)} green laps · tank ~${Math.round(f.tankMin)} min` : "no telemetry"; })())
     + tile("Driver", inCar ? esc(inCar.name.split(" ").at(-1)) : esc(me.driver || "–"),
         inCar ? `${me.drivers.stint_secs != null ? `stint ${hm(me.drivers.stint_secs)} · ` : ""}${inCar.short ? `needs ${hm(inCar.short)} more` : "minimum done"}` : "",
         drv && (drv.overbooked || ["impossible", "urgent"].includes(drv.worst)) ? "warn" : "")
@@ -327,8 +358,13 @@ function pwSituation(sel, me, mine, up, dn, net, loss, fin, drv, remaining, toSt
     ? `⚠ <b>${esc(urgent.name)}</b> can't reach the ${hm(urgent.need)} minimum in the time left (needs ${hm(urgent.short)} more): check the drive-time plan.`
     : `⚠ <b>${esc(urgent.name)}</b> still needs ${hm(urgent.short)} to reach the minimum: must be in the car by about ${pwClock(urgent.latest)} ET.`;
   if (me.in_pit) return `#${esc(me.car)} is in the pit lane.`;
-  if (net.yellow && loss.fcy && loss.green) return `<b>Yellow:</b> a stop now costs about ${Math.round(loss.fcy)} s against the field instead of about ${Math.round(loss.green)} s under green`
-    + (toStop != null && toStop <= 15 ? `, and #${esc(me.car)} is due in ${toStop} laps anyway.` : ".") + ` Pits may be closed at first: check race control.`;
+  if (net.yellow && loss.fcy && loss.green) {
+    const w = pwWindow(live.classes[sel.class], laps?.classes?.[sel.class] || {}, me, sel.class);
+    const why = !w ? "" : w.must ? ` #${esc(me.car)} has ${Math.round(w.fuelMin)} green minutes of fuel: it has to come in.`
+      : w.yellowIn ? ` #${esc(me.car)} has ${Math.round(w.fuelMin)} green minutes of fuel; most cars with under 40 come in on a yellow.`
+      : ` #${esc(me.car)} has ${Math.round(w.fuelMin)} green minutes of fuel, so staying out is an option (a yellow minute burns only ~${Math.round((YELLOW_FUEL[sel.class] ?? .4) * 100)}% of a green one).`;
+    return `<b>Yellow:</b> a stop now costs about ${Math.round(loss.fcy)} s against the field instead of about ${Math.round(loss.green)} s under green.${why} Pits may be closed at first: check race control.`;
+  }
   if (fin && remaining != null && remaining < 3 * 3600) {
     if (fin.stops === 0) return `Fuel to the flag: #${esc(me.car)} can make it on this tank, about ${fin.spare.toFixed(1)} laps spare at this pace.`;
     if (fin.stops === 1) return `Fuel to the flag: one more stop, in the window <b>L${fin.lastFrom}–L${fin.lastTo}</b>`

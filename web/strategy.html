@@ -427,8 +427,11 @@ function renderKpis(cmpCars, rows, strat, lc, lapsCls) {
     if (e) {
       energy = `<span class="mini"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></span>${e.now.toFixed(0)}%`
         + `<div class="sub">${e.use_per_lap ? `${e.use_per_lap}%/lap${e.mj_per_lap ? ` · ${e.mj_per_lap} MJ` : ""}` : "use/lap after 3 laps"}</div>`;
-      left = e.laps_left != null ? `${Math.floor(e.laps_left)}<div class="sub">${e.full_tank_laps ? `tank ~${Math.floor(e.full_tank_laps)}` : ""}</div>` : "–";
-      next = e.next_stop_lap ? `L${e.next_stop_lap}<div class="sub">${e.eta_min != null ? `in ~${e.eta_min} min` : ""}</div>` : e.refuelling ? "refuelling" : "–";
+      const cls = Object.keys(live.classes).find(k => live.classes[k] === lc), w = pwWindow(lc, lapsCls, r, cls);
+      left = w ? `${Math.round(w.fuelMin)} min<div class="sub">~${w.laps} laps · tank ~${Math.round(w.tankMin)} min</div>`
+        : e.laps_left != null ? `${Math.floor(e.laps_left)} laps<div class="sub">${e.full_tank_laps ? `tank ~${Math.floor(e.full_tank_laps)}` : ""}</div>` : "–";
+      next = w ? `${pwWindowText(w)}<div class="sub">${w.must ? "must stop" : w.yellowIn && !w.noStop ? "a yellow brings it in" : w.need ? `${w.need} stop${w.need > 1 ? "s" : ""} to the flag` : ""}</div>`
+        : e.next_stop_lap ? `fuel to L${e.next_stop_lap}<div class="sub">${e.eta_min != null ? `~${e.eta_min} min` : ""}</div>` : e.refuelling ? "refuelling" : "–";
       // Exact from IMSA's BoP when we have it (fixed refill rate); otherwise estimated from observed fills.
       const bopFill = e.fill_source === "bop" ? e.next_fill_secs : null;
       const arrive = e.use_per_lap && e.laps_left != null ? Math.max(0, e.now - e.use_per_lap * Math.floor(e.laps_left)) : null;
@@ -449,7 +452,7 @@ function renderKpis(cmpCars, rows, strat, lc, lapsCls) {
       <td class="l">${energy}</td><td>${left}</td><td>${next}</td><td>${fill}</td><td class="l m-hide">${last}</td><td>${stops}</td>
       <td class="m-hide">${st?.pace ? lapTime(st.pace) : "–"}<div class="sub ${fit ? (fit.b < -0.005 ? "up" : fit.b > 0.005 ? "down" : "") : ""}">${trend}</div></td></tr>`;
   }).join("");
-  if (body) $("kpis").innerHTML = `<div class="scroll"><table class="pittable"><thead><tr><th class="l">Car</th><th class="l">Energy</th><th title="Laps left on this tank">Laps left</th><th>Next stop</th>
+  if (body) $("kpis").innerHTML = `<div class="scroll"><table class="pittable"><thead><tr><th class="l">Car</th><th class="l">Energy</th><th title="Minutes of green running left on this tank (a yellow minute burns only about a third)">Green fuel</th><th title="Pit window: opens at the earliest stop that doesn't add a stop to the flag (undercut), closes when green fuel runs out (overcut)">Window</th>
     <th title="Refuelling time for the next stop">Next fill</th><th class="l m-hide" title="Last stop: time in the pit lane · F refuel · T tyres · D driver change">Last stop</th>
     <th title="Stops made + still needed to the flag">Stops</th><th class="m-hide" title="Median of the last 5 clean laps; trend through the stint">Pace</th></tr></thead><tbody>${body}</tbody></table></div>`;
   $("kpis").querySelectorAll(".chip.x").forEach(b => b.onclick = () => { paceExtra = paceExtra.filter(x => x !== b.dataset.car); render(); });
@@ -577,9 +580,10 @@ function drawLeaderChart(S) {
 }
 
 function renderBoard(rows, strat, sel, lapsCls, clsName, fc) {
+  const lc = live.classes[sel.class];
   const corvettes = standings.cars.filter(c => c.class === sel.class).map(c => c.car);
   $("board-title").textContent = `${clsName} strategy board`;
-  $("board").innerHTML = `<thead><tr><th>Pos</th><th title="Net to the flag: class position once every car has put in the fuel it still needs to finish (each tank costs a stop plus its refuelling time), so fuel economy over the rest of the race counts">Net</th><th>Car</th><th class="l">Driver</th><th title="Gap to the class leader on track">Gap</th><th title="Extra time this car still has to spend on stops and refuelling to reach the flag, against the class's most economical car. Net order = gap + fuel owed, so a 3 s lead with 3 s more fuel owed is a wash.">Fuel owed</th><th class="l">Energy</th><th>Use/lap</th><th>Laps left</th><th>Next stop</th><th>Stops</th><th title="Last stop: the lap it pitted on (in-lap), time in the pit lane · F refuel · T tyres · D driver change">Last stop</th><th>Pace</th><th title="Last 5 clean laps against the 5 before (negative = quicker)">Pace change</th><th title="Change in gap to the class leader per lap, last 10 laps">Gap trend</th></tr></thead><tbody>`
+  $("board").innerHTML = `<thead><tr><th>Pos</th><th title="Net to the flag: class position once every car has put in the fuel it still needs to finish (each tank costs a stop plus its refuelling time), so fuel economy over the rest of the race counts">Net</th><th>Car</th><th class="l">Driver</th><th title="Gap to the class leader on track">Gap</th><th title="Extra time this car still has to spend on stops and refuelling to reach the flag, against the class's most economical car. Net order = gap + fuel owed, so a 3 s lead with 3 s more fuel owed is a wash.">Fuel owed</th><th class="l">Energy</th><th title="% of a tank per green lap">Use/lap</th><th title="Minutes of green running the fuel in the tank lasts (laps in brackets)">Green fuel</th><th title="Pit window: opens at the earliest stop that doesn't add a stop to the flag (undercut), closes when green fuel runs out (overcut). Y = a yellow would likely bring it in.">Window</th><th>Stops</th><th title="Last stop: the lap it pitted on (in-lap), time in the pit lane · F refuel · T tyres · D driver change">Last stop</th><th>Pace</th><th title="Last 5 clean laps against the 5 before (negative = quicker)">Pace change</th><th title="Change in gap to the class leader per lap, last 10 laps">Gap trend</th></tr></thead><tbody>`
     + rows.map(r => { const e = r.energy || {}, x = strat[r.car] || {}, g = fit(lapsCls[r.car]?.gaps || []);
       const last = e.refills?.at(-1);
       return `<tr class="${corvettes.includes(r.car) ? "tracked" : ""}" style="--c:${r.car === sel.car ? C.me : corvettes.includes(r.car) ? "var(--series-2)" : C.ctx}">
@@ -587,7 +591,9 @@ function renderBoard(rows, strat, sel, lapsCls, clsName, fc) {
         <td class="l team">${esc(r.driver)}${[fc.champ_behind, fc.champ_ahead].includes(r.car) ? ` <span class="owes" title="#${esc(sel.car)}'s nearest championship rival">TITLE RIVAL</span>` : ""}${tyreTag(r.car)}${r.in_pit ? ` <span class="pit">PIT</span>` : ""}${r.owes_stop ? `<span class="owes" title="${r.owe_by === "fuel" ? `Needs ${r.owe_tanks} tanks more fuel than the most economical car in its class to reach the flag: about ${r.owe_secs} s more in stops and refuelling` : "Still owes a stop in this pit cycle"}">OWES STOP</span>` : ""}</td>
         <td class="dim">${r.class_pos === 1 ? "—" : esc(r.gap)}</td><td class="dim">${r.owe_secs != null ? `+${r.owe_secs.toFixed(1)} s` : r.owes_stop ? "a stop" : "–"}</td>
         <td class="l">${e.now != null ? `<span class="mini"><i style="width:${Math.max(0, Math.min(100, e.now))}%"></i></span>${e.now.toFixed(0)}%` : "–"}</td>
-        <td title="${e.mj_per_lap ? e.mj_per_lap + " MJ per lap of a " + e.tank_mj + " MJ tank" : ""}">${e.use_per_lap ?? "–"}</td><td>${e.laps_left != null ? Math.floor(e.laps_left) : "–"}</td><td>${e.next_stop_lap ? "L" + e.next_stop_lap : "–"}</td>
+        <td title="% of a tank per lap on green-flag laps (yellow laps use about a third as much)">${(() => { const g = pwGreenUse(lc, lapsCls, r.car); return g ? g.toFixed(2) : e.use_per_lap ?? "–"; })()}</td>${(() => { const w = pwWindow(lc, lapsCls, r, sel.class);
+          return w ? `<td>${Math.round(w.fuelMin)} min <span class="dim">(${w.laps})</span></td><td class="${w.must ? "down" : ""}">${pwWindowText(w)}${w.yellowIn && !w.noStop ? ` <span class="owes" title="A yellow would likely bring it in (40 green minutes or less)">Y</span>` : ""}</td>`
+            : `<td>${e.laps_left != null ? Math.floor(e.laps_left) + " laps" : "–"}</td><td>${e.next_stop_lap ? "fuel to L" + e.next_stop_lap : "–"}</td>`; })()}
         <td>${r.pit_stops ?? "–"}${e.stops_remaining != null ? ` <span class="dim">+${e.stops_remaining}</span>` : ""}</td>
         <td class="dim">${lapsCls[r.car]?.stops?.length ? `<b class="lslap">L${lapsCls[r.car].stops.at(-1)}</b> ` : ""}${e.stops?.length ? stopTags(e.stops.at(-1)) : last ? `fill ${last.secs}s` : (lapsCls[r.car]?.stops?.length ? "" : "–")}</td><td>${lapTime(x.pace)}</td>
         <td class="${x.trend < -0.05 ? "up" : x.trend > 0.05 ? "down" : "dim"}">${signed(x.trend)}</td>
