@@ -124,8 +124,8 @@ for 2nd. Ties and penalties aren't modelled.
 - **What a stop costs**: the in-lap plus the lap with the stop, compared with the cars that didn't pit on
   those same laps (so a drying track or traffic cancels out). Measured from this race once there are three
   green-flag stops; before that, Petit Le Mans 2021–2025 from Al Kamel's time cards: about 75 s under
-  green, and 39–56 s (by class) under a full-course yellow, because the field is slow while the car is in
-  the lane.
+  green in 2021–25 but 54–64 s in 2026 (the figures now used), and less under a full-course yellow because
+  the field is slow while the car is in the lane.
 - **If we pit now**: the car's gap plus the stop cost, slotted into the class order: where it would rejoin
   and which cars it would come out between, under green and if a yellow came out now. Stopping early means
   a shorter fill, which is credited.
@@ -166,11 +166,11 @@ Every race hour (`ANALYSIS_MINUTES`) the analyst projects each car's finish from
 
 - its gap to the class leader (laps down at the class pace), plus the stops it still owes against the
   others at the class stop cost
-- plus half the difference between its median clean lap so far and the class's, times the laps left
+- plus a quarter of its pace difference against the class on the same recent green laps, times the laps left
   (capped at 1 s/lap, and only fully trusted after about 100 clean laps, so one slow stint doesn't swing it)
 - plus random spread for what can still happen, and a chance of retiring, both calibrated on Petit Le Mans
-  2021–2025: gaps move by about 18–40 s per √(hour left) depending on class, and 1–3% of a class retires
-  per hour
+  2021–2025 (gaps move by about 36–80 s per √(hour left) depending on class, doubled after the 2026 audit),
+  and 1–3% of a class retires per hour
 - the pre-race view fades out by half distance
 
 Simulated 20,000 times as above. The Analysis tab draws each car's win chance after every update.
@@ -196,6 +196,11 @@ in each race hour, and a heat map of which laps ran under caution.
   at all, within 3 hours) rain would reach the track. A rough heads-up, labelled as such. The Weather
   card shows a looping radar map centred on the track.
 - **Track temperature**: IMSA's own station at the track (Al Kamel's `26_Weather` file, about hourly).
+
+### Audits
+
+After a race, `tools/audit/` scores these predictions against what happened (see its README for the
+Petit Le Mans 2026 findings and the tuning that came out of them).
 
 ## Data details
 

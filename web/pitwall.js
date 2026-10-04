@@ -3,13 +3,25 @@
 // where the car rejoins if it pits now, fuel to the flag and drive-time compliance.
 // Uses the Race page's helpers ($, esc, lapTime, hmsSecs, hm, medianOf, live, laps).
 
-// What a stop cost at Petit Le Mans 2021-2025 (Al Kamel time cards: in-lap + the lap with the stop,
-// against the class's lap time at the same moment). Yellow stops are in seconds at yellow pace,
-// which is what decides track position while the field is behind the safety car.
+// What a stop costs at Petit Le Mans, before this race has its own stops to measure (in-lap + the lap
+// with the stop, against the class on the same laps). Green: the 2026 race (n=37-73 a class; 2026 stops
+// are shorter than 2021-25's ~75 s). Yellow: 2021-25 and 2026 averaged (yellow procedures vary a lot).
 const PIT_PRIOR = {
-  "Road Atlanta": { source: "Petit Le Mans 2021–25",
-    GTP: { green: 75.5, fcy: 40.4 }, LMP2: { green: 74.6, fcy: 56.4 }, GTDPRO: { green: 75.0, fcy: 39.0 }, GTD: { green: 76.6, fcy: 45.3 } },
+  "Road Atlanta": { source: "Petit Le Mans 2021–26",
+    GTP: { green: 54, fcy: 48 }, LMP2: { green: 64, fcy: 55 }, GTDPRO: { green: 57, fcy: 37 }, GTD: { green: 61, fcy: 54 } },
 };
+// Cautions slow the race: laps to go = time left / green pace x this factor. A caution lap takes about
+// 1.5x a green lap, so with a share c of the time under caution the race runs 1 - c x 0.35 of the green
+// laps. c from this track's history (insights.json); audited on Petit Le Mans 2026, where the leaders ran
+// 0.78-0.82 of the green-pace laps (a record 16 cautions and a red flag).
+function cautionFactor() {
+  const c = cauData?.track === live?.event ? (cauData.summary?.pct_under_caution ?? 19) / 100 : 0.19;
+  return 1 - c * 0.35;
+}
+// Stops beyond the fuel minimum: yellows, tyres and driver changes. At Petit Le Mans 2026 cars made 13-15
+// stops against a fuel-only minimum of 6-7, about 0.44 extra per caution; at this track's usual caution
+// rate that's about 0.3 extra stops per hour left.
+const EXTRA_STOPS_PER_HOUR = 0.3;
 const isYellow = f => /yellow|fcy|caution|safety/i.test(f || "");
 const pwClock = secsFromNow => new Date(Date.now() + secsFromNow * 1000).toLocaleTimeString([], { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
 
@@ -164,7 +176,7 @@ function pwFixNet(lc, lapsCls) {
   const loss = pwPitLoss(lc, lapsCls, cls);
   const fills = lc.cars.flatMap(r => r.energy?.refills || []).filter(f => f.to - f.from >= 40).map(f => f.secs);
   const fixed = Math.max(10, (loss.green || 60) - (fills.length ? medianOf(fills) : 25));   // the stop minus its fill
-  const toGo = remaining / pace, cost = {};
+  const toGo = remaining / pace * cautionFactor(), cost = {};
   for (const r of lc.cars) {
     const f = pwFuel(lc, lapsCls, r);
     if (!f) continue;
@@ -202,7 +214,7 @@ function pwNet(lc, lapsCls, loss) {
 function pwFinish(r, lc, lapsCls, remaining) {
   const pace = pwPace(lc, lapsCls, r.car) || pwClassPace(lc, lapsCls), lap = +r.laps || 0;
   if (!pace || remaining == null) return null;
-  const toGo = remaining / pace;                 // laps until the flag at this pace
+  const toGo = remaining / pace * cautionFactor();   // laps until the flag at this pace, allowing for cautions
   const e = r.energy, s = r.stint, f = pwFuel(lc, lapsCls, r);
   let left, tank, measured = true;
   if (f) { left = f.left; tank = f.tank; }
@@ -292,8 +304,8 @@ function renderPitWall(sel, lc, lapsCls) {
     + tile(net.yellow ? "Net to the flag (if yellow holds)" : "Net to the flag", `P${mine.pos}`, `P${me.class_pos} on track${mine.owes >= 0.25 ? ` · ${mine.r.owe_tanks != null ? `needs ~${mine.r.owe_tanks.toFixed(1)} tank${mine.r.owe_tanks >= 1.5 ? "s" : ""} more fuel to the flag` : `owes ${mine.owes >= 0.75 ? "a stop" : `~${mine.owes.toFixed(1)} of a stop`}`}` : ""}`, "big")
     + tile("Ahead on net", up ? `#${esc(up.r.car)}` : "—", up ? `${gapTxt(mine, up)} up the road${why(up)}` : "leading on net")
     + tile("Behind on net", dn ? `#${esc(dn.r.car)}` : "—", dn ? `${gapTxt(dn, mine)} back${why(dn)}` : "")
-    + tile("Next stop", me.in_pit ? "in pit" : toStop != null ? (toStop <= 0 ? "due" : `${toStop} lap${toStop === 1 ? "" : "s"}`) : "–",
-        e?.next_stop_lap ? `L${e.next_stop_lap}${e.eta_min != null ? ` · ~${e.eta_min} min` : ""}` : s?.typical ? `est. from stint lengths` : "")
+    + tile("Fuel lasts", me.in_pit ? "in pit" : toStop != null ? (toStop <= 0 ? "due" : `${toStop} lap${toStop === 1 ? "" : "s"}`) : "–",
+        e?.next_stop_lap ? `to L${e.next_stop_lap}${e.eta_min != null ? ` · ~${e.eta_min} min` : ""} · stops often come sooner` : s?.typical ? `est. from stint lengths` : "")
     + tile("Energy", e ? `${Math.round(e.now)}%` : "–", (() => { const f = pwFuel(lc, lapsCls, me); return f ? `${f.left.toFixed(1)} green laps on this tank` : e?.laps_left != null ? `${e.laps_left.toFixed(1)} laps on this tank` : "no telemetry"; })())
     + tile("Driver", inCar ? esc(inCar.name.split(" ").at(-1)) : esc(me.driver || "–"),
         inCar ? `${me.drivers.stint_secs != null ? `stint ${hm(me.drivers.stint_secs)} · ` : ""}${inCar.short ? `needs ${hm(inCar.short)} more` : "minimum done"}` : "",
@@ -409,7 +421,9 @@ function renderFinish(sel, lc, lapsCls, cars, clsName) {
       + `<td>${f ? f.toGo.toFixed(0) : "–"}</td><td>${f ? f.left.toFixed(1) : "–"}</td><td class="l">${what}${f && !f.measured ? ` <span class="tag est">est.</span>` : ""}</td></tr>`;
   }).join("");
   $("fin-table").innerHTML = `<thead><tr><th>Car</th><th>Track</th><th>Net</th><th title="Laps to the flag at this car's pace">Laps to go</th><th title="Laps left on the current tank">Tank</th><th class="l">Stops to the flag</th></tr></thead><tbody>${rowsHtml}</tbody>`;
-  $("fin-note").innerHTML = `${(remaining / 3600).toFixed(1)} h to go. Laps to go at each car's recent pace; tank from IMSA telemetry energy use (measured) or, without telemetry, typical stint lengths (<span class="tag est">est.</span>). `
+  const extra = Math.round(EXTRA_STOPS_PER_HOUR * remaining / 3600);
+  $("fin-note").innerHTML = `${(remaining / 3600).toFixed(1)} h to go.${extra ? ` These are the stops fuel forces; expect about ${extra} more each for yellows, tyres and driver changes (at Petit Le Mans 2026 cars stopped about twice as often as fuel needed, usually with 60–70% left).` : ""}`
+    + ` Laps to go at each car's recent pace, allowing for cautions at this track's usual rate; tank from IMSA telemetry energy use (measured) or, without telemetry, typical stint lengths (<span class="tag est">est.</span>). `
     + `A yellow stretches a tank (slower laps use less energy), so windows open later than this. The window for a single last stop: stop before it and the last tank can't reach the flag; after it, this tank runs dry.`;
 }
 
@@ -432,7 +446,7 @@ function renderStratGraph(sel, lc, lapsCls, cars, clsName) {
   const rows = lc.cars, leaderLap = Math.max(0, ...rows.map(r => +r.laps || 0));
   const pace = pwClassPace(lc, lapsCls), remaining = hmsSecs(live.remaining), elapsed = hmsSecs(live.elapsed);
   const avg = RACE_LAPS[live.event]?.[sel.class];
-  const projEnd = pace && remaining != null ? leaderLap + remaining / pace : null;
+  const projEnd = pace && remaining != null ? leaderLap + remaining / pace * cautionFactor() : null;
   const useLive = projEnd && (elapsed ?? 0) >= 1200 || !avg;
   const xEnd = Math.ceil(useLive ? projEnd ?? leaderLap + 10 : avg);
   const W = Math.max(320, el.clientWidth || 900), phone = W < 640, H = phone ? 260 : 320;
@@ -447,7 +461,7 @@ function renderStratGraph(sel, lc, lapsCls, cars, clsName) {
     const d = lapsCls[c.car], r = rows.find(q => q.car === c.car);
     if (!d || !r) return null;
     const clean = pwClean(d), trend = rollingTrend(clean), now = pwPace(lc, lapsCls, c.car) || trend.at(-1)?.[1];
-    const lap = +r.laps || 0, finish = now && remaining != null ? lap + remaining / now : null;
+    const lap = +r.laps || 0, finish = now && remaining != null ? lap + remaining / now * cautionFactor() : null;
     const e = r.energy, stops = [];
     let next = e?.next_stop_lap ?? (r.stint?.laps_to_typical != null ? lap + Math.max(0, r.stint.laps_to_typical) : null);
     const every = e?.full_tank_laps ? Math.floor(e.full_tank_laps) : r.stint?.typical;

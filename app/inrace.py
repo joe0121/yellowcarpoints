@@ -15,12 +15,16 @@ import random
 import re
 import statistics
 
+from common import read
 from predict import summarise, title_base
 
 # Calibrated on Petit Le Mans 2021-2025 (seconds of gap movement per sqrt(hour left); retirements per hour).
-SPREAD = {"GTP": 22, "LMP2": 40, "GTDPRO": 18, "GTD": 28}
+# Doubled after auditing Petit Le Mans 2026 (half-hourly replays): the 2021-25 figures made the model far too
+# sure mid-race (it gave the eventual GTD PRO winner 0% for four hours); cautions and wave-bys compress gaps
+# more than the gap spread among finishers suggests.
+SPREAD = {"GTP": 44, "LMP2": 80, "GTDPRO": 36, "GTD": 56}
 RETIRE = {"GTP": 0.010, "LMP2": 0.023, "GTDPRO": 0.013, "GTD": 0.032}
-PACE_WEIGHT = 0.5
+PACE_WEIGHT = 0.25        # halved after the 2026 audit: recent pace over-predicted (scored worse than less pace)
 MAX_PACE = 1.0            # s/lap: bigger differences are usually damage or a slow stint, not the car
 
 
@@ -130,6 +134,9 @@ def predict(live, laps, standings, quali, pre, n=20000, seed=11):
         known = [p for p in paces.values() if p]
         lap = lap_now or (statistics.median(known) if known else 90.0)   # laps left at the current conditions' pace
         loss = lc.get("pit_loss") or 60
+        # Cautions slow the race (a caution lap ~1.5x green); share of time under caution from the track's history.
+        cshare = ((read("insights.json") or {}).get("summary") or {}).get("pct_under_caution", 19) / 100
+        laps_left = left / lap * (1 - cshare * 0.35)
         # Stops owed by fuel in hand (laps to go minus laps left, in standard class tanks), not by the timing
         # of recent stops: tyre-only stops (wets to slicks) don't make the others look like they owe one.
         owes = {r["car"]: r.get("owes_stop") or 0 for r in rows}
@@ -142,12 +149,11 @@ def predict(live, laps, standings, quali, pre, n=20000, seed=11):
             use = green_use(lapsCls.get(r["car"]), flags, lead - int(r.get("laps") or 0)) or e.get("use_per_lap")
             if use and e.get("now") is not None:
                 have = 100 if r.get("in_pit") else e["now"]
-                need[r["car"]] = max(0.0, (left / lap) * use - have) / 100
+                need[r["car"]] = max(0.0, laps_left * use - have) / 100
         if len(need) >= len(rows) / 2:
             least = min(need.values())
             owes = {c: round(need[c] - least, 2) if c in need else owes[c] for c in owes}
         base_owe = min(owes.values())
-        laps_left = left / lap
         mean = {}
         for r in rows:
             c = r["car"]
