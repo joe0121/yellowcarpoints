@@ -92,6 +92,25 @@ def relative_pace(lapsCls, flags, rows, recent=15):
     return out, (statistics.median(last) if last else None)
 
 
+def green_use(d, flags, down):
+    """Fuel use per lap (% of a tank) on green-flag laps, from the lap-by-lap energy record, across
+    stops (yellow laps use almost nothing; right after a stop the telemetry has no figure yet)."""
+    def flag_at(lap):
+        k = "green"
+        for l, kind in flags or []:
+            if l <= lap:
+                k = kind
+            else:
+                break
+        return k
+    pit = {x for s in (d or {}).get("stops", []) for x in (s, s + 1, s + 2)}
+    en, drops = (d or {}).get("energy") or [], []
+    for (m, e0), (n, e) in zip(en, en[1:]):
+        if n == m + 1 and n not in pit and flag_at(n + down) == "green" and flag_at(m + down) == "green" and 0.5 < e0 - e < 6:
+            drops.append(e0 - e)
+    return statistics.median(drops[-8:]) if len(drops[-8:]) >= 3 else None
+
+
 def predict(live, laps, standings, quali, pre, n=20000, seed=11):
     """Odds for every class from the live state. pre: the pre-race prediction (for the blend)."""
     left = secs(live.get("remaining")) or 0
@@ -114,15 +133,19 @@ def predict(live, laps, standings, quali, pre, n=20000, seed=11):
         # Stops owed by fuel in hand (laps to go minus laps left, in standard class tanks), not by the timing
         # of recent stops: tyre-only stops (wets to slicks) don't make the others look like they owe one.
         owes = {r["car"]: r.get("owes_stop") or 0 for r in rows}
-        tanks = [r["energy"]["full_tank_laps"] for r in rows if (r.get("energy") or {}).get("full_tank_laps")]
-        if len(tanks) >= len(rows) / 2:
-            tank = statistics.median(tanks)
-            to_go = left / lap
-            need = {r["car"]: max(0.0, (to_go - (tank if r.get("in_pit") else r["energy"]["laps_left"])) / tank)
-                    for r in rows if (r.get("energy") or {}).get("laps_left") is not None}
-            if need:
-                least = min(need.values())
-                owes = {c: round(need[c] - least, 2) if c in need else owes[c] for c in owes}
+        # Energy still to add to reach the flag, in tanks, at each car's green-flag fuel use.
+        lead = max(int(r.get("laps") or 0) for r in rows)
+        flags = (laps or {}).get("flags", {}).get(cls)
+        need = {}
+        for r in rows:
+            e = r.get("energy") or {}
+            use = green_use(lapsCls.get(r["car"]), flags, lead - int(r.get("laps") or 0)) or e.get("use_per_lap")
+            if use and e.get("now") is not None:
+                have = 100 if r.get("in_pit") else e["now"]
+                need[r["car"]] = max(0.0, (left / lap) * use - have) / 100
+        if len(need) >= len(rows) / 2:
+            least = min(need.values())
+            owes = {c: round(need[c] - least, 2) if c in need else owes[c] for c in owes}
         base_owe = min(owes.values())
         laps_left = left / lap
         mean = {}

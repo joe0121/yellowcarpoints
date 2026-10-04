@@ -33,6 +33,35 @@ function pwRecent(lc, lapsCls, car, n = 5) {
   const ok = d.laps.filter(([k, t]) => k > 1 && !pit.has(k) && pwFlagAt(flags, k + down) === "green" && t < 400);
   return ok.slice(-n);
 }
+// Fuel use per lap on green-flag laps only (% of a tank), from the lap-by-lap energy record, across stops:
+// yellow laps use almost nothing (which made "laps left" balloon), and straight after a stop the
+// telemetry has no use figure for the new tank yet. Median of the last 8 green laps, refuels skipped.
+function pwGreenUse(lc, lapsCls, car) {
+  const d = lapsCls[car], r = lc.cars.find(x => x.car === car);
+  if (!d?.energy?.length || !r) return null;
+  const cls = Object.keys(laps?.classes || {}).find(k => laps.classes[k] === lapsCls) || "";
+  const flags = laps?.flags?.[cls] || [], leadLaps = Math.max(0, ...lc.cars.map(x => +x.laps || 0)), down = leadLaps - (+r.laps || 0);
+  const pit = new Set((d.stops || []).flatMap(s => [s, s + 1, s + 2]));
+  const drops = [];
+  for (let i = 1; i < d.energy.length; i++) {
+    const [n, e] = d.energy[i], [m, e0] = d.energy[i - 1];
+    if (n !== m + 1 || pit.has(n) || pwFlagAt(flags, n + down) !== "green" || pwFlagAt(flags, m + down) !== "green") continue;
+    const drop = e0 - e;
+    if (drop > 0.5 && drop < 6) drops.push(drop);
+  }
+  const last = drops.slice(-8);
+  return last.length >= 3 ? medianOf(last) : null;
+}
+// Fuel state on green-flag terms: % in the tank, use per lap, laps left and laps per full tank.
+function pwFuel(lc, lapsCls, r) {
+  const e = r.energy;
+  if (!e || e.now == null) return null;
+  const use = pwGreenUse(lc, lapsCls, r.car) || e.use_per_lap;
+  if (!use) return null;
+  const now = r.in_pit ? 100 : e.now;
+  return { now, use, left: now / use, tank: 100 / use, fillSecs: e.full_fill_secs || 40 };
+}
+
 function pwPace(lc, lapsCls, car) {
   const rec = pwRecent(lc, lapsCls, car).map(q => q[1]);
   if (rec.length >= 3) return medianOf(rec);
@@ -137,9 +166,9 @@ function pwFixNet(lc, lapsCls) {
   const fixed = Math.max(10, (loss.green || 60) - (fills.length ? medianOf(fills) : 25));   // the stop minus its fill
   const toGo = remaining / pace, cost = {};
   for (const r of lc.cars) {
-    const e = r.energy;
-    if (!e?.full_tank_laps || e.now == null) continue;
-    const use = 100 / e.full_tank_laps, have = r.in_pit ? 100 : e.now;
+    const f = pwFuel(lc, lapsCls, r);
+    if (!f) continue;
+    const use = f.use, have = f.now, e = r.energy;
     const need = Math.max(0, toGo * use - have);                 // % of a tank still to add
     // Stops counted as a continuous amount (tanks to add), not rounded up: rounding makes 2.99 vs 3.01
     // tanks a whole stop's difference, and fuel saving or a late yellow decides which side it lands.
@@ -174,12 +203,13 @@ function pwFinish(r, lc, lapsCls, remaining) {
   const pace = pwPace(lc, lapsCls, r.car) || pwClassPace(lc, lapsCls), lap = +r.laps || 0;
   if (!pace || remaining == null) return null;
   const toGo = remaining / pace;                 // laps until the flag at this pace
-  const e = r.energy, s = r.stint;
+  const e = r.energy, s = r.stint, f = pwFuel(lc, lapsCls, r);
   let left, tank, measured = true;
-  if (e?.laps_left != null && e.full_tank_laps) { left = e.laps_left; tank = e.full_tank_laps; }
+  if (f) { left = f.left; tank = f.tank; }
+  else if (e?.laps_left != null && e.full_tank_laps) { left = e.laps_left; tank = e.full_tank_laps; }
   else if (s?.typical) { left = Math.max(0, s.laps_to_typical ?? 0); tank = s.typical; measured = false; }
   else return null;
-  if (r.in_pit) left = tank;                     // leaving on a full tank
+  if (r.in_pit && !f) left = tank;               // leaving on a full tank
   const out = { toGo, left, tank, measured, lap };
   if (toGo <= left) return { ...out, stops: 0, spare: left - toGo };
   const stops = Math.ceil((toGo - left) / tank);
@@ -188,7 +218,7 @@ function pwFinish(r, lc, lapsCls, remaining) {
   const lastFrom = Math.max(lap, lap + Math.ceil(toGo - tank));
   const fillFrac = stops === 1 ? (toGo - left) / tank : null;   // share of a tank the final fill needs
   return { ...out, stops, lastFrom, lastTo: stops === 1 ? lap + Math.floor(left) : null,
-           fillFrac, fillSecs: fillFrac != null && e?.full_fill_secs ? Math.round(fillFrac * e.full_fill_secs) : null };
+           fillFrac, fillSecs: fillFrac != null ? Math.round(fillFrac * (e?.full_fill_secs || 40)) : null };
 }
 
 // Drive time: requirement per driver and the 4-hours-in-any-6 limit, approximately, from lap times
@@ -264,7 +294,7 @@ function renderPitWall(sel, lc, lapsCls) {
     + tile("Behind on net", dn ? `#${esc(dn.r.car)}` : "—", dn ? `${gapTxt(dn, mine)} back${why(dn)}` : "")
     + tile("Next stop", me.in_pit ? "in pit" : toStop != null ? (toStop <= 0 ? "due" : `${toStop} lap${toStop === 1 ? "" : "s"}`) : "–",
         e?.next_stop_lap ? `L${e.next_stop_lap}${e.eta_min != null ? ` · ~${e.eta_min} min` : ""}` : s?.typical ? `est. from stint lengths` : "")
-    + tile("Energy", e ? `${Math.round(e.now)}%` : "–", e?.laps_left != null ? `${e.laps_left.toFixed(1)} laps on this tank` : "no telemetry")
+    + tile("Energy", e ? `${Math.round(e.now)}%` : "–", (() => { const f = pwFuel(lc, lapsCls, me); return f ? `${f.left.toFixed(1)} green laps on this tank` : e?.laps_left != null ? `${e.laps_left.toFixed(1)} laps on this tank` : "no telemetry"; })())
     + tile("Driver", inCar ? esc(inCar.name.split(" ").at(-1)) : esc(me.driver || "–"),
         inCar ? `${me.drivers.stint_secs != null ? `stint ${hm(me.drivers.stint_secs)} · ` : ""}${inCar.short ? `needs ${hm(inCar.short)} more` : "minimum done"}` : "",
         drv && (drv.overbooked || ["impossible", "urgent"].includes(drv.worst)) ? "warn" : "")
