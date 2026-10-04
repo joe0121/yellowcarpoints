@@ -41,6 +41,18 @@
     <div class="legend" id="fight-legend"></div>
     <div class="chart" id="fight-chart"><div class="tip"></div></div>
   </section>
+  <section class="card" id="mfr-card" hidden>
+    <h2 id="mfr-title">Manufacturers' championship</h2>
+    <p class="live-sub" id="mfr-sub"></p>
+    <div class="scroll"><table class="predtab titletab" id="mfr"></table></div>
+    <p class="note" id="mfr-note"></p>
+  </section>
+  <section class="card" id="mec-card" hidden>
+    <h2 id="mec-title">Michelin Endurance Cup</h2>
+    <p class="live-sub" id="mec-sub"></p>
+    <div class="mecgrid"><div class="scroll"><table class="predtab titletab" id="mec-teams"></table></div><div class="scroll"><table class="predtab titletab" id="mec-mfr"></table></div></div>
+    <p class="note" id="mec-note"></p>
+  </section>
   <section class="card" id="table-card" hidden>
     <h2 id="table-title">Standings</h2>
     <div class="scroll"><table id="table"></table></div>
@@ -77,7 +89,7 @@ const roundPts = r => r ? (r.q || 0) + (r.r || 0) : 0;
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
-let standings = null, live = null, hist = null, entries = null, config;
+let standings = null, live = null, hist = null, entries = null, config, titlesData = null;
 
 // The selected car comes from the URL (#13), then the last choice, then the first configured car.
 function selected() {
@@ -89,7 +101,9 @@ function selected() {
 function view(sel) {
   const c = standings.classes[sel.class];
   const others = standings.cars.filter(x => x.class === sel.class && x.car !== sel.car).map(x => x.car);
-  return withQuali({ ...c, class: sel.class, tracked: [sel.car, ...others],
+  // Season over: every round done (the last race's points are in, provisional or official).
+  const over = c.rounds_remaining === 0 && !c.events.some(e => e.state === "upcoming");
+  return withQuali({ ...c, over, class: sel.class, tracked: [sel.car, ...others],
     season: standings.season, event: standings.event, status: standings.status, url: standings.url, updated: standings.updated });
 }
 
@@ -118,7 +132,7 @@ async function getJSON(path) {
 }
 
 async function load() {
-  [standings, hist, entries, config] = await Promise.all(["standings", "history", "entries", "config"].map(n => getJSON(`data/${n}.json`)));
+  [standings, hist, entries, config, titlesData] = await Promise.all(["standings", "history", "entries", "config", "titles"].map(n => getJSON(`data/${n}.json`)));
   if (!standings || !standings.classes) {
     $("cars").innerHTML = `<div class="card err">Standings aren't available yet. Check back shortly.</div>`;
     return;
@@ -140,6 +154,7 @@ function renderAll() {
   render(d);
   renderHistory(sel, d);
   renderTitle(d);
+  renderTitles(d);
   renderProjection(d);
   renderRecap(d);
 }
@@ -177,7 +192,8 @@ function render(d) {
     const left = d.max_points_remaining;
     // The headline answer (what it needs) is filled in by renderTitle.
     const lead = t.pos === 1 && behind ? t.points - behind.points : 0;
-    const [status, color] = t.pos === 1 && lead > left ? ["Champions", "var(--good)"] : t.pos === 1 ? ["Leading", "var(--accent-ink)"]
+    const [status, color] = d.over ? (t.pos === 1 ? [`${d.season} Champions`, "var(--good)"] : [`Finished ${ord(t.pos)}`, "var(--text-2)"])
+      : t.pos === 1 && lead > left ? ["Champions", "var(--good)"] : t.pos === 1 ? ["Leading", "var(--accent-ink)"]
       : t.alive ? ["In contention", "var(--accent-ink)"] : ["Out of title contention", "var(--text-3)"];
     const best = Math.max(...t.rounds.map(roundPts));
     $("cars").innerHTML = `<article class="card car" style="--c:${colorOf(car)}">
@@ -298,7 +314,7 @@ function renderTitle(d) {
   const contenders = st.filter(s => s.alive || s.car === car).sort((a, b) => b.points - a.points)
     .filter((s, i) => i < 8 || s.car === car);
   // Clinch line: one point more than the best total anyone but the leader could still reach.
-  const clinch = st.length > 1 ? Math.max(...st.slice(1).map(s => s.points + left)) + 1 : null;
+  const clinch = !d.over && st.length > 1 ? Math.max(...st.slice(1).map(s => s.points + left)) + 1 : null;
 
   // Chart: points now (bar), the most each can still reach (dashed), points if the race ended now (diamond).
   const el = $("fight-chart");
@@ -315,7 +331,7 @@ function renderTitle(d) {
     g += `<line x1="${x(v)}" x2="${x(v)}" y1="${m.t - 4}" y2="${H - m.b}" stroke="var(--grid)"/><text x="${x(v)}" y="${H - 6}" text-anchor="middle">${fmt(v)}</text>`;
   const leaderPts = contenders[0].points;
   g += `<line x1="${x(leaderPts)}" x2="${x(leaderPts)}" y1="${m.t - 8}" y2="${H - m.b}" stroke="var(--text-3)" stroke-dasharray="2 3"/>`
-    + `<text x="${x(leaderPts)}" y="${m.t - 12}" text-anchor="middle">leader now</text>`;
+    + `<text x="${x(leaderPts)}" y="${m.t - 12}" text-anchor="middle">${d.over ? "champion" : "leader now"}</text>`;
   if (clinch) g += `<line x1="${x(clinch)}" x2="${x(clinch)}" y1="${m.t - 8}" y2="${H - m.b}" stroke="var(--accent)" stroke-width="2.5"/>`
     + `<text class="lbl" x="${x(clinch) - 4}" y="${m.t - 12}" text-anchor="end">clinch ${fmt(clinch)}</text>`;
   contenders.forEach((s, i) => {
@@ -330,14 +346,36 @@ function renderTitle(d) {
     g += `<text x="${W - m.r + 8}" y="${y + 4}"${mine ? ' class="lbl"' : ""}>${note}</text>`;
   });
   el.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cars still in contention for the ${esc(cls)} title">${g}</svg>`);
-  $("fight-legend").innerHTML = `<span style="--c:var(--text-2)">bar: points now</span><span style="--c:var(--text-3)">dashed: the most it can still reach (${fmt(left)} available)</span>`
+  $("fight-legend").innerHTML = d.over ? `<span style="--c:var(--text-2)">bar: final points${d.status === "Official" ? "" : " (provisional)"}</span>` : `<span style="--c:var(--text-2)">bar: points now</span><span style="--c:var(--text-3)">dashed: the most it can still reach (${fmt(left)} available)</span>`
     + (clinch ? `<span style="--c:var(--accent)">clinch line: a total no rival can reach (${fmt(clinch)})</span>` : "")
     + (lc ? `<span class="sw">◆ points if the race ended now</span>` : "");
   const alive = st.filter(s => s.alive).length;
+  const certNote = d.status === "Official" ? "These are IMSA's official points." : "The title is decided on track; the points stay provisional until IMSA certifies the results, so a penalty or appeal could still change them.";
+  if (d.over) {
+    const champ = st[0], runner = st[1];
+    $("fight-title").textContent = `Final standings · ${cls}`;
+    $("fight-sub").innerHTML = `The ${d.season} season is over. <b>#${esc(champ.car)} ${esc(champ.team)}</b> won the ${esc(cls)} title on ${fmt(champ.points)} points${runner ? `, ${fmt(champ.points - runner.points)} clear of #${esc(runner.car)}` : ""}. ${certNote}`;
+  } else {
   $("fight-title").textContent = `${d.rounds_remaining > 1 ? "Championship picture" : "Still in contention"} · ${cls}`;
   $("fight-sub").innerHTML = `${alive} car${alive === 1 ? " is" : "s are"} still mathematically in the title fight with ${fmt(left)} points left`
     + (d.rounds_remaining === 1 ? " (one race: up to 350 for the win plus up to 35 for qualifying)." : ` over ${d.rounds_remaining} rounds.`)
     + (lc ? ` Live from the race, ${esc((live.remaining || "").replace(/^00:/, ""))} to go.` : "");
+  }
+
+  // Season over: say how it ended, no scenarios.
+  if (d.over && $("answer")) {
+    const champ = st[0], above = st.find(s => s.pos === me.pos - 1), below = st.find(s => s.pos === me.pos + 1);
+    $("needs-mode").textContent = `${d.season} season · final`;
+    const head = me.pos === 1 ? `<em>Champions.</em> #${esc(car)} ${esc(me.team)} win the ${d.season} ${esc(cls)} title`
+      : `Season over: #${esc(car)} finishes ${ord(me.pos)} in the ${esc(cls)} championship`;
+    const sub = me.pos === 1
+      ? `${fmt(me.points)} points, ${below ? `${fmt(me.points - below.points)} clear of #${esc(below.car)} ${esc(below.team)}` : ""}.`
+      : `${fmt(me.points)} points: ${fmt(champ.points - me.points)} behind champion #${esc(champ.car)} ${esc(champ.team)}`
+        + (above && above.pos !== 1 ? `, ${fmt(above.points - me.points)} behind #${esc(above.car)} for ${ord(above.pos)}` : "")
+        + (below ? `, ${fmt(me.points - below.points)} clear of #${esc(below.car)}` : "") + ".";
+    $("answer").innerHTML = `<p class="answer">${head}.</p><p class="verdict">${sub}</p><p class="note">${certNote}</p>`;
+    return;
+  }
 
   // What the selected car needs. Which question that is depends on where the season stands:
   //   final round          -> what wins the title (rival by rival)
@@ -473,6 +511,54 @@ function renderTitle(d) {
   ans.innerHTML = `<p class="answer">${head}.</p>${sub ? `<p class="verdict">${sub}</p>` : ""}`
     + (lines.length ? `<ul class="needs-lines">${lines.join("")}</ul>` : "") + more
     + `<p class="note">${qNote}Ties and penalties aren't modelled.</p>`;
+}
+
+
+// --- Manufacturers' championship and the Michelin Endurance Cup (data/titles.json) ------------------
+// The selected car's make, from the entry list ("Chevrolet Corvette Z06 GT3.R" -> Chevrolet).
+function makeOfCar(car, names) {
+  const v = (entries?.cars?.[car]?.vehicle || live?.classes?.[selected()?.class]?.cars?.find(r => r.car === car)?.vehicle || "").toLowerCase();
+  if (/corvette/.test(v)) return "Chevrolet";
+  return names.find(n => v.startsWith(n.toLowerCase().split(" ")[0])) || null;
+}
+function titleTable(rows, kind, mine, decided) {
+  const lead = rows[0]?.points ?? 0, tie = rows.length > 1 && rows[0].points === rows[1].points;
+  return `<thead><tr><th>Pos</th><th class="l">${kind === "teams" ? "Car · team" : "Manufacturer"}</th><th>Points</th><th>Gap</th></tr></thead><tbody>`
+    + rows.map(r => { const me = kind === "teams" ? r.car === mine : r.make === mine;
+      return `<tr class="${me ? "me" : ""}"><td>${r.pos}${r.pos === 1 && decided ? " 🏆" : ""}</td><td class="l">${kind === "teams" ? `<b>#${esc(r.car)}</b> <span class="dim">${esc(r.team)}</span>` : esc(r.make)}</td>`
+        + `<td>${fmt(r.points)}</td><td class="dim">${r.pos === 1 ? "—" : `−${fmt(lead - r.points)}`}</td></tr>`; }).join("")
+    + `</tbody>` + (tie ? `<caption class="note">Tied on points at the top: IMSA's tiebreak puts ${esc(kind === "teams" ? "#" + rows[0].car : rows[0].make)} first.</caption>` : "");
+}
+function renderTitles(d) {
+  const T = titlesData?.season === d.season ? titlesData : null, cls = CLASS_NAMES[d.class] || d.class, car = d.tracked[0];
+  const status = s => s === "Official" ? "official" : "provisional until IMSA certifies the results";
+  // Manufacturers (no manufacturers' title in LMP2).
+  const M = T?.manufacturers?.[d.class];
+  $("mfr-card").hidden = !M;
+  if (M) {
+    const mine = makeOfCar(car, M.standings.map(r => r.make)), first = M.standings[0], second = M.standings[1];
+    $("mfr-title").textContent = `Manufacturers' championship · ${cls}`;
+    $("mfr-sub").innerHTML = d.over
+      ? `<b>${esc(first.make)}</b> win${/s$/.test(first.make) ? "" : "s"} the ${d.season} ${esc(cls)} manufacturers' title${second ? `, ${fmt(first.points - second.points)} points clear of ${esc(second.make)}` : ""}.`
+      : `${esc(first.make)} lead${second ? ` by ${fmt(first.points - second.points)} from ${esc(second.make)}` : ""}, after ${esc(M.events_done.at(-1) || M.event)}.`;
+    $("mfr").innerHTML = titleTable(M.standings, "manufacturers", mine, d.over);
+    $("mfr-note").textContent = `Each manufacturer scores with its best-placed car per race (plus qualifying). From IMSA's points via Al Kamel after ${M.event}, ${status(M.status)}.`;
+  }
+  // Michelin Endurance Cup: points at set checkpoints in the endurance races (e.g. every 4 hours at Petit Le Mans, and the finish).
+  const E = T?.endurance?.[d.class];
+  $("mec-card").hidden = !E?.teams;
+  if (E?.teams) {
+    const done = E.teams.events_done.length, total = E.teams.events.length, decided = done >= total;
+    const teams = E.teams.standings, mfr = E.manufacturers?.standings || [];
+    const mine = makeOfCar(car, mfr.map(r => r.make)), meRow = teams.find(r => r.car === car);
+    $("mec-title").textContent = `Michelin Endurance Cup · ${cls}`;
+    $("mec-sub").innerHTML = (decided ? `All ${total} endurance rounds done: <b>#${esc(teams[0].car)} ${esc(teams[0].team)}</b> wins the teams' cup${teams[0].points === teams[1]?.points ? " on the tiebreak" : ""}` + (mfr[0] ? `, <b>${esc(mfr[0].make)}</b> the manufacturers'${mfr[0].points === mfr[1]?.points ? " (tied on points, ahead on the tiebreak)" : ""}.` : ".")
+      : `${done} of ${total} endurance rounds done (${E.teams.events.map(esc).join(", ")}).`)
+      + (meRow ? ` #${esc(car)}: ${ord(meRow.pos)} on ${fmt(meRow.points)}.` : "");
+    $("mec-teams").innerHTML = titleTable(teams, "teams", car, decided);
+    $("mec-mfr").innerHTML = mfr.length ? titleTable(mfr, "manufacturers", mine, decided) : "";
+    $("mec-note").textContent = `The Endurance Cup is its own championship within the season: points at set checkpoints in the endurance races (${E.teams.events.map(esc).join(", ")}), not the race result alone. From IMSA's points via Al Kamel after ${E.event}, ${status(E.status)}.`;
+  }
 }
 
 // Live championship projection during the race.

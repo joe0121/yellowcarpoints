@@ -29,6 +29,7 @@ import history
 import live
 import racecontrol
 import sectors
+import titles
 import status
 from common import CAR_CLASS, CARS, CLASSES, GROUPS, DATA_DIR, LIVE_CLASSES, RACE_CARS, http, now_iso, read, write
 
@@ -310,6 +311,10 @@ def refresh_history():
 
 
 def run_once(last_hash=None):
+    try:
+        titles.refresh(http, BASE, _page, _options)       # manufacturers' and Endurance Cup standings
+    except Exception:
+        log.exception("titles failed")
     meta = find_latest_points()
     if not meta:
         log.warning("no championship points PDF found")

@@ -76,7 +76,7 @@
     const liveLead = fresh && lc?.cars?.find(hasTime);
     const leader = liveLead ? liveLead.car : data.standings?.classes?.[sel.class]?.standings?.[0]?.car;
     const look = leader && !window.isFriend(leader, data)
-      ? `<p class="lookaway">🙈 ${liveLead ? `A ${esc(window.makeOf(leader, data))} is leading ${NAMES[sel.class]}` : `A ${esc(window.makeOf(leader, data))} leads the ${NAMES[sel.class]} championship`}. We're choosing to look away.</p>` : "";
+      ? `<p class="lookaway">🙈 ${liveLead ? `A ${esc(window.makeOf(leader, data))} is leading ${NAMES[sel.class]}` : (data.standings?.classes?.[sel.class]?.rounds_remaining === 0 ? `A ${esc(window.makeOf(leader, data))} won the ${NAMES[sel.class]} championship` : `A ${esc(window.makeOf(leader, data))} leads the ${NAMES[sel.class]} championship`)}. We're choosing to look away.</p>` : "";
     el.innerHTML = groups.map(section).join("")
       + `<div class="pick-sec pick-any${mine ? " active" : ""}"><span class="pick-title">This is my car</span>`
       + `<select aria-label="Pick any car as my car"><option value="">Any car…</option>${opts}</select>`

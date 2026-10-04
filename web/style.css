@@ -628,3 +628,6 @@ body { --mainw: min(1040px, 100vw); }
 .tyre-wet { color: var(--s2); border-color: var(--s2); }
 .tyre-slick { color: var(--text); border-color: var(--text-3); }
 .titlenote { font-size: 11px; margin-left: 6px; }
+.mecgrid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .mecgrid { grid-template-columns: 1fr; } }
+table.titletab caption { caption-side: bottom; text-align: left; padding-top: 6px; }
