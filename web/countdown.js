@@ -4,7 +4,7 @@
 (() => {
   const el = document.getElementById("countdown");
   if (!el) return;
-  let sessions = [], live = null;
+  let sessions = [], live = null, calendar = [];
 
   const kind = n => /practice/i.test(n) ? "Practice" : /qualif/i.test(n) ? "Qualifying" : /warm/i.test(n) ? "Warm-up" : "Race";
   const label = n => n.replace(/ - WeatherTech Championship$/i, "").replace(/^WeatherTech Championship /i, "");
@@ -20,10 +20,11 @@
 
   async function load() {
     try {
-      const [sch, lv] = await Promise.all(["schedule", "live"].map(n =>
+      const [sch, lv, cal] = await Promise.all(["schedule", "live", "calendar"].map(n =>
         fetch(`data/${n}.json`, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null)));
       sessions = (sch?.sessions || []).map(s => ({ ...s, t0: new Date(s.start) / 1e3, t1: new Date(s.end) / 1e3 }));
       live = lv;
+      calendar = cal?.events || [];
     } catch (e) { /* keep what we had */ }
     tick();
   }
@@ -50,6 +51,17 @@
       const when = new Date(next.t0 * 1e3).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
       const name = label(next.name);
       text = `${name.startsWith(kind(next.name)) ? name : `${kind(next.name)}: ${name}`} in ${span(next.t0 - now)} · ${when}`;
+    }
+    // No weekend schedule up yet (IMSA posts session times about two weeks before an event): count down
+    // to the next round on the season calendar instead, by its dates.
+    if (!text && calendar.length) {
+      const today = new Date().toISOString().slice(0, 10), ev = calendar.find(e => e.end >= today);
+      if (ev) {
+        const t0 = new Date(ev.start + "T00:00:00-05:00") / 1e3, fmt = d => new Date(d + "T12:00:00").toLocaleDateString([], { month: "short", day: "numeric" });
+        const dates = `${fmt(ev.start)}–${fmt(ev.end).replace(/^[A-Za-z]+ /, ev.start.slice(5, 7) === ev.end.slice(5, 7) ? "" : "$&")}`;
+        text = t0 > now ? `Next race: ${ev.name} in ${span(t0 - now)} · ${dates}` : `Race weekend: ${ev.name} · ${dates}`;
+        el.title = "Session times appear here about two weeks before the event, when IMSA publishes the weekend schedule.";
+      }
     }
     el.hidden = !text;
     el.dataset.state = state;
