@@ -162,8 +162,8 @@ table.timing td.team div { white-space: nowrap; }
 }
 
 /* page tabs */
-.tabs { display: flex; gap: 4px; margin-top: 10px; }
-.tabs a { font: 600 13px Inter, sans-serif; text-decoration: none; color: var(--text-2); padding: 4px 12px; border-radius: 99px; border: 1px solid var(--line); }
+.tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 10px; }
+.tabs a { white-space: nowrap; font: 600 13px Inter, sans-serif; text-decoration: none; color: var(--text-2); padding: 4px 12px; border-radius: 99px; border: 1px solid var(--line); }
 .tabs a[aria-current] { color: var(--text); border-color: var(--text-3); background: var(--surface); }
 
 /* strategy page */

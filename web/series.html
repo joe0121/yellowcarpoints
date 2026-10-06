@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Other Series</title>
+<meta name="description" content="Every Corvette Z06 GT3.R outside IMSA: WEC, European Le Mans Series and Asian Le Mans Series results, unofficial points and pace.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23eda100'/><text x='16' y='23' font-size='18' font-family='Arial' font-weight='700' text-anchor='middle' fill='%23111'>4</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+<script src="account.js"></script>
+<style>
+  .series-grid { display: grid; gap: 16px; }
+  .series-grid > * { min-width: 0; }
+  .serieshead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+  .serieshead h2 { margin: 0 auto 0 0; }
+  .serieshead a { font-size: 13px; color: var(--accent-ink); }
+  .vettes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 14px 0 4px; }
+  .vette { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .vette .num { font-family: Oswald, sans-serif; font-size: 22px; font-weight: 600; }
+  .vette .team { font-size: 12px; color: var(--text-2); }
+  .vette .big { font-family: Oswald, sans-serif; font-size: 18px; font-weight: 500; margin-top: 4px; }
+  .vette .sub { font-size: 12px; color: var(--text-3); }
+  .sh3 { font-size: 13px; color: var(--text-2); font-weight: 600; margin: 18px 0 0; }
+  td.pace { min-width: 150px; }
+  td.pace .bar { margin: 2px 0; height: 6px; }
+  td.pace span { font-size: 12px; }
+  .rd { color: var(--text-3); }
+  table.predtab td.mini-pts { color: var(--text-3); font-size: 11px; }
+</style>
+</head>
+<body class="race">
+<main>
+  <header>
+    <div>
+      <h1>Yellow Car <span>Points</span></h1>
+      <p class="tagline">An unofficial Corvette fan site</p>
+      <p class="sub" id="sub">Corvettes in other series</p>
+      <div class="navrow"><nav class="tabs"><a href="./">Championship</a><a href="strategy.html">Race</a><a href="analysis.html">Analysis</a><a href="series.html" aria-current="page">Other series</a><a href="about.html">About</a><a href="guestbook.html">Guest book</a></nav><span class="countdown" id="countdown" hidden></span></div>
+    </div>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <section class="card" style="margin-bottom:16px">
+    <p class="live-sub" id="intro">The Corvette Z06 GT3.R outside IMSA: results of every race, unofficial points and how fast each car's best lap was against the rest of its class. Past races only, no live timing yet.</p>
+  </section>
+  <div class="series-grid" id="series"><section class="card"><p class="live-sub">Loading…</p></section></div>
+
+  <footer id="foot">Race results from <a href="https://openwec.com" target="_blank" rel="noopener">OpenWEC</a>. Points are worked out on this site from those results and are unofficial: they matched the official WEC and ELMS tables when checked, but the series' own standings are the real ones. Pole points are entered by hand because OpenWEC has no qualifying times.</footer>
+  <nav class="footlinks" aria-label="About this site">
+    <a href="https://github.com/joe0121/yellowcarpoints" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1 1.6 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .6 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>Source on GitHub</a>
+    <a href="https://www.instagram.com/c6zoooh6/" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.4" cy="6.6" r="1.3" fill="currentColor"/></svg>@C6ZOOOH6</a>
+    <a href="contact.html">Contact</a>
+  </nav>
+</main>
+<script src="countdown.js"></script>
+<script>
+// Official sites (live timing lives there; this site doesn't republish it).
+const OFFICIAL = {
+  WEC: { name: "FIA WEC", url: "https://www.fiawec.com/" },
+  ELMS: { name: "ELMS", url: "https://www.europeanlemansseries.com/" },
+  ALMS: { name: "Asian Le Mans Series", url: "https://www.asianlemansseries.com/" },
+};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const lap = s => s == null ? "–" : `${Math.floor(s / 60)}:${(s % 60).toFixed(3).padStart(6, "0")}`;
+const ord = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+const isVette = v => /corvette/i.test(v || "");
+
+async function getJSON(p) { try { const r = await fetch(p, { cache: "no-cache" }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
+
+function corvetteClass(s) {
+  // The class the Corvettes race in (LMGT3 / GT), from the race summaries.
+  for (const rd of s.rounds) for (const race of rd.races) for (const [cls, c] of Object.entries(race.classes)) if (c.corvettes.length) return cls;
+  return null;
+}
+
+function seriesCard(s) {
+  const cls = corvetteClass(s), off = OFFICIAL[s.series] || { name: s.name, url: "#" };
+  const done = s.rounds.filter(r => r.races.length);
+  const last = done[done.length - 1];
+  const table = s.standings?.[cls] || null;
+  // Every Corvette in the series this season, with a summary.
+  const cars = new Map();
+  for (const rd of done) for (const race of rd.races) for (const v of race.classes[cls]?.corvettes || []) {
+    const c = cars.get(v.car) || { car: v.car, team: v.team, races: 0, best: null, wins: 0, paces: [] };
+    c.races++; if (v.status === "Classified") { c.best = Math.min(c.best ?? 99, v.class_pos); if (v.class_pos === 1) c.wins++; }
+    if (v.pace_pct != null) c.paces.push(v.pace_pct);
+    cars.set(v.car, c);
+  }
+  const posOf = car => table ? table.findIndex(r => r.car === car) + 1 : 0;
+  const ptsOf = car => table?.find(r => r.car === car)?.pts;
+  const median = a => { const b = [...a].sort((x, y) => x - y); return b.length ? (b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2) : null; };
+
+  const vettes = [...cars.values()].sort((a, b) => (posOf(a.car) || 999) - (posOf(b.car) || 999) || b.races - a.races).map(c => {
+    const pos = posOf(c.car), med = median(c.paces);
+    const oneOff = (s.one_off || []).includes(c.car);
+    const champ = table && pos ? `${ord(pos)} · ${ptsOf(c.car)} pts`
+      : oneOff ? (c.best ? `Le Mans entry · P${c.best}` : "Le Mans entry")
+      : table ? "not scoring" : (c.best ? `best finish P${c.best}` : "no finish");
+    return `<div class="vette"><div class="num">#${esc(c.car)}</div><div class="team">${esc(c.team)}</div>
+      <div class="big">${champ}</div>
+      <div class="sub">${c.races} ${c.races === 1 ? "race" : "races"}${c.wins ? `, ${c.wins} ${c.wins === 1 ? "win" : "wins"}` : ""}${med != null ? ` · typical best lap +${med.toFixed(2)}%` : ""}</div></div>`;
+  }).join("");
+
+  // Standings: top 8 plus every Corvette.
+  let stand = "";
+  if (table) {
+    const show = table.filter((r, i) => i < 8 || isVette(r.vehicle));
+    const rounds = done.flatMap(rd => rd.races.map(() => rd));
+    stand = `<h3 class="sh3">${esc(cls)} teams, unofficial</h3><div class="scroll"><table class="predtab"><thead><tr><th>Pos</th><th>Car</th><th class="l">Team</th><th class="l">Car</th><th>Pts</th>${rounds.map(rd => `<th title="${esc(rd.event)}">R${rd.round}</th>`).join("")}</tr></thead><tbody>`
+      + show.map(r => `<tr class="${isVette(r.vehicle) ? "tracked" : ""}" style="--c: var(--accent)"><td>${posOf(r.car)}</td><td>#${esc(r.car)}</td><td class="l dim">${esc(r.team)}</td><td class="l dim">${esc((r.vehicle || "").replace(/ LMGT3.*| GT3.*/, ""))}</td><td><b>${r.pts}</b></td>${r.races.map(p => `<td class="mini-pts">${p == null ? "" : p || "·"}</td>`).join("")}</tr>`).join("")
+      + `</tbody></table></div>`;
+    if (s.one_off?.length) stand += `<p class="note">Le Mans-only entries don't score in the WEC; the points pass to the season entries behind them.</p>`;
+    const missing = done.length - (s.poles_set?.length || 0);
+    if (missing > 0) stand += `<p class="note">Pole points not entered yet for ${missing} ${missing === 1 ? "round" : "rounds"}, so totals may be short by a point there.</p>`;
+  } else {
+    stand = `<p class="note">No points table for this series: computed points didn't match the official ones (some entries don't score, and results changed after the race), so only results and pace are shown.</p>`;
+  }
+
+  // Results: one row per Corvette per race. Pace bar: gap of its best lap to the class's best lap.
+  const rows = [];
+  for (const rd of done) for (const race of rd.races) {
+    const c = race.classes[cls]; if (!c) continue;
+    for (const v of c.corvettes) rows.push({ rd, race, c, v, pts: race.points?.[cls]?.[v.car] });
+  }
+  const maxGap = Math.max(1.5, ...rows.map(r => r.v.pace_pct || 0));
+  const res = `<h3 class="sh3">Race by race</h3><div class="scroll"><table class="predtab"><thead><tr><th class="l">Round</th><th>Car</th><th>Finish</th>${table ? "<th>Pts</th>" : ""}<th>Best lap</th><th class="l">Best lap vs class best</th></tr></thead><tbody>`
+    + rows.map(({ rd, race, c, v, pts }) => {
+      const fin = v.status === "Classified" ? `P${v.class_pos}<span class="rd">/${c.entries}</span>${v.laps_down > 0 ? ` <span class="rd">−${v.laps_down}L</span>` : ""}` : `<span class="rd">${esc(v.status === "DSQ" ? "DSQ" : "DNF")}</span>`;
+      const gap = v.pace_pct;
+      const pace = gap == null ? "–" : `<div class="bar" title="#${esc(v.car)} best lap ${lap(v.best_lap)}: ${gap === 0 ? "fastest in class" : `${gap.toFixed(2)}% off the class's best (${lap(c.best_lap)})`}, ${ord(v.pace_rank)} of ${c.entries}"><span class="fill" style="--c: var(--accent); width:${Math.max(2, gap / maxGap * 100).toFixed(1)}%"></span></div>`
+        + `<span>${gap === 0 ? "fastest" : "+" + gap.toFixed(2) + "%"} · ${ord(v.pace_rank)}</span>`;
+      const ptsCell = (s.one_off || []).includes(v.car) ? "<span class=\"rd\" title=\"Le Mans-only entry, doesn't score\">–</span>"
+        : pts ? pts.pts + (pts.pole ? "<span class=\"rd\" title=\"includes 1 point for pole\">*</span>" : "") : "–";
+      return `<tr><td class="l">R${rd.round} ${esc(rd.event)}${rd.races.length > 1 ? ` <span class="rd">${esc(race.session)}</span>` : ""}</td><td>#${esc(v.car)}</td><td>${fin}</td>${table ? `<td>${ptsCell}</td>` : ""}<td>${lap(v.best_lap)}</td><td class="l pace">${pace}</td></tr>`;
+    }).join("")
+    + `</tbody></table></div><p class="note">The bar is how far each car's best lap was off the fastest lap in its class that race (shorter is faster), and its rank among the class. Best laps only, not race pace. * includes a point for pole.</p>`;
+
+  return `<section class="card"><div class="serieshead"><h2>${esc(s.name)} ${s.series === "ALMS" ? `${s.season}–${String(s.season + 1).slice(2)}` : s.season}</h2>
+    <a href="${off.url}" target="_blank" rel="noopener">Official site and live timing ↗</a></div>
+    <p class="live-sub">${done.length} ${done.length === 1 ? "round" : "rounds"} so far${last ? `, latest ${esc(last.event)}` : ""}. Corvettes race in ${esc(cls)}.</p>
+    <div class="vettes">${vettes}</div>${stand}${res}</section>`;
+}
+
+async function load() {
+  const d = await getJSON("data/series.json");
+  if (!d?.series?.length) { $("series").innerHTML = `<section class="card"><p class="live-sub">No data yet.</p></section>`; return; }
+  $("series").innerHTML = d.series.filter(s => corvetteClass(s)).map(seriesCard).join("");
+  $("meta").textContent = `Updated ${new Date(d.updated).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+load();
+</script>
+</body>
+</html>

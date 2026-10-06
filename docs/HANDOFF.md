@@ -13,12 +13,18 @@ install and "how the predictions work"; this is the working state, operations an
 - Idle between rounds (added 2026-10-06, `app/idle.py`): when the next round in calendar.json starts more
   than `IDLE_DAYS` (7) days away, the scraper only does a daily calendar/points/titles/OpenWEC pass and the
   analyst sleeps; both wake up 7 days before the round (2027-01-21 for the Rolex 24). `IDLE_DAYS=0` turns it off.
-- Other series (added 2026-10-06, `app/openwec.py`): daily OpenWEC results for WEC, ELMS and Asian LMS ->
-  series.json (each Corvette's class finish, laps down, best lap vs class best = relative pace). Not on a page
-  yet. OpenWEC has no live data, no points (would be computed, unofficial) and no BoP (WEC stopped publishing
-  BoP tables in 2026). Stint/lap/pace endpoints need an approved key: the key requested 2026-10-01 still gets
-  401 "unapproved" (results work without a key). Sources and terms per series: memory note
-  corvette-series-timing-sources.
+- Other series (added 2026-10-06, `app/openwec.py`, page `web/series.html` "Other series"): daily OpenWEC
+  results for WEC, ELMS and Asian LMS -> series.json: each Corvette's class finish, laps down, best lap vs
+  class best (relative pace), and unofficial team points for WEC and ELMS. Points verified 2026-10-06: WEC
+  LMGT3 18/18 season entries round by round against the official Teams table (R1-5), ELMS LMGT3 14/14 against
+  Wikipedia. Rules learned: 25-18-15-12-10-8-6-4-2-1 + 1 pole (not doubled), Le Mans x2 and Le Mans one-offs
+  don't score (points pass to season entries); OpenWEC marks every car "Classified", so classified = running
+  at the flag (total time within 1.5 laps of the winner) and >= 70% of the winner's laps; support-series races
+  filed under the same event are dropped. Asian LMS points did NOT match (shown as results/pace only).
+  OpenWEC qualifying sessions are empty, so POLES ARE ENTERED BY HAND in overrides.json "poles"
+  ({"WEC 2026 6": {"LMGT3": "<car>"}}; key gets " <session>" when an event has two races) after each round;
+  the page notes how many rounds lack a pole entry. No BoP (WEC stopped publishing it in 2026). Stint/lap
+  endpoints need an approved key (still 401 on 2026-10-06). OpenWEC lagged: WEC Fuji (Sep 27) not in yet.
 - Everything is deployed; `main` is what's running. The dev backup recorder can be stopped (`./dev.sh down`).
 
 ## Services (compose.yaml)
