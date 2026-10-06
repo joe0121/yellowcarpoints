@@ -23,6 +23,7 @@ SERIES = [s.strip().upper() for s in os.environ.get("OPENWEC_SERIES", "WEC,ELMS,
 MAKE = re.compile(os.environ.get("OPENWEC_MAKE", r"corvette"), re.I)
 KEY = os.environ.get("OPENWEC_API_KEY", "")
 EVERY = 86400
+RETRY = 3600
 CACHE = DATA_DIR / "openwec"
 _last = [0.0]
 
@@ -246,7 +247,9 @@ def refresh(force=False):
     """Once a day (or forced). Keeps the previous series.json if OpenWEC is down."""
     if not force and time.time() - _last[0] < EVERY:
         return None
-    _last[0] = time.time()
+    # Counts as done for the day only once something was written; after a failure (network, DNS), retry
+    # in an hour rather than tomorrow.
+    _last[0] = time.time() - EVERY + RETRY
     names = {s["key"]: s["name"] for s in _get("series")}
     out = []
     for key in SERIES:
@@ -256,7 +259,11 @@ def refresh(force=False):
                 out.append({**doc, "name": names.get(key, key)})
         except Exception:
             log.exception("openwec %s failed", key)
+            prev = next((x for x in (read("series.json") or {}).get("series", []) if x.get("series") == key), None)
+            if prev:
+                out.append(prev)                        # keep the last good copy of this series
     if out:
+        _last[0] = time.time()
         write("series.json", {"updated": now_iso(), "source": "OpenWEC (api.openwec.com)", "series": out})
         log.info("openwec: %s", ", ".join(f"{s['series']} {s['season']} {sum(bool(r['races']) for r in s['rounds'])}/{len(s['rounds'])} rounds"
                                          for s in out))

@@ -395,6 +395,11 @@ def main():
                     log.info("%s", idle.describe())
             if wake:
                 was_idle = True
+                for job in (openwec.refresh, series_schedule.refresh):   # no-ops unless due or retrying
+                    try:
+                        job()
+                    except Exception:
+                        log.exception("%s failed", job.__module__)
                 status.mark("idle", until=wake.isoformat(timespec="minutes"))
                 status.live(last_step=time.time(), wait_until=time.time() + 3600, failures=0)
                 time.sleep(min(3600, max(60, (wake - datetime.now(timezone.utc)).total_seconds())))

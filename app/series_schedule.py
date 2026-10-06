@@ -11,13 +11,14 @@ import re
 import time
 from datetime import datetime, timezone
 
-from common import http, now_iso, write
+from common import http, now_iso, read, write
 
 log = logging.getLogger("scraper.series_schedule")
 SITES = {"WEC": "https://www.fiawec.com", "ELMS": "https://www.europeanlemansseries.com",
          "ALMS": "https://www.asianlemansseries.com"}
 SKIP = re.compile(r"summary|test|prologue", re.I)
 EVERY = 86400
+RETRY = 3600
 _last = [0.0]
 
 
@@ -76,14 +77,20 @@ def collect(key, base):
 def refresh(force=False):
     if not force and time.time() - _last[0] < EVERY:
         return None
-    _last[0] = time.time()
+    # Counts as done for the day only once something was written; after a failure (network, DNS), retry
+    # in an hour rather than tomorrow.
+    _last[0] = time.time() - EVERY + RETRY
     out = {}
     for key, base in SITES.items():
         try:
             out[key] = collect(key, base)
         except Exception:
             log.exception("schedule %s failed", key)
+            prev = ((read("series_schedule.json") or {}).get("series") or {}).get(key)
+            if prev:
+                out[key] = prev                         # keep yesterday's rather than dropping the series
     if out:
+        _last[0] = time.time()
         write("series_schedule.json", {"updated": now_iso(), "series": out})
         log.info("series schedule: %s", ", ".join(f"{k} next {v['next']['name']} {v['next']['start'][:10]} ({len(v['next']['sessions'])} sessions)"
                                                   if v.get("next") else f"{k} none" for k, v in out.items()))
