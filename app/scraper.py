@@ -28,6 +28,7 @@ import weather
 import history
 import idle
 import openwec
+import series_schedule
 import live
 import racecontrol
 import sectors
@@ -385,6 +386,10 @@ def main():
                     openwec.refresh()                       # other Corvette series, past races
                 except Exception:
                     log.exception("openwec failed")
+                try:
+                    series_schedule.refresh()               # ...and their upcoming rounds
+                except Exception:
+                    log.exception("series schedule failed")
                 wake = idle.wake_at()                       # the calendar may just have changed
                 if wake:
                     log.info("%s", idle.describe())
@@ -419,6 +424,10 @@ def main():
                     status.mark("openwec")
             except Exception:
                 log.exception("openwec failed")
+            try:
+                series_schedule.refresh()
+            except Exception:
+                log.exception("series schedule failed")
         if time.monotonic() >= next_sectors:
             next_sectors = time.monotonic() + (SECTORS_LIVE if live.in_window() else SECTORS_IDLE)
             try:

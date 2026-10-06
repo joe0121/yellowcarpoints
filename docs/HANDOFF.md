@@ -13,6 +13,10 @@ install and "how the predictions work"; this is the working state, operations an
 - Idle between rounds (added 2026-10-06, `app/idle.py`): when the next round in calendar.json starts more
   than `IDLE_DAYS` (7) days away, the scraper only does a daily calendar/points/titles/OpenWEC pass and the
   analyst sleeps; both wake up 7 days before the round (2027-01-21 for the Rolex 24). `IDLE_DAYS=0` turns it off.
+- Next rounds for other series (added 2026-10-06, `app/series_schedule.py`): daily from fiawec.com /
+  europeanlemansseries.com / asianlemansseries.com race pages (schema.org SportsEvent + per-session
+  data-timestamp) -> series_schedule.json; the Other series page shows the next round, countdown and sessions
+  in the viewer's time zone (event dates kept in track time).
 - Other series (added 2026-10-06, `app/openwec.py`, page `web/series.html` "Other series"): daily OpenWEC
   results for WEC, ELMS and Asian LMS -> series.json: each Corvette's class finish, laps down, best lap vs
   class best (relative pace), and unofficial team points for WEC and ELMS. Points verified 2026-10-06: WEC

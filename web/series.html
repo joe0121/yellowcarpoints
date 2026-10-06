@@ -28,6 +28,17 @@
   td.pace .bar { margin: 2px 0; height: 6px; }
   td.pace span { font-size: 12px; }
   .rd { color: var(--text-3); }
+  .nextrace { border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px; margin: 12px 0 4px; }
+  .nextrace .nr-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .nextrace .nr-name { font-family: Oswald, sans-serif; font-size: 18px; font-weight: 500; margin-right: auto; }
+  .nextrace .nr-when { font-size: 13px; color: var(--text-2); }
+  .nextrace .nr-cd { font-size: 13px; font-weight: 600; color: var(--accent-ink); }
+  .nr-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px 16px; margin-top: 10px; }
+  .nr-days h4 { margin: 0 0 4px; font-size: 12px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .nr-days div.s { font-size: 13px; display: flex; gap: 8px; }
+  .nr-days div.s time { color: var(--text-2); min-width: 64px; font-variant-numeric: tabular-nums; }
+  .nr-days div.s.race { font-weight: 600; }
+  .nr-days div.s.past { color: var(--text-3); text-decoration: line-through; }
   table.predtab td.mini-pts { color: var(--text-3); font-size: 11px; }
 </style>
 </head>
@@ -44,7 +55,7 @@
   </header>
 
   <section class="card" style="margin-bottom:16px">
-    <p class="live-sub" id="intro">The Corvette Z06 GT3.R outside IMSA: results of every race, unofficial points and how fast each car's best lap was against the rest of its class. Past races only, no live timing yet.</p>
+    <p class="live-sub" id="intro">The Corvette Z06 GT3.R outside IMSA: each series' next round with its session times, results of every race, unofficial points and how fast each car's best lap was against the rest of its class. No live timing yet: use the official live timing link on each series.</p>
   </section>
   <div class="series-grid" id="series"><section class="card"><p class="live-sub">Loading…</p></section></div>
 
@@ -75,6 +86,40 @@ function corvetteClass(s) {
   // The class the Corvettes race in (LMGT3 / GT), from the race summaries.
   for (const rd of s.rounds) for (const race of rd.races) for (const [cls, c] of Object.entries(race.classes)) if (c.corvettes.length) return cls;
   return null;
+}
+
+// Next round from the series' own site: dates, countdown, sessions in the viewer's timezone.
+const tidy = n => String(n || "").replace(/^(WEC|ELMS|ALMS)\s+/, "").replace(/\s+by ALMS\b/, "").replace(/\s+20\d\d$/, "");
+const dfmt = (d, o) => new Date(d).toLocaleString(undefined, o);
+function until(ms) {
+  const m = Math.round(ms / 60000), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60);
+  return d ? `${d} d ${h} h` : h ? `${h} h ${m % 60} min` : `${m} min`;
+}
+function nextRaceBlock(n) {
+  if (!n) return "";
+  const now = Date.now(), race = n.sessions.find(x => /^race/i.test(x.name)), first = n.sessions[0];
+  const target = new Date((race || first || {}).at || n.start).getTime();
+  const live = n.sessions.some(x => /^race/i.test(x.name) && Date.parse(x.at) <= now) && Date.parse(n.end) >= now;
+  const cd = live ? "Race weekend underway" : target > now ? `${race ? "Race" : "Starts"} in ${until(target - now)}` : "This weekend";
+  // Event dates are the track's own calendar dates (don't shift them into the viewer's time zone).
+  const day = iso => new Date(iso.slice(0, 10) + "T12:00:00Z");
+  const dd = (iso, o) => day(iso).toLocaleDateString(undefined, { ...o, timeZone: "UTC" });
+  const sameMonth = n.start.slice(0, 7) === n.end.slice(0, 7);
+  const when = `${dd(n.start, { month: "short", day: "numeric" })}–${dd(n.end, sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" })}`;
+  const days = new Map();
+  for (const x of n.sessions) {
+    const k = dfmt(x.at, { weekday: "long", month: "short", day: "numeric" });
+    if (!days.has(k)) days.set(k, []);
+    days.get(k).push(x);
+  }
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const sessions = n.sessions.length
+    ? `<div class="nr-days">${[...days].map(([d, xs]) => `<div><h4>${esc(d)}</h4>${xs.map(x => `<div class="s${/^race/i.test(x.name) ? " race" : ""}${Date.parse(x.at) + 3600e3 < now ? " past" : ""}"><time datetime="${esc(x.at)}">${dfmt(x.at, { hour: "numeric", minute: "2-digit" })}</time><span>${esc(x.name)}</span></div>`).join("")}</div>`).join("")}</div>
+       <p class="note" style="margin:8px 0 0">Times in your time zone (${esc(tz)}).</p>`
+    : `<p class="note" style="margin:6px 0 0">Session times aren't published yet.</p>`;
+  return `<div class="nextrace"><div class="nr-head"><span class="nr-name">Next: ${esc(tidy(n.name))}</span>
+    <span class="nr-when">${esc(when)}${n.venue ? " · " + esc(n.venue) : ""}</span><span class="nr-cd">${esc(cd)}</span>
+    <a class="nr-when" href="${esc(n.url)}" target="_blank" rel="noopener">Event page ↗</a></div>${sessions}</div>`;
 }
 
 function seriesCard(s) {
@@ -142,11 +187,14 @@ function seriesCard(s) {
   return `<section class="card"><div class="serieshead"><h2>${esc(s.name)} ${s.series === "ALMS" ? `${s.season}–${String(s.season + 1).slice(2)}` : s.season}</h2>
     <a href="${off.url}" target="_blank" rel="noopener">Official site and live timing ↗</a></div>
     <p class="live-sub">${done.length} ${done.length === 1 ? "round" : "rounds"} so far${last ? `, latest ${esc(last.event)}` : ""}. Corvettes race in ${esc(cls)}.</p>
+    ${nextRaceBlock(SCHED?.series?.[s.series]?.next)}
     <div class="vettes">${vettes}</div>${stand}${res}</section>`;
 }
 
+let SCHED = null;
 async function load() {
-  const d = await getJSON("data/series.json");
+  const [d, sched] = await Promise.all([getJSON("data/series.json"), getJSON("data/series_schedule.json")]);
+  SCHED = sched;
   if (!d?.series?.length) { $("series").innerHTML = `<section class="card"><p class="live-sub">No data yet.</p></section>`; return; }
   $("series").innerHTML = d.series.filter(s => corvetteClass(s)).map(seriesCard).join("");
   $("meta").textContent = `Updated ${new Date(d.updated).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
