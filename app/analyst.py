@@ -18,6 +18,7 @@ import time
 from datetime import datetime, timezone
 
 import cautions
+import idle
 import inrace
 import predict
 import onboards
@@ -115,6 +116,14 @@ def main():
     state = {}
     log.info("analyst up: in-race every %d min", EVERY // 60)
     while True:
+        if idle.wake_at():                          # the scraper does the daily checks while idle
+            if not state.get("idle"):
+                state["idle"] = True
+                log.info("analyst %s", idle.describe())
+            time.sleep(3600)
+            continue
+        if state.pop("idle", None):
+            log.info("analyst waking up")
         try:
             tick(state)
         except Exception:

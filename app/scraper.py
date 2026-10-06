@@ -26,6 +26,8 @@ import bop
 import watch
 import weather
 import history
+import idle
+import openwec
 import live
 import racecontrol
 import sectors
@@ -367,7 +369,34 @@ def main():
     write("config.json", {"race_cars": [{"car": c, "class": k} for c, k in RACE_CARS.items()],
                           "groups": groups + ([{"name": "Other cars", "cars": rest}] if rest else [])})
     last, next_pdf, failures, next_sectors, next_watch, next_rc, next_wx = None, 0.0, 0, 0.0, 0.0, 0.0, 0.0
+    idle_check, was_idle = 0.0, None
     while True:
+        # More than IDLE_DAYS before the next round: only a daily calendar/points/titles check.
+        wake = idle.wake_at()
+        if wake:
+            if time.time() - idle_check >= idle.DAILY or not was_idle:
+                idle_check = time.time()
+                try:
+                    last = run_once(last)
+                    status.mark("points", event=(read("standings.json") or {}).get("event"))
+                except Exception:
+                    log.exception("scrape failed")
+                try:
+                    openwec.refresh()                       # other Corvette series, past races
+                except Exception:
+                    log.exception("openwec failed")
+                wake = idle.wake_at()                       # the calendar may just have changed
+                if wake:
+                    log.info("%s", idle.describe())
+            if wake:
+                was_idle = True
+                status.mark("idle", until=wake.isoformat(timespec="minutes"))
+                status.live(last_step=time.time(), wait_until=time.time() + 3600, failures=0)
+                time.sleep(min(3600, max(60, (wake - datetime.now(timezone.utc)).total_seconds())))
+                continue
+        if was_idle:
+            log.info("waking up: %s is within %d days", (idle.next_round() or {}).get("name"), idle.IDLE_DAYS)
+            was_idle, next_pdf = False, 0.0
         if time.monotonic() >= next_pdf:
             next_pdf = time.monotonic() + INTERVAL
             try:
@@ -385,6 +414,11 @@ def main():
                 status.mark("bop", bulletin=(read("bop.json") or {}).get("bulletin"))
             except Exception:
                 log.exception("BoP bulletin failed")
+            try:
+                if openwec.refresh():
+                    status.mark("openwec")
+            except Exception:
+                log.exception("openwec failed")
         if time.monotonic() >= next_sectors:
             next_sectors = time.monotonic() + (SECTORS_LIVE if live.in_window() else SECTORS_IDLE)
             try:

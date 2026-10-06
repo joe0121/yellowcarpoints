@@ -8,6 +8,8 @@ services:
       CARS: ${CARS:-}
       RACE_CARS: ${RACE_CARS:-}
       INTERVAL_MINUTES: ${INTERVAL_MINUTES:-30}
+      IDLE_DAYS: ${IDLE_DAYS:-7}
+      OPENWEC_API_KEY: ${OPENWEC_API_KEY:-}
     volumes:
       - data:/data
       - status:/status
@@ -22,6 +24,7 @@ services:
     command: ["python", "analyst.py"]
     environment:
       ANALYSIS_MINUTES: ${ANALYSIS_MINUTES:-60}
+      IDLE_DAYS: ${IDLE_DAYS:-7}
       WX_LIVE_SECONDS: ${WX_LIVE_SECONDS:-300}
       CACHE_DIR: /cache
     volumes:

@@ -10,6 +10,15 @@ install and "how the predictions work"; this is the working state, operations an
   note that switches to "official" by itself when Al Kamel publishes the Official points.
 - Header countdown runs to the 2027 Rolex 24 (Jan 28-31) from IMSA's season calendar; the exact countdown
   takes over when IMSA posts that weekend's session times (about two weeks before).
+- Idle between rounds (added 2026-10-06, `app/idle.py`): when the next round in calendar.json starts more
+  than `IDLE_DAYS` (7) days away, the scraper only does a daily calendar/points/titles/OpenWEC pass and the
+  analyst sleeps; both wake up 7 days before the round (2027-01-21 for the Rolex 24). `IDLE_DAYS=0` turns it off.
+- Other series (added 2026-10-06, `app/openwec.py`): daily OpenWEC results for WEC, ELMS and Asian LMS ->
+  series.json (each Corvette's class finish, laps down, best lap vs class best = relative pace). Not on a page
+  yet. OpenWEC has no live data, no points (would be computed, unofficial) and no BoP (WEC stopped publishing
+  BoP tables in 2026). Stint/lap/pace endpoints need an approved key: the key requested 2026-10-01 still gets
+  401 "unapproved" (results work without a key). Sources and terms per series: memory note
+  corvette-series-timing-sources.
 - Everything is deployed; `main` is what's running. The dev backup recorder can be stopped (`./dev.sh down`).
 
 ## Services (compose.yaml)
